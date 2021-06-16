@@ -43,8 +43,29 @@ Z = \int z Γ(d z, d a) = \int c(z, a) Γ(d z, d a), \qquad \int a Γ(d z, d a) 
 K = \int a Γ(d z, d a), \qquad L = 1,\qquad Z = \int z \Gamma(dz, da), \qquad Y = \exp(Z) K^\alpha L^{1-\alpha}
 ```
 
-Profit maximization of the firm implies that ``r(L, K) = \alpha \frac{Y}{K}`` and ``w(L, K) = (1-α) \frac{Y}{L}``.
+Profit maximization of the firm implies that ``r(K, L) = \alpha \frac{Y}{K}`` and ``w(K, L) = (1-α) \frac{Y}{L}``.
 """
+
+# ╔═╡ 58abec2a-ff8c-470f-aaf8-12f26abd0560
+K = 7
+
+# ╔═╡ ff113d54-212e-4610-8024-7aff1c840cef
+L = 1
+
+# ╔═╡ 49dde2cd-3ddb-4311-81f6-8b37163542bc
+α = 0.3
+
+# ╔═╡ fdf24b06-8124-4571-824b-5c514e52fbe4
+Y(K, L) = K^α * L^(1-α)
+
+# ╔═╡ a3b5150f-c36d-4326-ac87-695d204287ae
+r(K, L) = α * Y(K, L) / K
+
+# ╔═╡ 6524ce2c-47d5-4e90-a746-1e7725656bb0
+w(K, L) = (1-α) * Y(K, L) / L # note!!! wage rate is not used anywhere!
+
+# ╔═╡ 4a598c7d-387a-4de6-a079-2320693f3247
+r(K, L), w(K, L)
 
 # ╔═╡ 9c6e4ae1-88db-4e0c-bba1-85d2f0f7e8a6
 md"""
@@ -102,7 +123,7 @@ function get_c(choices, states, params)
   @unpack a_next = choices
   @unpack exo_state, endo_state = states
   @unpack a = endo_state
-  @unpack r = exo_state
+  @unpack r, w = exo_state
   
   inc = disposable_income(params.inc, params.tt, exo_state)
   c = a + inc - a_next/(1+r)
@@ -140,19 +161,20 @@ end
 
 # ╔═╡ 245e9e91-1a70-4fee-a687-b8092cbd9275
 begin
-	mutable struct HuggettAS{T1,T2} <: AggregateState
+	Base.@kwdef mutable struct HuggettAS{T1,T2,T3} <: AggregateState
   		r::T1
- 	 	dist::T2 # the distribution over idiosynchratic states
+		w::T2 = 1
+ 	 	dist::T3 # the distribution over idiosynchratic states
 	end
 	
-	function HuggettAS(r, a_grid, z_MC)
-  		dist_proto = zeros((length(a_grid), length(z_MC.state_values)))
-  		HuggettAS(r, dist_proto)
+	function HuggettAS(r, w, a_grid, z_MC)
+  		dist = zeros((length(a_grid), length(z_MC.state_values)))
+  		HuggettAS(; r, w, dist)
 	end
 end
 
 # ╔═╡ accb8c2b-fb6d-44a2-8314-bc0e7f9c3b21
-agg_state = HuggettAS(0.05, a_grid, z_MC);
+agg_state = HuggettAS(r(K, L), 1, a_grid, z_MC);
 
 # ╔═╡ 8dd6485e-ef86-47d5-b783-5793b2f5f092
 @unpack val, policies_full = solve_bellman(endo, exo, agg_state, param, Consumer(), rtol=√eps())
@@ -186,7 +208,7 @@ end
 
 # ╔═╡ e435c988-5587-4b5d-852b-18b242a8ff96
 function excess_demand(r)
-  agg_state = HuggettAS(r, a_grid, z_MC)
+  agg_state = HuggettAS(r, 1, a_grid, z_MC)
   @unpack val, policies_full = solve_bellman(endo, exo, agg_state, param, Consumer(), rtol=√eps())
 
   dist = stationary_distribution(endo, exo, policies_full.next_state)
@@ -196,14 +218,27 @@ end
 
 # ╔═╡ c5870a49-d7b4-4615-9b53-c2c4a8debef4
 let
-	r_vec = 0.07:0.005:0.11
+	K_grid = 1.0:0.2:6
+	r_vec = r.(K_grid, 1)
 
-	lines(r_vec, excess_demand.(r_vec),
+	K_vec = excess_demand.(r_vec) .- K_grid
+	fig, ax, _ = lines(K_grid, K_vec,
 		axis = (
-			xlabel = "interest rate",
-			ylabel = "aggregate demand for assets"
+			xlabel = "guessed aggregate capital",
+			ylabel = "excess demand for capital"
 		)
 		)
+	
+#	lo = minimum(K_grid) # min(minimum(K_grid), minimum(K_vec)) 
+#	hi = max(maximum(K_grid), maximum(K_vec))
+#
+#	lines!(ax, [lo, hi], [lo, hi])
+
+	fig
+
+	
+	
+	
 end
 
 # ╔═╡ f0184940-d410-48ca-9d0a-a38ff8212f76
@@ -1569,6 +1604,13 @@ version = "3.5.0+0"
 # ╠═9598cc76-2a48-4783-9791-102911ae680b
 # ╠═e5d509c7-28e5-434a-8c66-715c4cb504f5
 # ╠═8b1be755-0cad-47a0-836e-d916ab0a0013
+# ╠═58abec2a-ff8c-470f-aaf8-12f26abd0560
+# ╠═ff113d54-212e-4610-8024-7aff1c840cef
+# ╠═49dde2cd-3ddb-4311-81f6-8b37163542bc
+# ╠═fdf24b06-8124-4571-824b-5c514e52fbe4
+# ╠═a3b5150f-c36d-4326-ac87-695d204287ae
+# ╠═6524ce2c-47d5-4e90-a746-1e7725656bb0
+# ╠═4a598c7d-387a-4de6-a079-2320693f3247
 # ╠═accb8c2b-fb6d-44a2-8314-bc0e7f9c3b21
 # ╠═18b3db42-0871-47bb-935c-f07be0d60bd7
 # ╠═8dd6485e-ef86-47d5-b783-5793b2f5f092
