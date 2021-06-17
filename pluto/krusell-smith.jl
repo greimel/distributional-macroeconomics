@@ -275,16 +275,6 @@ TableOfContents()
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
-[compat]
-Aiyagari = "~0.1.4"
-CairoMakie = "~0.6.0"
-DisposableIncomes = "~0.1.0"
-Optim = "~1.3.0"
-PlutoUI = "~0.7.1"
-QuantEcon = "~0.16.2"
-Roots = "~1.0.9"
-UnPack = "~1.0.2"
-
 [deps]
 Aiyagari = "7b0e4355-eafe-4ce3-ba71-9b57fde9d81c"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
@@ -294,6 +284,16 @@ PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
+
+[compat]
+Aiyagari = "~0.1.4"
+CairoMakie = "~0.6.0"
+DisposableIncomes = "~0.1.0"
+Optim = "~1.3.0"
+PlutoUI = "~0.7.1"
+QuantEcon = "~0.16.2"
+Roots = "~1.0.9"
+UnPack = "~1.0.2"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
