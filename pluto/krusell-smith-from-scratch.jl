@@ -10,6 +10,9 @@ using UnPack: @unpack
 # ╔═╡ 3209d4d3-e0f7-47c1-8cb8-0da6d52a9d20
 using Statistics: mean
 
+# ╔═╡ 51fb53b2-2f32-44e6-bfb2-bd9452069555
+using GLM, DataFrames, ShiftedArrays, Chain
+
 # ╔═╡ 53f608f0-3387-4e42-9c27-f817b6e82e1a
 using Aiyagari: simulate
 
@@ -34,10 +37,25 @@ using Aiyagari: MarkovChain, ExogenousStateSpace, grid
 # ╔═╡ 298dd367-075d-49c7-bd1f-494987253d9b
 using PlutoUI
 
+# ╔═╡ 62574766-de52-414a-bebf-e972479dfc57
+md"""
+#### To do
+
+* power spaced grids with bilinear interpolation
+"""
+
 # ╔═╡ 884f3526-2d41-45d9-9c3c-b305010b6f71
 md"""
 # Towards Krusell-Smith
 """
+
+# ╔═╡ fbe7cc75-bb63-4f34-b6af-3ff74b7c56a3
+md"""
+## Updating the perceived law of motion of capital
+"""
+
+# ╔═╡ 9387247e-139a-49b2-8cfd-32b6b61f2d37
+perception = (α = [0.25, 0.22], β = [0.79, 0.82])
 
 # ╔═╡ af3bfa65-0124-407f-a954-62fe534462fe
 md"""
@@ -84,22 +102,61 @@ function consumption(choices, states, params)
 	c = (1+r) * k + inc - k_next
 end
 
-# ╔═╡ 320e4bd7-e4fa-477d-89a8-3b8e7e4885d4
-perceived_K_next(K, a, b) = a + b * K
-
 # ╔═╡ cec56f77-aca0-47c9-8d6c-853f9f1f794f
 u(c) = c > 0 ? log(c) : 10000 * c - 10000 * one(c)
 
+# ╔═╡ 5fdfb3a3-9b7f-4ddb-94ed-05c78392ca80
+md"""
+### Parameters
+"""
+
+# ╔═╡ c62cb2cd-8ae3-443a-83af-6e91e675ce38
+param = (β = 0.95, perception)
+
+# ╔═╡ 444f2896-6919-45bc-8346-4d735119119a
+md"""
+### Endogenous state grids
+"""
+
+# ╔═╡ 35d08f2a-d00a-11eb-345f-5585aea81c81
+K_grid = range(2, 20, length = 20)
+
+# ╔═╡ 3e38aa3e-588a-4262-ad5e-329b286b2932
+k_grid = range(0.1, 150, length = 20)
+
+# ╔═╡ 19ada19c-afcc-47f4-84ed-f695d62bdb19
+endo = EndogenousStateSpace((k = k_grid, K = K_grid));
+
+# ╔═╡ 69f60599-1947-4af5-be77-f37c5e0c3f74
+md"""
+### Exogenous state grids
+"""
+
+# ╔═╡ 922fe842-7042-4511-9b00-ef85316f2b70
+z_MC = begin
+	z_grid = [0.99, 1.01]
+	ϵ_z = 0.1
+	z_prob = [1 - ϵ_z ϵ_z; ϵ_z 1-ϵ_z]
+	
+	MarkovChain(z_prob, z_grid, :z)
+end
+
+# ╔═╡ 320e4bd7-e4fa-477d-89a8-3b8e7e4885d4
+function perceived_K_next(K, z, perception)
+	i = findall(z .== z_grid) |> only
+	perception.α[i] + perception.β[i] * K
+end
+
 # ╔═╡ 146f8c7f-fce3-41da-8a1c-56bfde6c4f1e
 function objective(choices, states, 𝔼V, params)
-	@unpack β = params
+	@unpack β, perception = params
 	@unpack k_next = choices
 	
 	@unpack exo_state, endo_state = states
   	@unpack K = endo_state
   	@unpack z = exo_state 
 	
-	K_next = perceived_K_next(K, 0, 1) # TODO
+	K_next = perceived_K_next(K, z, perception)
 	
 	c = consumption(choices, states, params)
 	
@@ -122,42 +179,6 @@ function Aiyagari.get_optimum(states, 𝔼V, params, endo, hh)
 	pol_full = (; k_next, c = consumption(choices, states, params))
 	
 	(; pol, pol_full, val, conv)
-end
-
-# ╔═╡ 5fdfb3a3-9b7f-4ddb-94ed-05c78392ca80
-md"""
-### Parameters
-"""
-
-# ╔═╡ c62cb2cd-8ae3-443a-83af-6e91e675ce38
-param = (β = 0.95, )
-
-# ╔═╡ 444f2896-6919-45bc-8346-4d735119119a
-md"""
-### Endogenous state grids
-"""
-
-# ╔═╡ 35d08f2a-d00a-11eb-345f-5585aea81c81
-K_grid = range(2, 20, length = 20)
-
-# ╔═╡ 3e38aa3e-588a-4262-ad5e-329b286b2932
-k_grid = range(0.1, 50, length = 20)
-
-# ╔═╡ 19ada19c-afcc-47f4-84ed-f695d62bdb19
-endo = EndogenousStateSpace((k = k_grid, K = K_grid));
-
-# ╔═╡ 69f60599-1947-4af5-be77-f37c5e0c3f74
-md"""
-### Exogenous state grids
-"""
-
-# ╔═╡ 922fe842-7042-4511-9b00-ef85316f2b70
-z_MC = begin
-	z_grid = [0.99, 1.01]
-	ϵ_z = 0.1
-	z_prob = [1 - ϵ_z ϵ_z; ϵ_z 1-ϵ_z]
-	
-	MarkovChain(z_prob, z_grid, :z)
 end
 
 # ╔═╡ e77d1493-cb29-4aca-9fa6-286078540fe8
@@ -218,6 +239,24 @@ begin
 	
 end
 
+# ╔═╡ 033d748c-e973-40bd-8f2b-b86875e6a799
+df_capital = DataFrame(
+	K = K_T[T_drop:T],
+	K_lagged = lag(K_T[T_drop:T]),
+	z = z_T[T_drop:T]
+	) |>
+	dropmissing
+
+# ╔═╡ 31bc2f20-7040-407d-9a8b-8519b1bbcee7
+perception1 = @chain df_capital begin
+	groupby(:z)
+	combine(_) do df
+		α, β = lm(@formula(log(K) ~ log(K_lagged)), df) |> coef
+		(; α, β)
+	end
+	(; _.α, _.β)
+end
+
 # ╔═╡ acd3032f-092d-4229-8b6c-3692e3852cdd
 lines(T_drop:T, K_T[T_drop:T])
 
@@ -254,17 +293,25 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 [compat]
 Aiyagari = "~0.1.5"
 CairoMakie = "~0.6.0"
+Chain = "~0.4.6"
+DataFrames = "~1.1.1"
+GLM = "~1.4.2"
 Interpolations = "~0.13.2"
 Optim = "~1.3.0"
 PlutoUI = "~0.7.9"
+ShiftedArrays = "~1.0.0"
 UnPack = "~1.0.2"
 
 [deps]
 Aiyagari = "7b0e4355-eafe-4ce3-ba71-9b57fde9d81c"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+GLM = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 """
@@ -370,6 +417,11 @@ deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "f2202b55d816427cd385a9a4f3ffb226bee80f99"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+0"
+
+[[Chain]]
+git-tree-sha1 = "7c845bdbbf8c47e62f88a63e9cbc09bd1785a01d"
+uuid = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+version = "0.4.6"
 
 [[CodecBzip2]]
 deps = ["Bzip2_jll", "Libdl", "TranscodingStreams"]
@@ -1577,9 +1629,15 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─62574766-de52-414a-bebf-e972479dfc57
 # ╠═6b1ecaed-cc8d-4b87-85e9-c44cb8a036cf
 # ╠═3209d4d3-e0f7-47c1-8cb8-0da6d52a9d20
 # ╟─884f3526-2d41-45d9-9c3c-b305010b6f71
+# ╟─fbe7cc75-bb63-4f34-b6af-3ff74b7c56a3
+# ╠═51fb53b2-2f32-44e6-bfb2-bd9452069555
+# ╠═033d748c-e973-40bd-8f2b-b86875e6a799
+# ╠═9387247e-139a-49b2-8cfd-32b6b61f2d37
+# ╠═31bc2f20-7040-407d-9a8b-8519b1bbcee7
 # ╟─af3bfa65-0124-407f-a954-62fe534462fe
 # ╠═53f608f0-3387-4e42-9c27-f817b6e82e1a
 # ╠═1fd634cf-63d9-4bf1-b8b9-4475e1ddeb02
