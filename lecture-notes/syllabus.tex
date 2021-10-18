@@ -1,0 +1,116 @@
+\documentclass[a4paper,11pt]{article}
+
+\usepackage{titling}
+\setlength{\droptitle}{-4cm}
+%\predate{}
+%\postdate{}
+%\preauthor{}
+%\postauthor{}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+\usepackage{booktabs,hyperref}
+\usepackage[longnamesfirst]{natbib}
+\bibliographystyle{ecta}
+
+\title{Topics in Distributional Macroeconomics}
+\date{\vspace{-2ex} Fabian Greimel, University of Amsterdam}
+\author{Proposal for an Elective Course at Tinbergen Institute}
+
+%\author{Fabian Greimel}
+
+\begin{document}
+
+\maketitle
+
+\noindent
+The term ``distributional macroeconomics'' was introduced by Benjamin Moll as a replacement for ``macroeconomics with heterogeneous agents'' to promote the view that the \emph{macroeconomy is a distribution} of state variables (e.g.\ income and wealth).\footnote{See \url{ https://benjaminmoll.com/wp-content/uploads/2019/07/DM_long.pdf}.}
+
+This course will explore some implications of income and wealth heterogeneity for macroeconomic dynamics and macroeconomic policy. First, we want to understand how secular trends (falling interest rates and rising debt) are connected to rising inequality. And second, we want to understand how heterogeneity matters for the aggregate response to macroeconomic shocks.
+
+The focus of the course is on topics, rather than computational methods. (These are covered in second year electives.) We will use simplified models to replicate results from papers and compare the results to empirical evidence. I will provide ready-to-run code in the form of interactive \href{https://github.com/fonsp/Pluto.jl}{\texttt{Pluto.jl}} notebooks. 
+
+The course is based on recent research papers. Most papers build on the Bewley-Huggett-Aiyagari model, some build on the two-agent (Saver-Spender) model. 
+
+\subsection*{Grading}
+
+\begin{enumerate}
+\item Group homeworks
+\item Presentation of a paper
+\item Short research proposal
+\end{enumerate}
+
+\subsection*{Topics}
+
+\begin{enumerate}
+\item Consumer Credit and Default
+\item Household Balance Sheets and Recessions
+\item Consequences of Rising Inequality
+\item House Price Expectations
+\item Monetary Policy and Heterogeneity (HANK)
+\end{enumerate}
+
+\subsection*{Structure and Content}
+
+\paragraph{Week 1: Introduction and Consumer Credit}
+\begin{enumerate}
+\item Introduction
+  \begin{enumerate}
+  \item Heterogeneity in Macroeconomics: Some History (Based on lecture notes by Ben Moll)
+  \item Policy relevance
+  \item Modeling income and wealth inequality
+  \item Modeling secured and unsecured debt
+  \item Lifecycle-model vs infinite horizon models    
+  \end{enumerate}
+
+\item Consumer Credit and Default \citep{athreya2002welfare,chatterjee2007quantitative,livshits2007consumer}
+\end{enumerate}
+
+\paragraph{Week 2: Household Balance Sheets}
+
+\begin{enumerate}
+\item Household Balance Sheets and the Great Recession
+  \begin{enumerate}
+  \item \cite{mian2013household}
+  \item \cite{berger2015consumption}
+  \end{enumerate}
+\item Housing Wealth Effects: How Consumption Reacts to a House Price Bust
+  \begin{enumerate}
+  \item \cite{berger2018house}
+  \item \cite{guren2021housing}
+  \item \cite{greimel2019understanding}
+  \end{enumerate}
+\end{enumerate}
+
+\paragraph{Week 3: Consequences of Rising Inequality}
+
+\begin{enumerate}
+\item Falling Interest Rates
+  \begin{enumerate}
+  \item Saving Glut of the Rich \citep{kumhof2015inequality}
+  \item Indebted Demand \citep{mian2021indebted-demand}
+  \end{enumerate}
+\item Rising Mortgage Debt
+  \begin{enumerate}
+  \item Bertrand \& Morse, Bellet
+  \item \citet{drechsel2021falling-behind}
+  \end{enumerate}
+\end{enumerate}
+
+\paragraph{Week 4: House Price Expectations}
+\begin{enumerate}
+\item Expectations and the Housing Boom and Bust \citep{kaplan2018microeconomic}
+\item Social Networks and House Price Expectations \citep{bailey2019beliefs-leverage,bailey2018housing}
+\end{enumerate}
+
+\paragraph{Week 5: Monetary Policy and Heterogeneity (HANK)}
+\begin{itemize}
+\item Microeconomics Heterogeneity and Macroeconomic Shocks \citep{kaplan2018microeconomic}
+\item Original HANK \citep{kaplan2018monetary}
+\item Simple HANK \citep{bilbiie2018analytical}
+\end{itemize}
+
+\paragraph{Weeks 6 \& 7: Student presentations}
+
+\bibliography{../inequality.bib}
+\end{document}
