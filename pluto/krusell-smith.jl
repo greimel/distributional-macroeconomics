@@ -67,14 +67,12 @@ w(K, L) = (1-α) * Y(K, L) / L # note!!! wage rate is not used anywhere!
 # ╔═╡ 4a598c7d-387a-4de6-a079-2320693f3247
 r(K, L), w(K, L)
 
+# ╔═╡ a6702311-3a3e-451f-afc1-34f4d207bf35
+Consumer()
+
 # ╔═╡ 9c6e4ae1-88db-4e0c-bba1-85d2f0f7e8a6
 md"""
 ### Equilibrium
-"""
-
-# ╔═╡ 6d9dc47c-d9ad-4d6b-8c52-66346b23c95c
-md"""
-## The Aiyagari Model
 """
 
 # ╔═╡ 086faa22-c073-439f-9216-67b1bde3f7b6
@@ -90,8 +88,11 @@ md"""
 # ╔═╡ b266db65-b0a7-425a-8715-4967dabcb4a0
 a_grid  = LinRange(-2, 5, 20)
 
+# ╔═╡ 75352c02-2a24-4794-87cc-cceba05a4d56
+K_grid = LinRange(2, 4, 10)
+
 # ╔═╡ dee739f4-4116-4348-b552-3ab1283de93b
-endo  = EndogenousStateSpace((a=a_grid,))
+endo  = EndogenousStateSpace((a=a_grid, K=K_grid))
 
 # ╔═╡ e3658f4b-a07d-48ed-8d7f-eb8bb63af7bf
 z_grid = log.([0.5; 1.0; 1.5])
@@ -131,12 +132,14 @@ end
 
 # ╔═╡ ffb1ae82-ec5f-4771-9f83-9f26b3637e38
 function objective(choices, states, 𝔼V, params)
-  @unpack a_next = choices
-  @unpack β = params
-  
+	@unpack a_next = choices
+    @unpack β = params
+	#@unpack K = 1.0 #states.endo_states
+	K = 1.0
+	
   c = get_c(choices, states, params)
 
-  u(c) + β * 𝔼V(a_next)
+  u(c) + β * 𝔼V(a_next, K)
 end
 
 # ╔═╡ 894fb516-f281-46d6-a391-66a5089f6b4d
@@ -145,7 +148,7 @@ function Aiyagari.get_optimum(states, 𝔼V, params, endo, hh::Consumer)
   
   a_min, a_max = extrema(a_grid)
 
-  res = Optim.optimize(a_next -> - objective((a_next=a_next,), states, 𝔼V, params), a_min, a_max)
+  res = Optim.optimize(a_next -> - objective((a_next=a_next), states, 𝔼V, params), a_min, a_max)
   
   a_next = Optim.minimizer(res)
   val    = - Optim.minimum(res)
@@ -175,6 +178,20 @@ end
 
 # ╔═╡ accb8c2b-fb6d-44a2-8314-bc0e7f9c3b21
 agg_state = HuggettAS(r(K, L), 1, a_grid, z_MC);
+
+# ╔═╡ 89d63d98-cda6-4a22-ade8-d6a87ff32fe9
+Aiyagari.initialize_values_policies(endo, exo, agg_state, param, Consumer())
+
+# ╔═╡ 14543eba-4307-4994-8f48-66b1b310dbfa
+begin
+	
+	container_size = (length(endo), length(exo))
+
+	value_old = zeros(container_size)
+  	value_new = zeros(container_size)
+  
+	proto_pol_full = Aiyagari.proto_policy(endo, exo, 0, value_new, agg_state, param, Consumer())
+end  
 
 # ╔═╡ 8dd6485e-ef86-47d5-b783-5793b2f5f092
 @unpack val, policies_full = solve_bellman(endo, exo, agg_state, param, Consumer(), rtol=√eps())
@@ -1613,7 +1630,10 @@ version = "3.5.0+0"
 # ╠═4a598c7d-387a-4de6-a079-2320693f3247
 # ╠═accb8c2b-fb6d-44a2-8314-bc0e7f9c3b21
 # ╠═18b3db42-0871-47bb-935c-f07be0d60bd7
+# ╠═89d63d98-cda6-4a22-ade8-d6a87ff32fe9
+# ╠═14543eba-4307-4994-8f48-66b1b310dbfa
 # ╠═8dd6485e-ef86-47d5-b783-5793b2f5f092
+# ╠═a6702311-3a3e-451f-afc1-34f4d207bf35
 # ╠═b53a3d95-906d-4332-9195-c442de8fcc84
 # ╠═76a69263-ff27-45c2-b342-d0953b3ab2a2
 # ╠═d72fce8d-201f-4d35-bb39-fbe4539c5eaa
@@ -1623,10 +1643,10 @@ version = "3.5.0+0"
 # ╠═c5870a49-d7b4-4615-9b53-c2c4a8debef4
 # ╠═cef5a125-d9b6-4866-8b7a-c9dfa9c04d34
 # ╠═f0184940-d410-48ca-9d0a-a38ff8212f76
-# ╟─6d9dc47c-d9ad-4d6b-8c52-66346b23c95c
 # ╟─086faa22-c073-439f-9216-67b1bde3f7b6
 # ╟─900dfec9-e075-407c-ab6c-f538daa375cd
 # ╠═b266db65-b0a7-425a-8715-4967dabcb4a0
+# ╠═75352c02-2a24-4794-87cc-cceba05a4d56
 # ╠═dee739f4-4116-4348-b552-3ab1283de93b
 # ╠═e3658f4b-a07d-48ed-8d7f-eb8bb63af7bf
 # ╠═5e68b389-87f1-4b68-93a5-016ca76ff01a
