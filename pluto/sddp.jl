@@ -4,102 +4,98 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 08dcfb70-331a-11ec-279e-41c05e8f771b
-using InfiniteOpt, Ipopt, Gurobi
-
-# ╔═╡ b1efbd9f-ba7d-4a95-af1c-3d1c85c2d7e0
-using Plots
-
-# ╔═╡ 91131788-9ca1-439d-8363-a1581df394c8
+# ╔═╡ 55d943ce-2c1c-4ebd-814d-5bd339584b47
 begin
-	# preferences and constraints
-	ρ = 0.025  # discount rate
-	ξ = 0.3
-	δ = 0.1
-	k = 100.0  # utility bliss point
-	T = 10.0   # life horizon
-	r = 0.05   # interest rate
-	p = 1.0
-	B0 = 0.0 # endowment
-	H0 = 1.0
-	#u(c; k=k) = -(c^ξ - k)^2       # utility function
-	u(c, h; ξ = ξ) = c^(1-ξ) * h^ξ #log(c)
-	discount(t; ρ=ρ) = exp(-ρ*t) # discount function
-	LOM_B(B, c, x, y; r=r, p=p) = y + r*B - c - p*x 
-	LOM_h(h, x; δ=δ) = - δ * h + x
+	using SDDP
+	import Distributions
+	import Gurobi
+	import Plots
 end
 
-# ╔═╡ ea2f7934-4b08-48a5-b88a-e892ff78ddb3
-begin
-	# hyperparameters
-	opt = Ipopt.Optimizer   # desired solver
-	ns = 1_000;  
+# ╔═╡ 752ca48f-53e3-4b22-8b4b-ff79df29948a
+md"""
+[_code by @odow_](https://github.com/odow/SDDP.jl/issues/429)
+"""
+
+# ╔═╡ db42483a-3339-11ec-1a0a-73ea0376b406
+function main(
+    ρ = 0.020,  # discount rate
+    k = 90.0,   # utility bliss point
+    T = 10.0,   # life horizon
+    r = 0.05,   # interest rate
+    dt = 0.1,   # time step size
+    B0 = 100.0, # endowment
+    μ = 0.0,    # Brownian motion
+    σ = 0.1,
+)
+    env = Gurobi.Env()
+    model = SDDP.LinearPolicyGraph(
+        stages = round(Int, T / dt),
+        sense = :Max,
+        upper_bound = 0,
+        optimizer = () -> Gurobi.Optimizer(env),
+    ) do sp, t
+        set_silent(sp)
+        @variable(sp, B >= 0, SDDP.State, initial_value = B0)
+        @variable(sp, y, SDDP.State, initial_value = 10)
+        @variable(sp, 0 <= c <= 99)
+        @constraint(sp, B.out == B.in + dt * (r * B.in + y.out - c))
+        @constraint(sp, con, y.out == y.in + dt * μ * y.in + σ * y.in)
+        SDDP.parameterize(sp, rand(Distributions.Normal(0, 1), 10)) do ω
+            set_normalized_coefficient(con, y.in, -(1 + dt * μ + σ * ω))
+        end
+        @stageobjective(sp, dt * (exp(-ρ * t * dt) * -(c - k)^2))
+    end
+    SDDP.train(
+        model;
+        iteration_limit = 100,
+    )
+    sims = SDDP.simulate(model, 100, [:B, :c, :y]);
+    function plot_simulations(sims)
+        plot = Plots.plot()
+        plot_simulation!(
+            sims[1];
+            labels = ["B: wealth balance" "c: consumption" "y"],
+        )
+        for s in sims[2:end]
+            plot_simulation!(s, labels = false)
+        end
+        return plot
+    end
+    function plot_simulation!(sim; kwargs...)
+        Plots.plot!(
+            dt:dt:T,
+            [
+                map(data -> data[:B].out, sim),
+                map(data -> data[:c], sim),
+                map(data -> data[:y].out, sim),
+            ],
+            color = [:blue :red :green];
+            kwargs...
+        )
+    end
+    return model, plot_simulations(sims)
 end
 
-# ╔═╡ 025ba11a-1628-452a-8e1e-4105b1ee1530
-income(t) = 3 .* (sin(t) + 1)
+# ╔═╡ 18f0dfe9-8876-4dba-a4c5-5d187dd02168
+model, plt = main()
 
-# ╔═╡ 9320a7fe-13f0-4896-acf7-e3b53dcec17b
-begin
-	m = InfiniteModel(opt)
-	@infinite_parameter(m, t in [0, T], num_supports = ns)
-	@variable(m, B, Infinite(t)) ## state variables
-	@variable(m, h >= 0, Infinite(t))
-	@variable(m, c >= 0, Infinite(t)) ## control variables
-	@variable(m, x, Infinite(t)) ## control variables
-	@parameter_function(m, y == income(t))
-	@objective(m, Max, integral(u(c, h), t, weight_func = discount))
-	#@constraint(m, B(0) == 0)
-	@constraint(m, h(0) == 1)
-	@constraint(m, B(T) == 0)
-	@constraint(m, - B <= p * h)
-	
-	@constraint(m, deriv(B, t) == LOM_B(B, c, x, y; p, r))
-	@constraint(m, deriv(h, t) == LOM_h(h, x; δ))
-	
-	optimize!(m)
-	termination_status(m)
-end
-
-# ╔═╡ f666933e-7388-4e53-a9a2-cc44fdb4915a
-begin
-	c_opt = value(c)
-	h_opt = value(h)
-	B_opt = value(B)
-	ts = supports(t)
-	opt_obj = objective_value(m) # V(B0, 0)
-end
-
-# ╔═╡ bc39747c-ab1b-4027-876b-eb2e0ee3c63c
-y
-
-# ╔═╡ 65e413ac-c32a-483e-8e05-2079c86a7645
-income.(ts)
-
-# ╔═╡ 9bdf92db-d7a2-402d-94ee-4032ee600849
-begin
-	ix = 2:(length(ts)-1) # index for plotting
-	plot(
-		plot(ts[ix],   B_opt[ix], title = "B: wealth balance"),
-		plot(ts[ix],  c_opt[ix], title = "c: consumption"),
-		plot(ts[ix],  h_opt[ix], title = "h: housing"),
-		plot(ts, income.(ts), title = "y: income")
-		)
-end
+# ╔═╡ 80c8d2f2-b10f-4f8c-8776-e95a16befc66
+plt
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
-InfiniteOpt = "20393b10-9daf-11e9-18c9-8db751c92c57"
-Ipopt = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SDDP = "f4570300-c277-11e8-125c-4912f86ce65d"
 
 [compat]
+Distributions = "~0.25.20"
 Gurobi = "~0.9.14"
-InfiniteOpt = "~0.5.0"
-Ipopt = "~0.7.0"
 Plots = "~1.22.6"
+SDDP = "~0.4.3"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -108,17 +104,6 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.7.0-rc2.0"
 manifest_format = "2.0"
-
-[[deps.ASL_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "370cafc70604b2522f2c7cf9915ebcd17b4cd38b"
-uuid = "ae81ac8f-d209-56e5-92de-9978fef736f9"
-version = "0.1.2+0"
-
-[[deps.AbstractTrees]]
-git-tree-sha1 = "03e0550477d86222521d254b741d470ba17ea0b5"
-uuid = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
-version = "0.3.4"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -140,12 +125,6 @@ deps = ["JSON", "Logging", "Printf", "Profile", "Statistics", "UUIDs"]
 git-tree-sha1 = "61adeb0823084487000600ef8b1c00cc2474cd47"
 uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 version = "1.2.0"
-
-[[deps.BinaryProvider]]
-deps = ["Libdl", "Logging", "SHA"]
-git-tree-sha1 = "ecdec412a9abc8db54c0efc5548c64dfce072058"
-uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
-version = "0.5.10"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -296,6 +275,11 @@ git-tree-sha1 = "b3bfd02e98aedfa5cf885665493c5598c350cd2f"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.2.10+0"
 
+[[deps.ExprTools]]
+git-tree-sha1 = "b7e3d17636b348f005f11040025ae8c6f645fe92"
+uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
+version = "0.1.6"
+
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
 git-tree-sha1 = "b57e3acbe22f8484b4b5ff66a7499717fe1a9cc8"
@@ -307,12 +291,6 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "d8a578692e3077ac998b50c0217dfd67f21d1e5f"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.0+0"
-
-[[deps.FastGaussQuadrature]]
-deps = ["LinearAlgebra", "SpecialFunctions", "StaticArrays"]
-git-tree-sha1 = "5829b25887e53fb6730a9df2ff89ed24baa6abf6"
-uuid = "442a2c76-b920-505d-bb47-c5924d526838"
-version = "0.4.7"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -421,12 +399,6 @@ git-tree-sha1 = "8a954fed8ac097d5be04921d595f741115c1b2ad"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+0"
 
-[[deps.InfiniteOpt]]
-deps = ["AbstractTrees", "DataStructures", "Distributions", "FastGaussQuadrature", "JuMP", "LeftChildRightSiblingTrees", "LinearAlgebra", "MutableArithmetics", "Reexport", "SpecialFunctions"]
-git-tree-sha1 = "209c327ee031b9951be71f735cde5399eff06c9b"
-uuid = "20393b10-9daf-11e9-18c9-8db751c92c57"
-version = "0.5.0"
-
 [[deps.IniFile]]
 deps = ["Test"]
 git-tree-sha1 = "098e4d2c533924c921f9f9847274f2ad89e018b8"
@@ -442,18 +414,6 @@ deps = ["Test"]
 git-tree-sha1 = "f0c6489b12d28fb4c2103073ec7452f3423bd308"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
 version = "0.1.1"
-
-[[deps.Ipopt]]
-deps = ["BinaryProvider", "Ipopt_jll", "Libdl", "LinearAlgebra", "MathOptInterface", "MathProgBase"]
-git-tree-sha1 = "380786b4929b8d18d76e909c6b2eca355b7c3bd6"
-uuid = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
-version = "0.7.0"
-
-[[deps.Ipopt_jll]]
-deps = ["ASL_jll", "Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "MUMPS_seq_jll", "OpenBLAS32_jll", "Pkg"]
-git-tree-sha1 = "82124f27743f2802c23fcb05febc517d0b15d86e"
-uuid = "9cc047cb-c261-5740-88fc-0cf96f7bdcc7"
-version = "3.13.4+2"
 
 [[deps.IrrationalConstants]]
 git-tree-sha1 = "7fd44fd4ff43fc60815f8e764c0f352b83c49151"
@@ -522,12 +482,6 @@ deps = ["Formatting", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdow
 git-tree-sha1 = "669315d963863322302137c4591ffce3cb5b8e68"
 uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
 version = "0.15.8"
-
-[[deps.LeftChildRightSiblingTrees]]
-deps = ["AbstractTrees"]
-git-tree-sha1 = "71be1eb5ad19cb4f61fa8c73395c0338fd092ae0"
-uuid = "1d6d02ad-be62-4b6b-8a6d-2f90e265016e"
-version = "0.1.2"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -609,18 +563,6 @@ version = "0.3.4"
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
-[[deps.METIS_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "2dc1a9fc87e57e32b1fc186db78811157b30c118"
-uuid = "d00139f3-1899-568f-a2f0-47f597d42d70"
-version = "5.1.0+5"
-
-[[deps.MUMPS_seq_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "METIS_jll", "OpenBLAS32_jll", "Pkg"]
-git-tree-sha1 = "1a11a84b2af5feb5a62a820574804056cdc59c39"
-uuid = "d7ed1dd3-d0ae-5e8e-bfb4-87a502085b8d"
-version = "5.2.1+4"
-
 [[deps.MacroTools]]
 deps = ["Markdown", "Random"]
 git-tree-sha1 = "5a5bc6bf062f0f95e62d0fe0a2d99699fed82dd9"
@@ -636,12 +578,6 @@ deps = ["BenchmarkTools", "CodecBzip2", "CodecZlib", "JSON", "JSONSchema", "Line
 git-tree-sha1 = "575644e3c05b258250bb599e57cf73bbf1062901"
 uuid = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 version = "0.9.22"
-
-[[deps.MathProgBase]]
-deps = ["LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "9abbe463a1e9fc507f12a69e7f29346c2cdc472c"
-uuid = "fdba3010-5040-5b88-9595-932c9decdf73"
-version = "0.7.8"
 
 [[deps.MbedTLS]]
 deps = ["Dates", "MbedTLS_jll", "Random", "Sockets"]
@@ -689,12 +625,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "7937eda4681660b4d6aeeecc2f7e1c81c8ee4e2f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+0"
-
-[[deps.OpenBLAS32_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "9c6c2ed4b7acd2137b878eb96c68e63b76199d0f"
-uuid = "656ef2d0-ae68-5445-9ca0-591084a874a2"
-version = "0.3.17+0"
 
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
@@ -841,6 +771,12 @@ git-tree-sha1 = "68db32dff12bb6127bac73c209881191bf0efbb7"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
 version = "0.3.0+0"
 
+[[deps.SDDP]]
+deps = ["Distributed", "HTTP", "JSON", "JuMP", "LinearAlgebra", "MutableArithmetics", "Printf", "Random", "RecipesBase", "Reexport", "SHA", "Statistics", "TimerOutputs"]
+git-tree-sha1 = "01ffea8a99d7191d9b83ef3a01711d623973051c"
+uuid = "f4570300-c277-11e8-125c-4912f86ce65d"
+version = "0.4.3"
+
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 
@@ -942,6 +878,12 @@ uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 [[deps.Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[deps.TimerOutputs]]
+deps = ["ExprTools", "Printf"]
+git-tree-sha1 = "7cb456f358e8f9d102a8b25e8dfedf58fa5689bc"
+uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
+version = "0.5.13"
 
 [[deps.TranscodingStreams]]
 deps = ["Random", "Test"]
@@ -1177,15 +1119,10 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
-# ╠═08dcfb70-331a-11ec-279e-41c05e8f771b
-# ╠═b1efbd9f-ba7d-4a95-af1c-3d1c85c2d7e0
-# ╠═91131788-9ca1-439d-8363-a1581df394c8
-# ╠═ea2f7934-4b08-48a5-b88a-e892ff78ddb3
-# ╠═025ba11a-1628-452a-8e1e-4105b1ee1530
-# ╠═9320a7fe-13f0-4896-acf7-e3b53dcec17b
-# ╠═f666933e-7388-4e53-a9a2-cc44fdb4915a
-# ╠═bc39747c-ab1b-4027-876b-eb2e0ee3c63c
-# ╠═65e413ac-c32a-483e-8e05-2079c86a7645
-# ╠═9bdf92db-d7a2-402d-94ee-4032ee600849
+# ╟─752ca48f-53e3-4b22-8b4b-ff79df29948a
+# ╠═55d943ce-2c1c-4ebd-814d-5bd339584b47
+# ╠═db42483a-3339-11ec-1a0a-73ea0376b406
+# ╠═18f0dfe9-8876-4dba-a4c5-5d187dd02168
+# ╠═80c8d2f2-b10f-4f8c-8776-e95a16befc66
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
