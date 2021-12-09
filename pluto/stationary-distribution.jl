@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.2
+# v0.17.3
 
 using Markdown
 using InteractiveUtils
@@ -53,9 +53,6 @@ v(s) = \max_{a \in A} r(s, a) + \operatorname{E}(v(s')|s, a)
 \end{align}
 ```
 """
-
-# ╔═╡ a1d82c1e-caba-4d73-9f54-549a606e34fe
-
 
 # ╔═╡ 7001a10f-8dfe-45bf-814b-53fdafc5a8fb
 md"""
@@ -122,71 +119,56 @@ md"""
 """
 
 # ╔═╡ 75e694ad-2c16-4806-af5f-e3e7642050b3
-function statespace(iters)
-	#iters = (k = k_grid, z = z_grid)
-	k = keys(iters)
-	iters_tuple = values(iters)
-	iters_idx = eachindex.(iters_tuple)
-
-	vals = NamedTuple{k}.(Iterators.product(iters...))
-	idxs = NamedTuple{k}.(Iterators.product(iters_idx...))
-
-	grid_ = map(enumerate(zip(vals, idxs))) do (i, (vs, idxs))
-		State(vs, idxs, i)
-	end
-
-	grid = NamedDimsArray{k}(collect(grid_))
-end
+grid = Iterators.product(1:length(k_grid), 1:length(z_grid)) |> collect
 
 # ╔═╡ d6b61a69-a1dc-4fe1-8411-617969b2e4d2
-function state(statespace; vals = nothing, inds = nothing)
-	if !isnothing(vals)
-		i = findfirst(s -> values(s) == vals, statespace)
-	elseif !isnothing(inds)
-		i = findfirst(s -> indices(s) == inds, statespace)
-	end
-#@if !isnothing(i)
-	#	statespace[1]
-#		@show vals, inds
-#	else
-		return statespace[i]
-#	end
-end
+
+
+# ╔═╡ 64310237-f55d-40e3-b4fb-c8b3c0bd6775
+
+
+# ╔═╡ 5cd8e4b2-f46f-4a3e-951b-0f1f1fcfe3f9
+
+
+# ╔═╡ bdffd5ce-1c50-4db5-976c-aef110150b73
+
 
 # ╔═╡ f2cdbdef-682a-494c-9000-4b9757d70e47
 
 
 # ╔═╡ 037b8360-fc22-4863-9626-91727013de05
-grid = statespace((k = k_grid, z = z_grid))
 
-# ╔═╡ 64310237-f55d-40e3-b4fb-c8b3c0bd6775
-indices(grid[1])
-
-# ╔═╡ 5cd8e4b2-f46f-4a3e-951b-0f1f1fcfe3f9
-values(grid[1])
-
-# ╔═╡ bdffd5ce-1c50-4db5-976c-aef110150b73
-state(grid, vals = (; k = k_grid[5], z = z_grid[3]))
 
 # ╔═╡ 2a24dcf2-a532-4fc3-901e-2a7969433c45
-getproperty(grid[1], :k)
+
 
 # ╔═╡ 4c563044-cdec-4e94-a889-7d0ea040345d
-indices(grid[5], :z)
+
 
 # ╔═╡ 75afb8c8-4666-4162-8a45-e90d554306dc
 dp = let
 	(; α, β) = params
 	
 	function T(s, a)
-		k_idx = indices(s, :k)
-		vals = NamedTuple{keys(values(s))}.(k_idx, eachindex(z_grid))
-		states = map(v -> state(grid; vals = v), vals)
-		probs = z_P[indices(s, :z), :]
+		i_k, i_z = s
+		k = k_grid[i_k]
+		z = z_grid[i_z]
+
+		i_a = findfirst(==(a),  k_grid)
+
+		states = [(i_a, i_z_next) for i_z_next in 1:length(z_grid)]
+		
+		probs = z_P[i_z, :]
 		SparseCat(states, probs)
 	end
-	
-	R(s, a::Real) = log(max((s.k + s.z)^α - a, 0, 0)) 
+
+	function R(s, a::Real) 
+		i_k, i_z = s
+		k = k_grid[i_k]
+		z = z_grid[i_z]
+		
+		log(max((k + z)^α - a, 0, 0)) 
+	end
 	
 	(; T, R, β)
 end
@@ -220,8 +202,8 @@ let
 	ax_value = Axis(fig[1,1], title = "value")
 	ax_policy = Axis(fig[1,2], title = "policy")
 	for i in 1:3
-		lines!(ax_value, k_grid, value.(Ref(sol), grid[k=:, z_idx=i]), label = i)
-		lines!(ax_policy, k_grid, action.(Ref(sol), grid[k=:, z_idx=i]), label = i)
+		lines!(ax_value, k_grid, value.(Ref(sol), grid[:, i]), label = i)
+		lines!(ax_policy, k_grid, action.(Ref(sol), grid[:, i]), label = i)
 	end
 
 	fig
@@ -280,7 +262,7 @@ StructArrays = "~0.6.3"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.0-rc3"
+julia_version = "1.7.0"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -649,9 +631,9 @@ version = "0.21.0+0"
 
 [[deps.Glib_jll]]
 deps = ["Artifacts", "Gettext_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libiconv_jll", "Libmount_jll", "PCRE_jll", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "7bf67e9a481712b3dbe9cb3dac852dc4b1162e02"
+git-tree-sha1 = "74ef6288d071f58033d54fd6708d4bc23a8b8972"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
-version = "2.68.3+0"
+version = "2.68.3+1"
 
 [[deps.Graphics]]
 deps = ["Colors", "LinearAlgebra", "NaNMath"]
@@ -678,9 +660,9 @@ version = "1.0.2"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
-git-tree-sha1 = "8a954fed8ac097d5be04921d595f741115c1b2ad"
+git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
-version = "2.8.1+0"
+version = "2.8.1+1"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -1566,8 +1548,7 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─870ed666-2e12-46df-b7e6-6edb6ca83f43
-# ╠═80bab100-6775-479a-86c6-fa8c462acb11
-# ╠═a1d82c1e-caba-4d73-9f54-549a606e34fe
+# ╟─80bab100-6775-479a-86c6-fa8c462acb11
 # ╟─7001a10f-8dfe-45bf-814b-53fdafc5a8fb
 # ╠═a4f03a87-b3f3-405a-825f-821abc9cc372
 # ╠═b729650d-9234-4a52-a09f-8d84e7eb81fd
