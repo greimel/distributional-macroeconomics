@@ -24,23 +24,26 @@ using StructArrays
 # ╔═╡ a4aa9781-07e2-4d18-96f6-3aad52d2ac40
 using NamedDims
 
+# ╔═╡ d4ae5a54-87de-4366-94a6-be94573d4470
+using POMDPs: POMDPs
+
+# ╔═╡ db37c4f0-0b90-4a23-8b7d-d592308dd5e9
+using FreqTables, DataFrames
+
 # ╔═╡ 7106b6f7-7a67-41ce-b46d-2f33eda76444
 using SparseArrays
 
 # ╔═╡ 5974a7f1-058b-4abd-bd86-102ad0bd8092
 using Arpack
 
-# ╔═╡ 92904cdb-e267-48d5-94e7-fe944e86adec
-using PlutoTest
-
 # ╔═╡ 28d7e91b-c5f0-4230-b61f-e305de3d57c3
 using LinearAlgebra
 
-# ╔═╡ d4ae5a54-87de-4366-94a6-be94573d4470
-using POMDPs: POMDPs
-
 # ╔═╡ ea50a024-868b-4d48-8877-20a7b13cf614
 using PlutoUI: TableOfContents
+
+# ╔═╡ 92904cdb-e267-48d5-94e7-fe944e86adec
+using PlutoTest
 
 # ╔═╡ 870ed666-2e12-46df-b7e6-6edb6ca83f43
 md"""
@@ -107,7 +110,7 @@ md"""
 """
 
 # ╔═╡ c48e8a97-68d4-4ba0-b5bc-1b6fbede5835
-MC = tauchen(5, 0.8, 0.1)
+MC = tauchen(15, 0.8, 0.1)
 
 # ╔═╡ b6a1b579-6185-415b-af38-a29d294099e8
 MarkovChain |> fieldnames
@@ -204,13 +207,75 @@ let
 	fig
 end
 
+# ╔═╡ 0d2c4186-201c-4c78-9316-34aa8fea5ca6
+md"""
+# Simulating an agent
+"""
+
+# ╔═╡ f1a912bd-705d-4268-945d-88d3916d7572
+function simulate_path(s₀, N, sol, dp)
+
+	path = Tuple{Int,Int}[]
+	push!(path, s₀)
+
+	for t ∈ 2:N
+		s₁ = dp.T(s₀, action(sol, s₀)) |> rand
+		push!(path, s₁)
+		s₀ = s₁
+	end
+	path
+end
+
+# ╔═╡ 64ea4140-a98e-427c-91d7-bdbfb058674f
+s₀ = grid[2, 1]
+
+# ╔═╡ e0b3d6bc-47e0-4b75-bc70-d2b570144b26
+dp.T(s₀, action(sol, s₀)) |> rand
+
+# ╔═╡ d9966b13-4938-4bf8-b834-ddf096041ac5
+paths = map(1:1000) do _
+		path = simulate_path(s₀, 100, sol, dp)
+end
+
+# ╔═╡ 6798f509-d4cb-4c15-9723-6486162893ee
+let
+	fig = Figure()
+	ax = Axis(fig[1,1])
+
+	for i in 1:100
+		dist = k_grid[first.(getindex.(paths, i))]
+		frqtbl = freqtable(dist)
+		vals = names(frqtbl) |> only
+	
+		lines!(ax, vals, collect(frqtbl))
+	end
+
+	fig
+end
+
+# ╔═╡ e08c5658-a6f9-4e5f-b21f-b0681e8b0c4b
+let
+	s₀ = grid[2, 1]
+	
+	fig = Figure()
+	ax = Axis(fig[1,1], title = "Simulating paths")
+
+	for path in paths
+		lines!(ax, k_grid[first.(path)])
+	end
+
+	fig
+end
+
 # ╔═╡ f3f3cc78-5102-11ec-3839-85a55959538e
 md"""
 # Stationary distribution
 """
 
-# ╔═╡ bf266abe-bc19-452c-b51f-08cb9448d203
-reward = dp.R.(grid, action.(Ref(sol), grid))
+# ╔═╡ 29aed1ee-f1c1-4b6e-9d93-26146d0dbc0b
+md"""
+## Building the controlled Markov Chain
+"""
 
 # ╔═╡ d912c2b3-e47c-4767-84ed-c84616afb188
 IJV = mapreduce(vcat, grid) do state
@@ -226,10 +291,12 @@ end |> StructArray
 mc = sparse(IJV.from, IJV.to, IJV.pr, length(grid), length(grid))
 
 # ╔═╡ 51569027-ad0c-4aab-92f5-62ecf75c5989
-@test all(==(1), sum(mc, dims=2))
+@test all(≈(1), sum(mc, dims=2))
 
-# ╔═╡ c818dc44-a390-447f-9d26-545791f4703f
-mc^5 |> Matrix
+# ╔═╡ 7ffd63ad-b349-4a18-8e6a-1e2320e84a07
+md"""
+## Computing the stationary distribution
+"""
 
 # ╔═╡ d1035de9-ba48-4ed3-ac6d-4119399878ca
 λ, ϕ = eigs(mc')
@@ -249,15 +316,11 @@ begin
 	fig = Figure()
 	ax = Axis(fig[1,1])
 	lines!.(ax, Ref(k_grid), collect(eachcol(π)))
-	#lines(fig[1,2], Ref(k_grid), sum(π, dims = 2))
 	fig
 end
 
 # ╔═╡ 3b05bd8c-8cab-41f8-a7ff-98941013ddeb
 lines(k_grid, dropdims(sum(π, dims=2), dims=2))
-
-# ╔═╡ d0bafa91-9833-4ceb-a728-1cb6c48f855e
-POMDPs.states(mdp)
 
 # ╔═╡ a385f1ea-f544-4134-88ea-c0778780b617
 md"""
@@ -267,16 +330,15 @@ md"""
 # ╔═╡ 1de531ec-a81c-4a04-957d-25ff29e80d09
 TableOfContents()
 
-# ╔═╡ 92aea081-4730-40cb-a3d2-adbc34448adc
-
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DiscreteValueIteration = "4b033969-44f6-5439-a48b-c11fa3648068"
+FreqTables = "da1fdf0e-e0ff-5433-a45f-9bb5ff651cb1"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NamedDims = "356022a1-0364-5f58-8944-0da4b18d706f"
@@ -293,7 +355,9 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 AlgebraOfGraphics = "~0.6.0"
 Arpack = "~0.5.3"
 CairoMakie = "~0.6.6"
+DataFrames = "~1.3.0"
 DiscreteValueIteration = "~0.4.5"
+FreqTables = "~0.4.5"
 Makie = "~0.15.3"
 NamedDims = "~0.2.43"
 POMDPModelTools = "~0.3.9"
@@ -433,6 +497,12 @@ git-tree-sha1 = "f2202b55d816427cd385a9a4f3ffb226bee80f99"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+0"
 
+[[deps.CategoricalArrays]]
+deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
+git-tree-sha1 = "c308f209870fdbd84cb20332b6dfaf14bf3387f8"
+uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+version = "0.10.2"
+
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
 git-tree-sha1 = "4c26b4e9e91ca528ea212927326ece5918a04b47"
@@ -487,6 +557,11 @@ git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
+[[deps.Combinatorics]]
+git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
+uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+version = "1.0.2"
+
 [[deps.CommonRLInterface]]
 deps = ["MacroTools"]
 git-tree-sha1 = "21de56ebf28c262651e682f7fe614d44623dc087"
@@ -536,6 +611,12 @@ version = "0.7.4"
 git-tree-sha1 = "cc70b17275652eb47bc9e5f81635981f13cea5c8"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.9.0"
+
+[[deps.DataFrames]]
+deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Reexport", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
+git-tree-sha1 = "2e993336a3f68216be91eb8ee4625ebbaba19147"
+uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+version = "1.3.0"
 
 [[deps.DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
@@ -713,6 +794,12 @@ git-tree-sha1 = "770050893e7bc8a34915b4b9298604a3236de834"
 uuid = "663a7486-cb36-511b-a19d-713bb74d65c9"
 version = "0.9.5"
 
+[[deps.FreqTables]]
+deps = ["CategoricalArrays", "Missings", "NamedArrays", "Tables"]
+git-tree-sha1 = "488ad2dab30fd2727ee65451f790c81ed454666d"
+uuid = "da1fdf0e-e0ff-5433-a45f-9bb5ff651cb1"
+version = "0.4.5"
+
 [[deps.FriBidi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "aa31987c2ba8704e23c6c8ba8a4f769d5d7e4f91"
@@ -871,6 +958,11 @@ deps = ["Test"]
 git-tree-sha1 = "a7254c0acd8e62f1ac75ad24d5db43f5f19f3c65"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
 version = "0.1.2"
+
+[[deps.InvertedIndices]]
+git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
+uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
+version = "1.1.0"
 
 [[deps.IrrationalConstants]]
 git-tree-sha1 = "7fd44fd4ff43fc60815f8e764c0f352b83c49151"
@@ -1131,6 +1223,12 @@ git-tree-sha1 = "bfe47e760d60b82b66b61d2d44128b62e3a369fb"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.5"
 
+[[deps.NamedArrays]]
+deps = ["Combinatorics", "DataStructures", "DelimitedFiles", "InvertedIndices", "LinearAlgebra", "Random", "Requires", "SparseArrays", "Statistics"]
+git-tree-sha1 = "2fd5787125d1a93fbe30961bd841707b8a80d75b"
+uuid = "86f7a689-2022-50b4-a561-43c23ac3c673"
+version = "0.9.6"
+
 [[deps.NamedDims]]
 deps = ["AbstractFFTs", "ChainRulesCore", "CovarianceEstimation", "LinearAlgebra", "Pkg", "Requires", "Statistics"]
 git-tree-sha1 = "88dce79529a358f6efd13225d131bec958a18f1d"
@@ -1357,6 +1455,12 @@ deps = ["TOML"]
 git-tree-sha1 = "00cfd92944ca9c760982747e9a1d0d5d86ab1e5a"
 uuid = "21216c6a-2e73-6563-6e65-726566657250"
 version = "1.2.2"
+
+[[deps.PrettyTables]]
+deps = ["Crayons", "Formatting", "Markdown", "Reexport", "Tables"]
+git-tree-sha1 = "d940010be611ee9d67064fe559edbb305f8cc0eb"
+uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+version = "1.2.3"
 
 [[deps.Primes]]
 git-tree-sha1 = "984a3ee07d47d401e0b823b7d30546792439070a"
@@ -1774,7 +1878,7 @@ version = "3.5.0+0"
 # ╟─80bab100-6775-479a-86c6-fa8c462acb11
 # ╟─7001a10f-8dfe-45bf-814b-53fdafc5a8fb
 # ╠═a4f03a87-b3f3-405a-825f-821abc9cc372
-# ╠═b729650d-9234-4a52-a09f-8d84e7eb81fd
+# ╟─b729650d-9234-4a52-a09f-8d84e7eb81fd
 # ╠═b940e82b-0565-4f38-8061-ee65f3b818fb
 # ╠═928cf3cc-4f2f-428f-a00b-cc1a973012fc
 # ╟─2c8dafc9-f3f6-40e4-bb83-1abe258c00f2
@@ -1793,26 +1897,32 @@ version = "3.5.0+0"
 # ╠═33f459ee-c4db-42cc-9857-00cc9f8a1b0d
 # ╠═a4aa9781-07e2-4d18-96f6-3aad52d2ac40
 # ╠═75afb8c8-4666-4162-8a45-e90d554306dc
+# ╠═d4ae5a54-87de-4366-94a6-be94573d4470
 # ╠═083f5528-b602-4699-b782-e3a521cb1cea
 # ╠═d8ff6a80-c01d-4878-a926-8bc31f47279b
+# ╟─0d2c4186-201c-4c78-9316-34aa8fea5ca6
+# ╠═e0b3d6bc-47e0-4b75-bc70-d2b570144b26
+# ╠═f1a912bd-705d-4268-945d-88d3916d7572
+# ╠═64ea4140-a98e-427c-91d7-bdbfb058674f
+# ╠═d9966b13-4938-4bf8-b834-ddf096041ac5
+# ╠═db37c4f0-0b90-4a23-8b7d-d592308dd5e9
+# ╠═6798f509-d4cb-4c15-9723-6486162893ee
+# ╠═e08c5658-a6f9-4e5f-b21f-b0681e8b0c4b
 # ╟─f3f3cc78-5102-11ec-3839-85a55959538e
-# ╠═bf266abe-bc19-452c-b51f-08cb9448d203
-# ╠═d912c2b3-e47c-4767-84ed-c84616afb188
+# ╟─29aed1ee-f1c1-4b6e-9d93-26146d0dbc0b
 # ╠═7106b6f7-7a67-41ce-b46d-2f33eda76444
+# ╠═d912c2b3-e47c-4767-84ed-c84616afb188
 # ╠═5974a7f1-058b-4abd-bd86-102ad0bd8092
 # ╠═35ad1ec5-d35f-46ec-a677-aa517feb8b48
-# ╠═92904cdb-e267-48d5-94e7-fe944e86adec
 # ╠═51569027-ad0c-4aab-92f5-62ecf75c5989
-# ╠═c818dc44-a390-447f-9d26-545791f4703f
 # ╠═28d7e91b-c5f0-4230-b61f-e305de3d57c3
+# ╟─7ffd63ad-b349-4a18-8e6a-1e2320e84a07
 # ╠═d1035de9-ba48-4ed3-ac6d-4119399878ca
 # ╠═15d3e184-4bb3-48cf-85b2-0dae297e38eb
 # ╠═eb81c692-fc6f-4957-9c56-dda2a0925f75
-# ╠═d4ae5a54-87de-4366-94a6-be94573d4470
-# ╠═d0bafa91-9833-4ceb-a728-1cb6c48f855e
 # ╟─a385f1ea-f544-4134-88ea-c0778780b617
 # ╠═ea50a024-868b-4d48-8877-20a7b13cf614
 # ╠═1de531ec-a81c-4a04-957d-25ff29e80d09
-# ╠═92aea081-4730-40cb-a3d2-adbc34448adc
+# ╠═92904cdb-e267-48d5-94e7-fe944e86adec
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
