@@ -45,9 +45,14 @@ using PlutoUI: TableOfContents
 # ╔═╡ 92904cdb-e267-48d5-94e7-fe944e86adec
 using PlutoTest
 
+# ╔═╡ b8813399-6acf-4cf6-95aa-3d69a9c5441f
+md"""
+# The Aiyagari model and its variants
+"""
+
 # ╔═╡ 870ed666-2e12-46df-b7e6-6edb6ca83f43
 md"""
-# Aiyagari
+## The Household
 """
 
 # ╔═╡ 80bab100-6775-479a-86c6-fa8c462acb11
@@ -57,13 +62,31 @@ md"""
 &\max \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
-		&c_t + k_{t-1}(1 + r - \delta) = k_t + y_t \\
+		&u(c) = \log(c) \\
+		&c_t + k_{t-1}(1 + r - \delta) = k_t + y_t \cdot w \\
 		&\log(y_t) \sim \text{some Markov Chain} \\
-		&y_0, k_{-1}, r \text{ given}
+		&y_0, k_{-1} \text{ given}
 \end{aligned}
 \end{align}
 ```
 
+What needs to be specified:
+* parameter ``\delta``
+* prices ``r``, ``w``
+* idiosynchratic productivity process
+* initial state ``(y_0, k_{-1})``
+"""
+
+# ╔═╡ cd106100-a747-477b-93c5-9c785be3b9ca
+md"""
+Let ``s = (k, y)`` be the state and ``a = (k')`` be the action. We can then write
+```math
+c(s,a;\cdots) = y \cdot w + k\cdot(1 + r - \delta) - k'
+```
+Let us also define the reward function
+```math
+r(s, a; \cdots) = u(c(s,a;\cdots))
+```
 Rewrite this recursively,
 ```math
 \begin{align}
@@ -93,7 +116,7 @@ end
 
 # ╔═╡ b729650d-9234-4a52-a09f-8d84e7eb81fd
 md"""
-_Code by JGS Lazzaro_
+_code adapted from JGS Lazzaro_
 """
 
 # ╔═╡ 2c8dafc9-f3f6-40e4-bb83-1abe258c00f2
@@ -102,7 +125,7 @@ md"""
 """
 
 # ╔═╡ 51151fb5-14eb-4e1e-8e01-53130a352e61
-params = (; β = 0.9, α = 0.3)
+params = (; β = 0.9, α = 0.3, δ = 0.0)
 
 # ╔═╡ 9d6c65dc-1d31-4b20-996c-3a6489c9fd6c
 md"""
@@ -128,11 +151,9 @@ md"""
 
 # ╔═╡ f4187a41-5313-43a4-a8cd-8a7bdd0ecdbc
 k_grid = let
-	(; β, α) = params
+	nk = 40
 
-	nk = 20
-
-	k_grid = range(eps(),stop = 0.1,length=nk)
+	k_grid = range(eps(), stop = 0.5, length=nk)
 end
 
 # ╔═╡ aab747fa-7501-4dbc-8a58-dfb3336bacf1
@@ -147,8 +168,8 @@ grid = Iterators.product(1:length(k_grid), 1:length(z_grid)) |> collect
 grid_linear = LinearIndices(grid)
 
 # ╔═╡ 75afb8c8-4666-4162-8a45-e90d554306dc
-dp = let
-	(; α, β) = params
+function household_dp(; r, w, params) 
+	(; β, δ) = params
 	
 	function T(s, a)
 		i_k, i_z = s
@@ -167,16 +188,17 @@ dp = let
 		i_k, i_z = s
 		k = k_grid[i_k]
 		z = z_grid[i_z]
-		
-		log(max((k + z)^α - a, 0, 0)) 
+
+		k_next = a
+		c = max(z * w + k * (1 + r - δ) - k_next, 0)
+		log(c)
 	end
 	
 	(; T, R, β)
 end
 
 # ╔═╡ 083f5528-b602-4699-b782-e3a521cb1cea
-(; mdp, sol) = let
-	(; T, R, β) = dp
+function solve_household(; T, R, β, grid, k_grid)
 
 	#truesol = β * α * Kgrid.^α
 	mdp = QuickMDP(
@@ -194,6 +216,100 @@ end
 	(; mdp, sol)
 end
 
+# ╔═╡ 0d2c4186-201c-4c78-9316-34aa8fea5ca6
+md"""
+# Simulating an agent
+"""
+
+# ╔═╡ f1a912bd-705d-4268-945d-88d3916d7572
+function simulate_path(s₀, N, sol, T)
+
+	path = Tuple{Int,Int}[]
+	push!(path, s₀)
+
+	for t ∈ 2:N
+		s₁ = T(s₀, action(sol, s₀)) |> rand
+		push!(path, s₁)
+		s₀ = s₁
+	end
+	path
+end
+
+# ╔═╡ 64ea4140-a98e-427c-91d7-bdbfb058674f
+s₀ = grid[2, 1]
+
+# ╔═╡ f3f3cc78-5102-11ec-3839-85a55959538e
+md"""
+# Stationary distribution
+"""
+
+# ╔═╡ 29aed1ee-f1c1-4b6e-9d93-26146d0dbc0b
+md"""
+## Building the controlled Markov Chain
+"""
+
+# ╔═╡ 815eab60-1ba8-4b42-84f0-c7cc87d9f282
+function controlled_markov_chain(grid, sol, T)
+	IJV = mapreduce(vcat, grid) do state
+		from_tpl = state
+		from = grid_linear[from_tpl...]
+		to_dist = T(from_tpl, action(sol, from_tpl))
+		map(zip(to_dist.vals, to_dist.probs)) do (to_tpl, pr)
+			(; from, to = grid_linear[to_tpl...], pr)
+		end
+	end |> StructArray
+
+	sparse(IJV.from, IJV.to, IJV.pr, length(grid), length(grid))
+
+end
+
+# ╔═╡ cb49ccc0-2470-4a79-99ee-d1467f09eb2c
+md"""
+## Computing the stationary distribution
+"""
+
+# ╔═╡ 4442496d-3176-45e0-be4a-2dc7951b8b0c
+function stationary_distribution(mc, grid)
+	λ, ϕ = eigs(mc')
+
+	@assert λ[1] ≈ 1
+	π = ϕ[:, 1]
+	@assert isreal(π)
+	π = real.(π)
+	π ./= sum(π)
+	π = reshape(π, size(grid)) |> Matrix	
+end
+
+# ╔═╡ 898b1440-ca66-4807-9592-6bb06331930f
+md"""
+# Saving in a productive asset
+"""
+
+# ╔═╡ adddd0c7-4163-43b4-8360-15f66583231a
+get_r(A, K, L; α) = α * A * (L/K)^(1-α)
+
+# ╔═╡ 5e391462-76f5-41d5-8af9-b6a52b46526e
+get_w(A, K, L; α) = (1-α) * A * (K/L)^α
+
+# ╔═╡ 7f0e140b-fe8f-4c49-ad9e-dbe08bd19651
+begin
+	K_guess = 0.1
+	L = 1
+	r = get_r(1, K_guess, L; params.α)
+	w = get_w(1, K_guess, L; params.α)
+	#r, w = 0.10, 1
+	(; T, R, β) = household_dp(; r, w, params)
+	(; mdp, sol) = solve_household(; T, R, β, grid, k_grid)
+
+	mc = controlled_markov_chain(grid, sol, T)
+	π = stationary_distribution(mc, grid)
+	K = dot(sum(π, dims=2), k_grid)
+	(; K, r, w)
+end
+
+# ╔═╡ 3b05bd8c-8cab-41f8-a7ff-98941013ddeb
+lines(k_grid, dropdims(sum(π, dims=2), dims=2))
+
 # ╔═╡ d8ff6a80-c01d-4878-a926-8bc31f47279b
 let	
 	fig = Figure()
@@ -207,34 +323,12 @@ let
 	fig
 end
 
-# ╔═╡ 0d2c4186-201c-4c78-9316-34aa8fea5ca6
-md"""
-# Simulating an agent
-"""
-
-# ╔═╡ f1a912bd-705d-4268-945d-88d3916d7572
-function simulate_path(s₀, N, sol, dp)
-
-	path = Tuple{Int,Int}[]
-	push!(path, s₀)
-
-	for t ∈ 2:N
-		s₁ = dp.T(s₀, action(sol, s₀)) |> rand
-		push!(path, s₁)
-		s₀ = s₁
-	end
-	path
-end
-
-# ╔═╡ 64ea4140-a98e-427c-91d7-bdbfb058674f
-s₀ = grid[2, 1]
-
 # ╔═╡ e0b3d6bc-47e0-4b75-bc70-d2b570144b26
-dp.T(s₀, action(sol, s₀)) |> rand
+T(s₀, action(sol, s₀)) |> rand
 
 # ╔═╡ d9966b13-4938-4bf8-b834-ddf096041ac5
 paths = map(1:1000) do _
-		path = simulate_path(s₀, 100, sol, dp)
+		path = simulate_path(s₀, 100, sol, T)
 end
 
 # ╔═╡ 6798f509-d4cb-4c15-9723-6486162893ee
@@ -267,51 +361,13 @@ let
 	fig
 end
 
-# ╔═╡ f3f3cc78-5102-11ec-3839-85a55959538e
-md"""
-# Stationary distribution
-"""
-
-# ╔═╡ 29aed1ee-f1c1-4b6e-9d93-26146d0dbc0b
-md"""
-## Building the controlled Markov Chain
-"""
-
-# ╔═╡ d912c2b3-e47c-4767-84ed-c84616afb188
-IJV = mapreduce(vcat, grid) do state
-	from_tpl = state
-	from = grid_linear[from_tpl...]
-	to_dist = dp.T(from_tpl, action(sol, from_tpl))
-	map(zip(to_dist.vals, to_dist.probs)) do (to_tpl, pr)
-		(; from, to = grid_linear[to_tpl...], pr)
-	end
-end |> StructArray
-
-# ╔═╡ 35ad1ec5-d35f-46ec-a677-aa517feb8b48
-mc = sparse(IJV.from, IJV.to, IJV.pr, length(grid), length(grid))
-
 # ╔═╡ 51569027-ad0c-4aab-92f5-62ecf75c5989
 @test all(≈(1), sum(mc, dims=2))
 
-# ╔═╡ 7ffd63ad-b349-4a18-8e6a-1e2320e84a07
-md"""
-## Computing the stationary distribution
-"""
-
-# ╔═╡ d1035de9-ba48-4ed3-ac6d-4119399878ca
-λ, ϕ = eigs(mc')
-
-# ╔═╡ 15d3e184-4bb3-48cf-85b2-0dae297e38eb
-abs.(λ)
-
 # ╔═╡ eb81c692-fc6f-4957-9c56-dda2a0925f75
-begin
-	@assert λ[1] ≈ 1
-	π = ϕ[:, 1]
-	@assert isreal(π)
-	π = real.(π)
-	π ./= sum(π)
-	π = reshape(π, size(grid)) |> Matrix
+let
+	mc = controlled_markov_chain(grid, sol, T)
+	π = stationary_distribution(mc, grid)
 
 	fig = Figure()
 	ax = Axis(fig[1,1])
@@ -319,8 +375,11 @@ begin
 	fig
 end
 
-# ╔═╡ 3b05bd8c-8cab-41f8-a7ff-98941013ddeb
-lines(k_grid, dropdims(sum(π, dims=2), dims=2))
+# ╔═╡ f7377919-cff0-4a0e-bfa5-9e314d574630
+
+
+# ╔═╡ 6b41ceef-0edb-4f38-883a-8f23a5938357
+
 
 # ╔═╡ a385f1ea-f544-4134-88ea-c0778780b617
 md"""
@@ -1874,8 +1933,10 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─b8813399-6acf-4cf6-95aa-3d69a9c5441f
 # ╟─870ed666-2e12-46df-b7e6-6edb6ca83f43
 # ╟─80bab100-6775-479a-86c6-fa8c462acb11
+# ╠═cd106100-a747-477b-93c5-9c785be3b9ca
 # ╟─7001a10f-8dfe-45bf-814b-53fdafc5a8fb
 # ╠═a4f03a87-b3f3-405a-825f-821abc9cc372
 # ╟─b729650d-9234-4a52-a09f-8d84e7eb81fd
@@ -1883,7 +1944,6 @@ version = "3.5.0+0"
 # ╠═928cf3cc-4f2f-428f-a00b-cc1a973012fc
 # ╟─2c8dafc9-f3f6-40e4-bb83-1abe258c00f2
 # ╠═51151fb5-14eb-4e1e-8e01-53130a352e61
-# ╠═3b05bd8c-8cab-41f8-a7ff-98941013ddeb
 # ╟─9d6c65dc-1d31-4b20-996c-3a6489c9fd6c
 # ╠═2a4881e3-a17f-419d-ab10-5fb9ec135882
 # ╠═c48e8a97-68d4-4ba0-b5bc-1b6fbede5835
@@ -1899,6 +1959,8 @@ version = "3.5.0+0"
 # ╠═75afb8c8-4666-4162-8a45-e90d554306dc
 # ╠═d4ae5a54-87de-4366-94a6-be94573d4470
 # ╠═083f5528-b602-4699-b782-e3a521cb1cea
+# ╠═7f0e140b-fe8f-4c49-ad9e-dbe08bd19651
+# ╠═3b05bd8c-8cab-41f8-a7ff-98941013ddeb
 # ╠═d8ff6a80-c01d-4878-a926-8bc31f47279b
 # ╟─0d2c4186-201c-4c78-9316-34aa8fea5ca6
 # ╠═e0b3d6bc-47e0-4b75-bc70-d2b570144b26
@@ -1911,15 +1973,18 @@ version = "3.5.0+0"
 # ╟─f3f3cc78-5102-11ec-3839-85a55959538e
 # ╟─29aed1ee-f1c1-4b6e-9d93-26146d0dbc0b
 # ╠═7106b6f7-7a67-41ce-b46d-2f33eda76444
-# ╠═d912c2b3-e47c-4767-84ed-c84616afb188
-# ╠═5974a7f1-058b-4abd-bd86-102ad0bd8092
-# ╠═35ad1ec5-d35f-46ec-a677-aa517feb8b48
+# ╠═815eab60-1ba8-4b42-84f0-c7cc87d9f282
 # ╠═51569027-ad0c-4aab-92f5-62ecf75c5989
+# ╟─cb49ccc0-2470-4a79-99ee-d1467f09eb2c
+# ╠═5974a7f1-058b-4abd-bd86-102ad0bd8092
 # ╠═28d7e91b-c5f0-4230-b61f-e305de3d57c3
-# ╟─7ffd63ad-b349-4a18-8e6a-1e2320e84a07
-# ╠═d1035de9-ba48-4ed3-ac6d-4119399878ca
-# ╠═15d3e184-4bb3-48cf-85b2-0dae297e38eb
+# ╠═4442496d-3176-45e0-be4a-2dc7951b8b0c
 # ╠═eb81c692-fc6f-4957-9c56-dda2a0925f75
+# ╟─898b1440-ca66-4807-9592-6bb06331930f
+# ╠═adddd0c7-4163-43b4-8360-15f66583231a
+# ╠═5e391462-76f5-41d5-8af9-b6a52b46526e
+# ╠═f7377919-cff0-4a0e-bfa5-9e314d574630
+# ╠═6b41ceef-0edb-4f38-883a-8f23a5938357
 # ╟─a385f1ea-f544-4134-88ea-c0778780b617
 # ╠═ea50a024-868b-4d48-8877-20a7b13cf614
 # ╠═1de531ec-a81c-4a04-957d-25ff29e80d09
