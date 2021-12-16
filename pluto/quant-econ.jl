@@ -10,9 +10,17 @@ using LinearAlgebra, Statistics
 # ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
 using Parameters, Plots, QuantEcon
 
+# ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
+using PlutoUI
+
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 md"""
 # Aiyagari with QuantEcon
+"""
+
+# ╔═╡ fa42601c-ccbf-4009-8c59-595542c241c8
+md"""
+## Setup
 """
 
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
@@ -67,9 +75,14 @@ Household = @with_kw (r = 0.01,
                       # -Inf is the utility of dying (0 consumption)
                       Q = setup_Q!(zeros(n, a_size, n), s_i_vals, z_chain))
 
+# ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
+md"""
+## Solve Households' problem
+"""
+
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
-am = Household(a_max = 20.0, r = 0.03, w = 0.956);
+am = Household(a_max = 25.0, r = 0.03, w = 0.956);
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
@@ -109,11 +122,9 @@ begin
 	π = stationary_distributions(results.mc)[:, 1][1]
 	π = reshape(π, (am.a_size, am.z_size))
 	#reshape(π, size(am.s_vals))
-	plot(am.a_vals, π)
+	plot(am.a_vals, π, linestyle = :dash)
+	plot!(am.a_vals, vec(sum(π, dims = 2)), color = :black)
 end
-
-# ╔═╡ f7d93384-f714-4759-bace-dbdeabcb9cbf
-reshape(am.s_vals[:,2], (am.a_size, am.z_size))
 
 # ╔═╡ f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 begin
@@ -178,18 +189,28 @@ let
 	plot!(xlabel = "capital", ylabel = "interest rate", xlim = (2, 14), ylim = (0.0, 0.1))
 end
 
+# ╔═╡ fd97aa43-5e80-4be9-92d1-44d9fc371b84
+md"""
+# Appendix
+"""
+
+# ╔═╡ 1392f788-73b5-4733-b1d3-4fb5cc1c8c78
+TableOfContents()
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
 Parameters = "~0.12.3"
 Plots = "~1.25.2"
+PlutoUI = "~0.7.23"
 QuantEcon = "~0.16.3"
 """
 
@@ -205,6 +226,12 @@ deps = ["LinearAlgebra"]
 git-tree-sha1 = "485ee0867925449198280d4af84bdb46a2a404d0"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "1.0.1"
+
+[[deps.AbstractPlutoDingetjes]]
+deps = ["Pkg"]
+git-tree-sha1 = "abb72771fd8895a7ebd83d5632dc4b989b022b5b"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.1.2"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -530,6 +557,23 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
+
+[[deps.Hyperscript]]
+deps = ["Test"]
+git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
+uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
+version = "0.0.4"
+
+[[deps.HypertextLiteral]]
+git-tree-sha1 = "2b078b5a615c6c0396c77810d92ee8c6f470d238"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.3"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
 
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
@@ -914,6 +958,12 @@ deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers"
 git-tree-sha1 = "65ebc27d8c00c84276f14aaf4ff63cbe12016c70"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 version = "1.25.2"
+
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
+git-tree-sha1 = "5152abbdab6488d5eec6a01029ca6697dff4ec8f"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.23"
 
 [[deps.Polynomials]]
 deps = ["Intervals", "LinearAlgebra", "MutableArithmetics", "RecipesBase"]
@@ -1374,9 +1424,11 @@ version = "0.9.1+5"
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╟─fa42601c-ccbf-4009-8c59-595542c241c8
 # ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
+# ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
@@ -1386,7 +1438,6 @@ version = "0.9.1+5"
 # ╠═b400e20c-1317-4aa6-b131-44f6022783a7
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
 # ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
-# ╠═f7d93384-f714-4759-bace-dbdeabcb9cbf
 # ╠═f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 # ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
 # ╠═fbfb389c-b67b-4705-92f8-086742e59303
@@ -1396,5 +1447,8 @@ version = "0.9.1+5"
 # ╠═4bebd0c9-2334-4901-8b90-98e7aeb26971
 # ╠═04ac8dc5-626b-47ff-ab33-18edb541c86a
 # ╠═8b8ae8a4-137b-4a7f-a6f4-aca2b1c12508
+# ╟─fd97aa43-5e80-4be9-92d1-44d9fc371b84
+# ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
+# ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
