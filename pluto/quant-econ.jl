@@ -41,13 +41,13 @@ function setup_Q!(Q, s_i_vals, z_chain)
 end
 
 # ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, a_vals, s_vals, r, w, u)
+function setup_R!(R, a_vals, s_vals, q, w, u)
     for new_a_i in 1:size(R, 2)
         a_new = a_vals[new_a_i]
         for s_i in 1:size(R, 1)
             a = s_vals[s_i, 1]
             z = s_vals[s_i, 2]
-            c = w * z + (1 + r) * a - a_new
+            c = w * z + a - q * a_new 
             if c > 0
                 R[s_i, new_a_i] = u(c)
             end
@@ -58,6 +58,7 @@ end
 
 # ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
 Household = @with_kw (r = 0.01,
+					  q = 1/(1+r),
                       w = 1.0,
                       σ = 1.0,
                       β = 0.96,
@@ -70,8 +71,8 @@ Household = @with_kw (r = 0.01,
                       n = a_size * z_size,
                       s_vals = gridmake(a_vals, z_chain.state_values),
                       s_i_vals = gridmake(1:a_size, 1:z_size),
-                      u = σ == 1 ? x -> log(x) : x -> (x^(1 - σ) - 1) / (1 - σ),
-                      R = setup_R!(fill(-Inf, n, a_size), a_vals, s_vals, r, w, u),
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ),
+                      R = setup_R!(fill(-Inf, n, a_size), a_vals, s_vals, q, w, u),
                       # -Inf is the utility of dying (0 consumption)
                       Q = setup_Q!(zeros(n, a_size, n), s_i_vals, z_chain))
 
@@ -80,9 +81,15 @@ md"""
 ## Solve Households' problem
 """
 
+# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
+r = 0.013
+
+# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
+q = 1/(1+r)
+
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
-am = Household(a_max = 25.0, r = 0.03, w = 0.956);
+am = Household(; a_min = -3, a_max = 7.0, q, w = 0.956);
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
@@ -96,13 +103,13 @@ results = solve(am_ddp, PFI)
 # Simplify names
 @unpack z_size, a_size, n, a_vals = am;
 
-# ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
-z_vals = am.z_chain.state_values
-
 # ╔═╡ c3c267fc-286a-4808-b9e0-26292aac1a20
 # Get all optimal actions across the set of
 # a indices with z fixed in each column
 a_star = reshape([a_vals[results.sigma[s_i]] for s_i in 1:n], a_size, z_size)
+
+# ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
+z_vals = am.z_chain.state_values
 
 # ╔═╡ b400e20c-1317-4aa6-b131-44f6022783a7
 begin
@@ -125,6 +132,9 @@ begin
 	plot(am.a_vals, π, linestyle = :dash)
 	plot!(am.a_vals, vec(sum(π, dims = 2)), color = :black)
 end
+
+# ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
+dot(vec(sum(π, dims=2)), am.a_vals)
 
 # ╔═╡ f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 begin
@@ -1429,14 +1439,17 @@ version = "0.9.1+5"
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
-# ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╠═0361d9ad-e266-452a-933c-432c6f3ef232
 # ╠═0edf1cb1-1b34-4d9c-855c-8629c409bc6d
 # ╠═c3c267fc-286a-4808-b9e0-26292aac1a20
 # ╠═b400e20c-1317-4aa6-b131-44f6022783a7
+# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
+# ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
+# ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
+# ╠═c9771579-bf40-4f39-b272-4bd5b3be9730
 # ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
 # ╠═f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 # ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
