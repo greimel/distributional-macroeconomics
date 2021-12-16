@@ -56,10 +56,10 @@ function setup_Q!(Q, s_i_vals, A_i_vals, z_chain)
         for A_i in 1:size(Q, 2)
             for s_i in 1:size(Q, 1)
                 z_i = s_i_vals[s_i, 2]
-                next_a_i = s_i_vals[next_s_i, 1]
-                next_z_i = s_i_vals[next_s_i, 2]
 				next_d_i = s_i_vals[next_s_i, 3]
-                if [next_a_i, next_d_i] == A_i_vals[A_i]
+                next_z_i = s_i_vals[next_s_i, 2]
+                next_a_i = s_i_vals[next_s_i, 1]
+                if [next_a_i, next_d_i] == A_i_vals[A_i, :]
                     Q[s_i, A_i, next_s_i] = z_chain.p[z_i, next_z_i]
                 end
             end
