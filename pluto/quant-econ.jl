@@ -211,49 +211,48 @@ md"""
 ## Next
 """
 
+# ╔═╡ d3e32f16-66d7-4f68-a120-bec087577214
+function QQQ(s_i, a_i, s_next_i, z_chain)
+	if s_next_i.a == a_i.a
+		z_chain.p[s_i.z, s_next_i.z]
+	else
+		0.0
+	end
+end
+
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
-function setup_Q!(Q, s_i_vals, A_i_vals, z_chain)
-    for next_s_i in 1:size(Q, 3)
-        for A_i in 1:size(Q, 2)
-            for s_i in 1:size(Q, 1)
-                z_i = s_i_vals[s_i].z
-				#next_d_i = s_i_vals[next_s_i].d
-                next_z_i = s_i_vals[next_s_i].z
-                next_a_i = s_i_vals[next_s_i].a
-                if next_a_i == A_i_vals[A_i].a
-                    Q[s_i, A_i, next_s_i] = z_chain.p[z_i, next_z_i]
-                end
-            end
-        end
+function setup_Q!(Q, s, a, z_chain)
+    for (next_s_i, next_s_is) ∈ enumerate(s.i_vals)
+        for (a_i, a_is) ∈ enumerate(a.i_vals)
+            for (s_i, s_is) ∈ enumerate(s.i_vals)
+				Q[s_i, a_i, next_s_i] = QQQ(s_is, a_is, next_s_is, z_chain)
+			end
+		end
     end
     return Q
 end
 
-# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, A_vals, s_vals, q, w, u)	
-    for new_A_i in 1:size(R, 2)
-        a_new = A_vals[new_A_i].a
-        for s_i in 1:size(R, 1)
-            a = s_vals[s_i].a
-            z = s_vals[s_i].z
-			c = (w*z) + a - q * a_new
-			if c > 0
-                R[s_i, new_A_i] = u(c)
-            end
-        end
-    end
-    return R
+# ╔═╡ 45a6739f-e9da-4234-8dad-af30cdddaeb3
+function RRR(curr, next, q, w, u)
+	c = (w * curr.z) + curr.a - q * next.a
+	c > 0 ? u(c) : -Inf
 end
 
 # ╔═╡ 73beee0a-758f-420d-bdcc-8e084328abff
 function Household(; kwargs...) 
 	hh = Household0(; kwargs...)
 	(; A, s, z_chain, q, w, u) = hh
-	R = setup_R!(fill(-Inf, s.length, A.length), A.vals, s.vals, q, w, u)
+	R = RRR.(s.vals, permutedims(A.vals), q, w, u)
     # -Inf is the utility of dying (0 consumption)
-    Q = setup_Q!(zeros(s.length, A.length, s.length), s.i_vals, A.i_vals, z_chain)
+    Q = setup_Q!(zeros(s.length, A.length, s.length), s, A, z_chain)
 	(; hh..., R, Q)
 end
+
+# ╔═╡ d5034a06-1cb3-4f0a-836a-31db549936d0
+
+
+# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
+
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
@@ -261,8 +260,8 @@ md"""
 """
 
 # ╔═╡ 1fe9dee4-f0c7-462a-9cf2-b8d88fde8ef1
-# 150-200 μ
-# 800 ms
+# 53 # 150-200 μ
+# 200 # 800 ms
 
 # ╔═╡ 0361d9ad-e266-452a-933c-432c6f3ef232
 # Simplify names
@@ -2100,6 +2099,9 @@ version = "0.9.1+5"
 # ╠═d152594a-338b-4f2a-9b68-51840d1aaa1c
 # ╟─cd251242-ad5e-45a3-969e-17536551871e
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
+# ╠═d3e32f16-66d7-4f68-a120-bec087577214
+# ╠═45a6739f-e9da-4234-8dad-af30cdddaeb3
+# ╠═d5034a06-1cb3-4f0a-836a-31db549936d0
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
