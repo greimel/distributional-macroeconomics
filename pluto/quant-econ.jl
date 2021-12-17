@@ -202,15 +202,15 @@ function Household0(; a_min = 1e-10,
 					  kwargs...)
 
 	a = range(a_min, a_max, length = a_size)
-	endo = (; a, d)
+	endo = (; a)
 	exo = (; z = z_chain.state_values)
 
 	(; A, s) = grids(endo, exo)
 
-	A_s = (; A, s)
-	other = (; a_vals = a, d_vals = d, z_vals = z_chain.state_values, z_chain)
+	A_s = (; A, s, z_chain)
+	#other = (; a_vals = a, d_vals = d, z_vals = z_chain.state_values, z_chain)
 	
-	(; Household00(; kwargs...)..., A_s..., other...)
+	(; Household00(; kwargs...)..., A_s...)
 end
 
 # ╔═╡ 5d936207-1462-4f3c-9c29-5f39bbd497e1
@@ -233,10 +233,10 @@ function setup_Q!(Q, s_i_vals, A_i_vals, z_chain)
         for A_i in 1:size(Q, 2)
             for s_i in 1:size(Q, 1)
                 z_i = s_i_vals[s_i].z
-				next_d_i = s_i_vals[next_s_i].d
+				#next_d_i = s_i_vals[next_s_i].d
                 next_z_i = s_i_vals[next_s_i].z
                 next_a_i = s_i_vals[next_s_i].a
-                if (a=next_a_i, d=next_d_i) == A_i_vals[A_i]
+                if next_a_i == A_i_vals[A_i].a
                     Q[s_i, A_i, next_s_i] = z_chain.p[z_i, next_z_i]
                 end
             end
@@ -246,36 +246,13 @@ function setup_Q!(Q, s_i_vals, A_i_vals, z_chain)
 end
 
 # ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, A_vals, s_vals, q, w, u)
-	γ = 1.0 #0.9
-	
+function setup_R!(R, A_vals, s_vals, q, w, u)	
     for new_A_i in 1:size(R, 2)
         a_new = A_vals[new_A_i].a
-		d_new = A_vals[new_A_i].d
         for s_i in 1:size(R, 1)
             a = s_vals[s_i].a
             z = s_vals[s_i].z
-			d = s_vals[s_i].d
-
-			if d == 1 # defaulted last period
-				a = 0
-				if d_new == 1 && a_new < 0
-					c = 0
-				else # d_new == 0
-					c = γ * (w*z) - q * a_new
-				end
-			else # d == 0
-				if d_new == 0
-					c = w * z + a - q * a_new
-				else # d_new == 1 # default now
-					if a_new < 0
-						c = 0
-					else
-						c = γ * (w*z) - q * a_new
-					end
-				end
-			end
-			
+			c = (w*z) + a - q * a_new
 			if c > 0
                 R[s_i, new_A_i] = u(c)
             end
@@ -373,29 +350,29 @@ begin
 		am.A.vals[results.sigma, :]
 		vec
 		DataFrame
-		rename!(:a => :a_next, :d => :d_next)
+		rename!(:a => :a_next) #, :d => :d_next)
 	end
 
 	df_results = [df_state df_policy]
 	df_results.π = copy(π_flat)
 
-	df_results.default_prob = (results.mc.p)' * df_results.d_next
+#	df_results.default_prob = (results.mc.p)' * df_results.d_next
 	
 	df_results
 end
 
 # ╔═╡ 77752a82-1782-4010-af1d-7e25f197388f
 @chain df_results begin
-	@subset(:default_prob > 0)
+	#@subset(:default_prob > 0)
 end
 
 # ╔═╡ 391c91a1-ca79-4145-87e9-132b8c27cb24
 @chain df_results begin
-	@groupby(:a, :z, :d)
+	@groupby(:a, :z) #, :d)
 	@combine(:π = sum(:π))
 	sort(:a)
 	data(_) * visual(Lines) * mapping(
-		:a, :π, color = :z => nonnumeric, col = :d => nonnumeric
+		:a, :π, color = :z => nonnumeric#, col = :d => nonnumeric
 	)
 	draw
 end
@@ -405,7 +382,7 @@ end
 	copy
 	sort!([:a, :z])
 	data(_) * visual(Lines) * mapping(
-		:a, :a_next, color = :z => nonnumeric, col = :d => nonnumeric
+		:a, :a_next, color = :z => nonnumeric#, col = :d => nonnumeric
 	)
 	draw
 end
@@ -2117,7 +2094,7 @@ version = "0.9.1+5"
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
-# ╠═9007cab9-064e-48ba-aebd-f5450c2f6f89
+# ╟─9007cab9-064e-48ba-aebd-f5450c2f6f89
 # ╠═b9db68b8-09bf-41c4-9628-0e5d756bf2ab
 # ╠═279397d7-0ab1-4908-b89b-693f5e51903f
 # ╠═5d6a6380-f0bd-45dd-8928-bb3bd467fea7
