@@ -28,45 +28,225 @@ md"""
 # Aiyagari with QuantEcon
 """
 
+# ╔═╡ 9007cab9-064e-48ba-aebd-f5450c2f6f89
+md"""
+## Kathreya (2002)
+"""
+
+# ╔═╡ b9db68b8-09bf-41c4-9628-0e5d756bf2ab
+#= Default = @with_kw (
+	α = 3.0, β = 0.947,
+	ρ = 0.75, τ = 0.034, D = 2/3,
+	y_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75]),
+	r_ℓ = 0.13, r_d = 0.025,
+	λ = 0.25, # fraction of average annual income, 1 ≈ 40,000
+	T_star = 0.99,
+	A̲_S = -1, A̲_BC = 0, A̲_B = 0,
+	u = function(c) c^(1-α)/(1-α) end
+)
+
+# ╔═╡ 279397d7-0ab1-4908-b89b-693f5e51903f
+hh = Default()
+
+# ╔═╡ 5d6a6380-f0bd-45dd-8928-bb3bd467fea7
+i_s = (i_y = 1, i_a = 5)
+
+# ╔═╡ 668427e6-65dd-45eb-becf-f3059af76664
+function RR(s, a, hh)
+	# unpack variables
+	(; a_next, d_next) = a
+	(; a, y, d) = s
+	(; r_ℓ, r_d, λ, u) = hh
+
+	r = a_next < 0 ? r_ℓ : r_d
+	c = y + a - a_next / (1+r)
+
+	# default ⟺ move from solvent to constrained state
+	default = d == :S && d_next == :BC
+
+	if c > 0
+		u(c) - default * λ
+	else
+		-Inf
+	end
+end
+
+# ╔═╡ e82025ea-3d50-4660-85e0-c3b6ec419580
+let
+
+	
+	s = (y = 0.75, a = 2, d = :S)
+	a = (a_next = 2.5, d_next = :D)
+
+	RR(s, a, hh)
+end
+
+# ╔═╡ 3c17df28-7512-4103-b76f-1a06b2a96ca7
+function QQ(i_s, i_a, i_s_next, hh)
+	(; ρ) = hh
+	d_vals = [:S, :BC]
+	d 		 = d_vals[i_s.i_d]
+	d_chosen = d_vals[i_a.i_d]
+	d_next 	 = d_vals[i_s_next.i_d]
+	#(; i_a, i_y, i_d) = i_s
+	if i_s_next.i_a == i_a.i_a #&& i_s_next.i_d == i_a.i_d
+		pr_y = hh.y_chain.p[i_s.i_y, i_s_next.i_y]
+		# if I am currently solvent I can choose :S or :BC
+		if d == :S 
+			if d_chosen == d_next
+				return pr_y
+			else
+				return 0
+			end
+		# if I am currently BC I cannot influence
+		# the transition (d_chosen is irrelevant)
+		else # d == :BC
+			if d_next == :BC
+				return pr_y * (1-ρ)
+			else # d_next == :S
+				return pr_y * ρ
+			end
+		end
+	else # i_a_chosen != i_a_next
+		return 0
+	end
+		
+end
+	
+	
+
+# ╔═╡ 726aaaa8-74dd-4e68-ba8f-cd8b96e1bd78
+let
+	i_s = (i_a = 3, i_d = 1, i_y = 2)
+	i_a = (i_a = 4, i_d = 1)
+	i_s_next = (i_a = 4, i_d = 2, i_y = 2)
+
+	QQ(i_s, i_a, i_s_next, hh)
+end
+
 # ╔═╡ fa42601c-ccbf-4009-8c59-595542c241c8
 md"""
 ## Setup
 """
 
 # ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
-Household0 = @with_kw (r = 0.001,
+Household00 = @with_kw (r = 0.001,
 					  q = 1/(1+r),
                       w = 1.0,
                       σ = 1.0,
                       β = 0.96,
-                      z_chain = MarkovChain([0.7 0.2 0.1; 0.15 0.7 0.15; 0.1 0.2 0.7], [0.1; 0.5; 1.0]),
-                      a_min = 1e-10,
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
+
+# ╔═╡ 72e2ca1b-269e-4dce-aee4-99a370bd38c6
+md"""
+## A grid of named tuples
+"""
+
+# ╔═╡ 48268999-84bd-4a0b-9742-9eda8ff45322
+function grids(hh; a_min = √eps(), a_max = 18, a_size = 200)
+	a = range(a_min, a_max, length = a_size)
+	d = [:S, :BC]
+	(endo = (; a, d), exo = (; y = hh.y_chain.state_values))
+end
+
+# ╔═╡ 420f55e6-ecae-439e-91df-12cb91c4e1be
+md"""
+### Helpers
+"""
+
+# ╔═╡ 0d08fc7f-f62d-4c23-aef8-856d2d8f3f20
+function nt_dot(f, nt)
+	NamedTuple{keys(nt)}(f.(values(nt)))
+end
+
+# ╔═╡ 1192694a-5edf-44a1-a2e8-a29b3b8239d2
+function nt_indices(nt)
+	lengths = nt_dot(length, nt)
+	ranges_nt = nt_dot(Base.OneTo, lengths)
+end
+
+# ╔═╡ d152594a-338b-4f2a-9b68-51840d1aaa1c
+function nt_product(nt)
+	@chain nt begin
+		values
+		Iterators.product(_...)
+		NamedTuple{keys(nt)}.(_)
+	end
+end
+
+# ╔═╡ 4c33c00c-3ba2-44d2-9e1e-4cd2ba90213a
+function grids_(grids)
+	prod = nt_product(grids)
+	
+	(length = length(prod),
+	 keys = keys(grids),
+	 size = size(prod),
+	 vals = vec(prod),
+	 i_vals = vec(nt_product(nt_indices(grids)))
+	)
+end
+
+# ╔═╡ b26da25a-305e-48a8-984e-5a2339a68f17
+function grids(endo, exo)
+	A = grids_(endo)
+	s = grids_((; endo..., exo...))
+	(; A, s)
+end
+
+# ╔═╡ e2e8819a-8a9e-4dec-a2ed-a1e77f8aaf78
+function Household0(; a_min = 1e-10,
                       a_max = 18.0,
                       a_size = 200,
-                      a_vals = range(a_min, a_max, length = a_size),
-                      z_size = length(z_chain.state_values),
-					  d_vals = [1, 0],
-					  d_size = length(d_vals),
-                      s_vals = gridmake(a_vals, z_chain.state_values, d_vals),
-                      s_i_vals = gridmake(1:a_size, 1:z_size, 1:d_size),
-				      s_size = (a_size, z_size, d_size),
-                      n = size(s_vals, 1),
-					  A_vals = gridmake(a_vals, d_vals),
-					  A_i_vals = gridmake(1:a_size, 1:d_size),
-		              A_length = size(A_vals, 1),
-					  A_size = (a_size, d_size),
-                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
+					  d = [1, 0],
+					  z_chain = MarkovChain([0.7 0.2 0.1; 0.15 0.7 0.15; 0.1 0.2 0.7], [0.1; 0.5; 1.0]),
+					  kwargs...)
+
+	a = range(a_min, a_max, length = a_size)
+	endo = (; a, d)
+	exo = (; z = z_chain.state_values)
+
+	(; A, s) = grids(endo, exo)
+
+	s_vals = s.vals
+	s_i_vals = s.i_vals
+	s_size = s.size
+	n = s.length
+
+	A_vals = A.vals
+	A_i_vals = A.i_vals
+	A_size = A.size
+	A_length = A.length
+
+	A_s = (; s_vals, s_i_vals, s_size, n, A_vals, A_i_vals, A_size, A_length)
+	other = (; a_vals = a, d_vals = d, z_vals = z_chain.state_values, z_chain)
+	
+	(; Household00(; kwargs...)..., A_s..., other...)
+end
+
+# ╔═╡ 5d936207-1462-4f3c-9c29-5f39bbd497e1
+let
+	(; endo, exo) = grids(hh)
+	grids(endo, exo)
+end
+
+# ╔═╡ 8efa17c6-9ccc-428f-b6e1-83e7285a4424
+grids(hh)
+
+# ╔═╡ cd251242-ad5e-45a3-969e-17536551871e
+md"""
+## Next
+"""
 
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
 function setup_Q!(Q, s_i_vals, A_i_vals, z_chain)
     for next_s_i in 1:size(Q, 3)
         for A_i in 1:size(Q, 2)
             for s_i in 1:size(Q, 1)
-                z_i = s_i_vals[s_i, 2]
-				next_d_i = s_i_vals[next_s_i, 3]
-                next_z_i = s_i_vals[next_s_i, 2]
-                next_a_i = s_i_vals[next_s_i, 1]
-                if [next_a_i, next_d_i] == A_i_vals[A_i, :]
+                z_i = s_i_vals[s_i].z
+				next_d_i = s_i_vals[next_s_i].d
+                next_z_i = s_i_vals[next_s_i].z
+                next_a_i = s_i_vals[next_s_i].a
+                if (a=next_a_i, d=next_d_i) == A_i_vals[A_i]
                     Q[s_i, A_i, next_s_i] = z_chain.p[z_i, next_z_i]
                 end
             end
@@ -80,12 +260,12 @@ function setup_R!(R, A_vals, s_vals, q, w, u)
 	γ = 1.0 #0.9
 	
     for new_A_i in 1:size(R, 2)
-        a_new = A_vals[new_A_i, 1]
-		d_new = A_vals[new_A_i, 2]
+        a_new = A_vals[new_A_i].a
+		d_new = A_vals[new_A_i].d
         for s_i in 1:size(R, 1)
-            a = s_vals[s_i, 1]
-            z = s_vals[s_i, 2]
-			d = s_vals[s_i, 3]
+            a = s_vals[s_i].a
+            z = s_vals[s_i].z
+			d = s_vals[s_i].d
 
 			if d == 1 # defaulted last period
 				a = 0
@@ -117,7 +297,7 @@ end
 # ╔═╡ 73beee0a-758f-420d-bdcc-8e084328abff
 function Household(; kwargs...) 
 	hh = Household0(; kwargs...)
-	@unpack n, A_length, A_vals, s_vals, q, w, u, s_i_vals, A_i_vals, z_chain = hh
+	(; n, A_length, A_vals, s_vals, q, w, u, s_i_vals, A_i_vals, z_chain) = hh
 	R = setup_R!(fill(-Inf, n, A_length), A_vals, s_vals, q, w, u)
     # -Inf is the utility of dying (0 consumption)
     Q = setup_Q!(zeros(n, A_length, n), s_i_vals, A_i_vals, z_chain)
@@ -128,6 +308,10 @@ end
 md"""
 ## Solve Households' problem
 """
+
+# ╔═╡ 1fe9dee4-f0c7-462a-9cf2-b8d88fde8ef1
+# 150-200 μ
+# 800 ms
 
 # ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
 r = 0.03
@@ -149,7 +333,7 @@ results = solve(am_ddp, PFI)
 
 # ╔═╡ 0361d9ad-e266-452a-933c-432c6f3ef232
 # Simplify names
-@unpack z_size, A_size, n, s_size, A_vals, a_vals = am;
+(; A_size, n, s_size, A_vals, a_vals) = am;
 
 # ╔═╡ 0ae29455-2cf6-46a6-9d25-b31f76d8fe02
 A_vals[results.sigma[1], :]
@@ -191,8 +375,13 @@ end
 
 # ╔═╡ f795c619-517a-4cb2-b3b2-939d1425e2b8
 begin
-	df_state  = DataFrame(am.s_vals, [:a, :z, :d])
-	df_policy = DataFrame(A_vals[results.sigma, :], [:a_next, :d_next])
+	df_state  = DataFrame(am.s_vals)
+	df_policy = @chain begin
+		A_vals[results.sigma, :]
+		vec
+		DataFrame
+		rename!(:a => :a_next, :d => :d_next)
+	end
 
 	df_results = [df_state df_policy]
 	df_results.π = copy(π_flat)
@@ -1935,15 +2124,36 @@ version = "0.9.1+5"
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╠═9007cab9-064e-48ba-aebd-f5450c2f6f89
+# ╠═b9db68b8-09bf-41c4-9628-0e5d756bf2ab
+# ╠═279397d7-0ab1-4908-b89b-693f5e51903f
+# ╠═5d6a6380-f0bd-45dd-8928-bb3bd467fea7
+# ╠═e82025ea-3d50-4660-85e0-c3b6ec419580
+# ╠═668427e6-65dd-45eb-becf-f3059af76664
+# ╠═3c17df28-7512-4103-b76f-1a06b2a96ca7
+# ╠═726aaaa8-74dd-4e68-ba8f-cd8b96e1bd78
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
 # ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+# ╠═e2e8819a-8a9e-4dec-a2ed-a1e77f8aaf78
 # ╠═73beee0a-758f-420d-bdcc-8e084328abff
 # ╠═9be81a15-7117-4911-8254-4848df50c059
+# ╟─72e2ca1b-269e-4dce-aee4-99a370bd38c6
+# ╠═5d936207-1462-4f3c-9c29-5f39bbd497e1
+# ╠═48268999-84bd-4a0b-9742-9eda8ff45322
+# ╠═b26da25a-305e-48a8-984e-5a2339a68f17
+# ╠═8efa17c6-9ccc-428f-b6e1-83e7285a4424
+# ╟─420f55e6-ecae-439e-91df-12cb91c4e1be
+# ╠═4c33c00c-3ba2-44d2-9e1e-4cd2ba90213a
+# ╠═0d08fc7f-f62d-4c23-aef8-856d2d8f3f20
+# ╠═1192694a-5edf-44a1-a2e8-a29b3b8239d2
+# ╠═d152594a-338b-4f2a-9b68-51840d1aaa1c
+# ╟─cd251242-ad5e-45a3-969e-17536551871e
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
+# ╠═1fe9dee4-f0c7-462a-9cf2-b8d88fde8ef1
 # ╠═0361d9ad-e266-452a-933c-432c6f3ef232
 # ╠═0edf1cb1-1b34-4d9c-855c-8629c409bc6d
 # ╠═0ae29455-2cf6-46a6-9d25-b31f76d8fe02
