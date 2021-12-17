@@ -34,7 +34,7 @@ md"""
 """
 
 # ╔═╡ b9db68b8-09bf-41c4-9628-0e5d756bf2ab
-#= Default = @with_kw (
+Default = @with_kw (
 	α = 3.0, β = 0.947,
 	ρ = 0.75, τ = 0.034, D = 2/3,
 	y_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75]),
@@ -207,17 +207,7 @@ function Household0(; a_min = 1e-10,
 
 	(; A, s) = grids(endo, exo)
 
-	s_vals = s.vals
-	s_i_vals = s.i_vals
-	s_size = s.size
-	n = s.length
-
-	A_vals = A.vals
-	A_i_vals = A.i_vals
-	A_size = A.size
-	A_length = A.length
-
-	A_s = (; s_vals, s_i_vals, s_size, n, A_vals, A_i_vals, A_size, A_length)
+	A_s = (; A, s)
 	other = (; a_vals = a, d_vals = d, z_vals = z_chain.state_values, z_chain)
 	
 	(; Household00(; kwargs...)..., A_s..., other...)
@@ -297,10 +287,10 @@ end
 # ╔═╡ 73beee0a-758f-420d-bdcc-8e084328abff
 function Household(; kwargs...) 
 	hh = Household0(; kwargs...)
-	(; n, A_length, A_vals, s_vals, q, w, u, s_i_vals, A_i_vals, z_chain) = hh
-	R = setup_R!(fill(-Inf, n, A_length), A_vals, s_vals, q, w, u)
+	(; A, s, z_chain, q, w, u) = hh
+	R = setup_R!(fill(-Inf, s.length, A.length), A.vals, s.vals, q, w, u)
     # -Inf is the utility of dying (0 consumption)
-    Q = setup_Q!(zeros(n, A_length, n), s_i_vals, A_i_vals, z_chain)
+    Q = setup_Q!(zeros(s.length, A.length, s.length), s.i_vals, A.i_vals, z_chain)
 	(; hh..., R, Q)
 end
 
@@ -312,6 +302,13 @@ md"""
 # ╔═╡ 1fe9dee4-f0c7-462a-9cf2-b8d88fde8ef1
 # 150-200 μ
 # 800 ms
+
+# ╔═╡ 0361d9ad-e266-452a-933c-432c6f3ef232
+# Simplify names
+#(; A_size, n, s_size, A_vals, a_vals) = am;
+
+# ╔═╡ 0eb69ebd-cd53-4829-a78d-7797450ce2d8
+
 
 # ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
 r = 0.03
@@ -331,23 +328,19 @@ am_ddp = DiscreteDP(am.R, am.Q, am.β);
 # Solve using policy function iteration
 results = solve(am_ddp, PFI)
 
-# ╔═╡ 0361d9ad-e266-452a-933c-432c6f3ef232
-# Simplify names
-(; A_size, n, s_size, A_vals, a_vals) = am;
+# ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
+z_vals = am.z_chain.state_values
 
 # ╔═╡ 0ae29455-2cf6-46a6-9d25-b31f76d8fe02
-A_vals[results.sigma[1], :]
+am.A.vals[results.sigma[1], :]
 
 # ╔═╡ 51e98fe4-61af-4bcf-a04b-17bd19e4135a
-A_vals[results.sigma, :]
+am.A.vals[results.sigma, :]
 
 # ╔═╡ c3c267fc-286a-4808-b9e0-26292aac1a20
 # Get all optimal actions across the set of
 # a indices with z fixed in each column
-a_star = reshape([A_vals[results.sigma[s_i], :][1] for s_i in 1:n], A_size..., z_size)
-
-# ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
-z_vals = am.z_chain.state_values
+a_star = reshape([am.A.vals[results.sigma[s_i], :][1] for s_i in 1:am.s.length], am.s.size...)
 
 # ╔═╡ b400e20c-1317-4aa6-b131-44f6022783a7
 begin
@@ -367,7 +360,7 @@ md"""
 begin
 	π_flat = stationary_distributions(results.mc)[:, 1][1]
 	
-	π = reshape(π_flat, am.s_size)
+	π = reshape(π_flat, am.s.size)
 #	#reshape(π, size(am.s_vals))
 #	#plot(am.a_vals, π, linestyle = :dash)
 #	#plot!(am.a_vals, vec(sum(π, dims = 2)), color = :black)
@@ -375,9 +368,9 @@ end
 
 # ╔═╡ f795c619-517a-4cb2-b3b2-939d1425e2b8
 begin
-	df_state  = DataFrame(am.s_vals)
+	df_state  = DataFrame(am.s.vals)
 	df_policy = @chain begin
-		A_vals[results.sigma, :]
+		am.A.vals[results.sigma, :]
 		vec
 		DataFrame
 		rename!(:a => :a_next, :d => :d_next)
@@ -2155,6 +2148,7 @@ version = "0.9.1+5"
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╠═1fe9dee4-f0c7-462a-9cf2-b8d88fde8ef1
 # ╠═0361d9ad-e266-452a-933c-432c6f3ef232
+# ╠═0eb69ebd-cd53-4829-a78d-7797450ce2d8
 # ╠═0edf1cb1-1b34-4d9c-855c-8629c409bc6d
 # ╠═0ae29455-2cf6-46a6-9d25-b31f76d8fe02
 # ╠═51e98fe4-61af-4bcf-a04b-17bd19e4135a
