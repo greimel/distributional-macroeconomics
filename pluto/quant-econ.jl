@@ -142,13 +142,6 @@ md"""
 ## A grid of named tuples
 """
 
-# ╔═╡ 48268999-84bd-4a0b-9742-9eda8ff45322
-function grids(hh; a_min = √eps(), a_max = 18, a_size = 200)
-	a = range(a_min, a_max, length = a_size)
-	d = [:S, :BC]
-	(endo = (; a, d), exo = (; y = hh.y_chain.state_values))
-end
-
 # ╔═╡ 420f55e6-ecae-439e-91df-12cb91c4e1be
 md"""
 ### Helpers
@@ -212,15 +205,6 @@ function Household0(; a_min = 1e-10,
 	
 	(; Household00(; kwargs...)..., A_s...)
 end
-
-# ╔═╡ 5d936207-1462-4f3c-9c29-5f39bbd497e1
-let
-	(; endo, exo) = grids(hh)
-	grids(endo, exo)
-end
-
-# ╔═╡ 8efa17c6-9ccc-428f-b6e1-83e7285a4424
-grids(hh)
 
 # ╔═╡ cd251242-ad5e-45a3-969e-17536551871e
 md"""
@@ -2108,10 +2092,7 @@ version = "0.9.1+5"
 # ╠═73beee0a-758f-420d-bdcc-8e084328abff
 # ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╟─72e2ca1b-269e-4dce-aee4-99a370bd38c6
-# ╠═5d936207-1462-4f3c-9c29-5f39bbd497e1
-# ╠═48268999-84bd-4a0b-9742-9eda8ff45322
 # ╠═b26da25a-305e-48a8-984e-5a2339a68f17
-# ╠═8efa17c6-9ccc-428f-b6e1-83e7285a4424
 # ╟─420f55e6-ecae-439e-91df-12cb91c4e1be
 # ╠═4c33c00c-3ba2-44d2-9e1e-4cd2ba90213a
 # ╠═0d08fc7f-f62d-4c23-aef8-856d2d8f3f20
