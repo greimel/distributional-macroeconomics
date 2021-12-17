@@ -28,10 +28,59 @@ md"""
 # Aiyagari with QuantEcon
 """
 
+# ╔═╡ 3073ca5b-3535-45d9-ac88-5444e346af0f
+md"""
+## Huggett
+"""
+
+# ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+Household00 = @with_kw (#r = 0.001,
+					  r_ℓ = 0.13, r_d = 0.025,
+					  #q = 1/(1+r),
+                      w = 1.0,
+                      σ = 3.0,
+                      β = 0.947,
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
+
+# ╔═╡ d3e32f16-66d7-4f68-a120-bec087577214
+function QQQ(s_i, a_i, s_next_i, z_chain)
+	if s_next_i.a == a_i.a
+		z_chain.p[s_i.z, s_next_i.z]
+	else
+		0.0
+	end
+end
+
+# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
+function setup_Q!(Q, s, a, z_chain)
+    for (next_s_i, next_s_is) ∈ enumerate(s.i_vals)
+        for (a_i, a_is) ∈ enumerate(a.i_vals)
+            for (s_i, s_is) ∈ enumerate(s.i_vals)
+				Q[s_i, a_i, next_s_i] = QQQ(s_is, a_is, next_s_is, z_chain)
+			end
+		end
+    end
+    return Q
+end
+
+# ╔═╡ 45a6739f-e9da-4234-8dad-af30cdddaeb3
+function RRR(curr, next, (; r_ℓ, r_d, w, u))
+	r = next.a < 0 ? r_ℓ : r_d
+	q = 1/(1+r)
+	c = (w * curr.z) + curr.a - q * next.a
+	c > 0 ? u(c) : -Inf
+end
+
 # ╔═╡ 9007cab9-064e-48ba-aebd-f5450c2f6f89
 md"""
 ## Kathreya (2002)
 """
+
+# ╔═╡ 56d6cccf-c0f5-498f-9602-e647a7710cd0
+ThreeStateMC() = MarkovChain([0.7 0.2 0.1; 0.15 0.7 0.15; 0.1 0.2 0.7], [0.1; 0.5; 1.0])
+
+# ╔═╡ 6427d30b-f656-4085-b5cd-75d9c08af72a
+KathreyaMC() = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
 
 # ╔═╡ b9db68b8-09bf-41c4-9628-0e5d756bf2ab
 Default = @with_kw (
@@ -47,9 +96,6 @@ Default = @with_kw (
 
 # ╔═╡ 279397d7-0ab1-4908-b89b-693f5e51903f
 hh = Default()
-
-# ╔═╡ 5d6a6380-f0bd-45dd-8928-bb3bd467fea7
-i_s = (i_y = 1, i_a = 5)
 
 # ╔═╡ 668427e6-65dd-45eb-becf-f3059af76664
 function RR(s, a, hh)
@@ -73,8 +119,6 @@ end
 
 # ╔═╡ e82025ea-3d50-4660-85e0-c3b6ec419580
 let
-
-	
 	s = (y = 0.75, a = 2, d = :S)
 	a = (a_next = 2.5, d_next = :D)
 
@@ -128,14 +172,6 @@ end
 md"""
 ## Setup
 """
-
-# ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
-Household00 = @with_kw (r = 0.001,
-					  q = 1/(1+r),
-                      w = 1.0,
-                      σ = 1.0,
-                      β = 0.96,
-                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
 
 # ╔═╡ 72e2ca1b-269e-4dce-aee4-99a370bd38c6
 md"""
@@ -191,7 +227,7 @@ function Household0(; a_min = 1e-10,
                       a_max = 18.0,
                       a_size = 200,
 					  d = [1, 0],
-					  z_chain = MarkovChain([0.7 0.2 0.1; 0.15 0.7 0.15; 0.1 0.2 0.7], [0.1; 0.5; 1.0]),
+					  z_chain = ThreeStateMC(),
 					  kwargs...)
 
 	a = range(a_min, a_max, length = a_size)
@@ -203,50 +239,27 @@ function Household0(; a_min = 1e-10,
 	A_s = (; A, s, z_chain)
 	#other = (; a_vals = a, d_vals = d, z_vals = z_chain.state_values, z_chain)
 	
-	(; Household00(; kwargs...)..., A_s...)
-end
-
-# ╔═╡ cd251242-ad5e-45a3-969e-17536551871e
-md"""
-## Next
-"""
-
-# ╔═╡ d3e32f16-66d7-4f68-a120-bec087577214
-function QQQ(s_i, a_i, s_next_i, z_chain)
-	if s_next_i.a == a_i.a
-		z_chain.p[s_i.z, s_next_i.z]
-	else
-		0.0
-	end
-end
-
-# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
-function setup_Q!(Q, s, a, z_chain)
-    for (next_s_i, next_s_is) ∈ enumerate(s.i_vals)
-        for (a_i, a_is) ∈ enumerate(a.i_vals)
-            for (s_i, s_is) ∈ enumerate(s.i_vals)
-				Q[s_i, a_i, next_s_i] = QQQ(s_is, a_is, next_s_is, z_chain)
-			end
-		end
-    end
-    return Q
-end
-
-# ╔═╡ 45a6739f-e9da-4234-8dad-af30cdddaeb3
-function RRR(curr, next, q, w, u)
-	c = (w * curr.z) + curr.a - q * next.a
-	c > 0 ? u(c) : -Inf
+	(; params = Household00(; kwargs...), A_s...)
 end
 
 # ╔═╡ 73beee0a-758f-420d-bdcc-8e084328abff
 function Household(; kwargs...) 
 	hh = Household0(; kwargs...)
-	(; A, s, z_chain, q, w, u) = hh
-	R = RRR.(s.vals, permutedims(A.vals), q, w, u)
+	(; A, s, z_chain, params) = hh
+	R = RRR.(s.vals, permutedims(A.vals), Ref(params))
     # -Inf is the utility of dying (0 consumption)
     Q = setup_Q!(zeros(s.length, A.length, s.length), s, A, z_chain)
-	(; hh..., R, Q)
+	(; hh..., R, Q, params.β)
 end
+
+# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
+# Create an instance of Household
+am = Household(; a_min = -1, a_max = 4.0, a_size = 50, w = 0.956, z_chain = KathreyaMC());
+
+# ╔═╡ cd251242-ad5e-45a3-969e-17536551871e
+md"""
+## Next
+"""
 
 # ╔═╡ d5034a06-1cb3-4f0a-836a-31db549936d0
 
@@ -259,6 +272,14 @@ md"""
 ## Solve Households' problem
 """
 
+# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
+# Use the instance to build a discrete dynamic program
+am_ddp = DiscreteDP(am.R, am.Q, am.β);
+
+# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
+# Solve using policy function iteration
+results = solve(am_ddp, PFI)
+
 # ╔═╡ 1fe9dee4-f0c7-462a-9cf2-b8d88fde8ef1
 # 53 # 150-200 μ
 # 200 # 800 ms
@@ -269,24 +290,6 @@ md"""
 
 # ╔═╡ 0eb69ebd-cd53-4829-a78d-7797450ce2d8
 
-
-# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.03
-
-# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
-q = 1/(1+r)
-
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-# Create an instance of Household
-am = Household(; a_min = -3, a_max = 3.0, a_size = 150, q, w = 0.956);
-
-# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
-# Use the instance to build a discrete dynamic program
-am_ddp = DiscreteDP(am.R, am.Q, am.β);
-
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-# Solve using policy function iteration
-results = solve(am_ddp, PFI)
 
 # ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
 z_vals = am.z_chain.state_values
@@ -310,6 +313,12 @@ begin
 	plot!(a_vals, a_vals, label = "", color = :black, linestyle = :dash)
 	plot!(xlabel = "current assets", ylabel = "next period assets", grid = false)
 end
+
+# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
+r = 0.03
+
+# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
+q = 1/(1+r)
 
 # ╔═╡ 51615ade-06d2-40dd-9d54-f0dab0fe5e92
 md"""
@@ -2077,19 +2086,24 @@ version = "0.9.1+5"
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╟─3073ca5b-3535-45d9-ac88-5444e346af0f
+# ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+# ╠═e2e8819a-8a9e-4dec-a2ed-a1e77f8aaf78
+# ╠═73beee0a-758f-420d-bdcc-8e084328abff
+# ╠═9be81a15-7117-4911-8254-4848df50c059
+# ╠═ce25751c-949a-4ad3-a572-679f403ccb98
+# ╠═d3e32f16-66d7-4f68-a120-bec087577214
+# ╠═45a6739f-e9da-4234-8dad-af30cdddaeb3
 # ╟─9007cab9-064e-48ba-aebd-f5450c2f6f89
+# ╠═56d6cccf-c0f5-498f-9602-e647a7710cd0
+# ╠═6427d30b-f656-4085-b5cd-75d9c08af72a
 # ╠═b9db68b8-09bf-41c4-9628-0e5d756bf2ab
 # ╠═279397d7-0ab1-4908-b89b-693f5e51903f
-# ╠═5d6a6380-f0bd-45dd-8928-bb3bd467fea7
 # ╠═e82025ea-3d50-4660-85e0-c3b6ec419580
 # ╠═668427e6-65dd-45eb-becf-f3059af76664
 # ╠═3c17df28-7512-4103-b76f-1a06b2a96ca7
 # ╠═726aaaa8-74dd-4e68-ba8f-cd8b96e1bd78
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
-# ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
-# ╠═e2e8819a-8a9e-4dec-a2ed-a1e77f8aaf78
-# ╠═73beee0a-758f-420d-bdcc-8e084328abff
-# ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╟─72e2ca1b-269e-4dce-aee4-99a370bd38c6
 # ╠═b26da25a-305e-48a8-984e-5a2339a68f17
 # ╟─420f55e6-ecae-439e-91df-12cb91c4e1be
@@ -2098,9 +2112,6 @@ version = "0.9.1+5"
 # ╠═1192694a-5edf-44a1-a2e8-a29b3b8239d2
 # ╠═d152594a-338b-4f2a-9b68-51840d1aaa1c
 # ╟─cd251242-ad5e-45a3-969e-17536551871e
-# ╠═ce25751c-949a-4ad3-a572-679f403ccb98
-# ╠═d3e32f16-66d7-4f68-a120-bec087577214
-# ╠═45a6739f-e9da-4234-8dad-af30cdddaeb3
 # ╠═d5034a06-1cb3-4f0a-836a-31db549936d0
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
