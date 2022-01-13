@@ -27,6 +27,9 @@ using NamedDims
 # ╔═╡ d4ae5a54-87de-4366-94a6-be94573d4470
 using POMDPs: POMDPs
 
+# ╔═╡ 30c96dda-e544-4cca-b904-9c91eb1ef6f9
+using Chain
+
 # ╔═╡ db37c4f0-0b90-4a23-8b7d-d592308dd5e9
 using FreqTables, DataFrames
 
@@ -125,7 +128,7 @@ md"""
 """
 
 # ╔═╡ 51151fb5-14eb-4e1e-8e01-53130a352e61
-params = (; β = 0.9, α = 0.3, δ = 0.0)
+params = (; β = 0.9, α = 0.3, δ = 0.05)
 
 # ╔═╡ 9d6c65dc-1d31-4b20-996c-3a6489c9fd6c
 md"""
@@ -133,7 +136,7 @@ md"""
 """
 
 # ╔═╡ c48e8a97-68d4-4ba0-b5bc-1b6fbede5835
-MC = tauchen(15, 0.8, 0.1)
+MC = tauchen(5, 0.8, 0.1)
 
 # ╔═╡ b6a1b579-6185-415b-af38-a29d294099e8
 MarkovChain |> fieldnames
@@ -149,26 +152,19 @@ md"""
 ### Wealth
 """
 
-# ╔═╡ f4187a41-5313-43a4-a8cd-8a7bdd0ecdbc
-k_grid = let
-	nk = 40
-
-	k_grid = range(eps(), stop = 0.5, length=nk)
-end
-
 # ╔═╡ aab747fa-7501-4dbc-8a58-dfb3336bacf1
 md"""
 ### Together
 """
 
 # ╔═╡ 75e694ad-2c16-4806-af5f-e3e7642050b3
-grid = Iterators.product(1:length(k_grid), 1:length(z_grid)) |> collect
+grid(k_grid, z_grid) = Iterators.product(1:length(k_grid), 1:length(z_grid)) |> collect
 
 # ╔═╡ d6b61a69-a1dc-4fe1-8411-617969b2e4d2
-grid_linear = LinearIndices(grid)
+grid_linear(grid) = LinearIndices(grid)
 
 # ╔═╡ 75afb8c8-4666-4162-8a45-e90d554306dc
-function household_dp(; r, w, params) 
+function household_dp(; r, w, params, k_grid, z_grid, z_P) 
 	(; β, δ) = params
 	
 	function T(s, a)
@@ -198,15 +194,16 @@ function household_dp(; r, w, params)
 end
 
 # ╔═╡ 083f5528-b602-4699-b782-e3a521cb1cea
-function solve_household(; T, R, β, grid, k_grid)
+function solve_household(; T, R, β, k_grid, z_grid)
 
+	grid_ = grid(k_grid, z_grid)
 	#truesol = β * α * Kgrid.^α
 	mdp = QuickMDP(
-	    states       = grid,
+	    states       = grid_,
 	    actions      = k_grid,
 	    transition   = T,
 	    reward       = R,
-	    initialstate = grid[1],
+	    initialstate = grid_[1],
 	    discount     = β
 	)
 
@@ -215,6 +212,20 @@ function solve_household(; T, R, β, grid, k_grid)
 
 	(; mdp, sol)
 end
+
+# ╔═╡ 454eea7b-682c-4640-a9c5-a91bceb02840
+
+
+# ╔═╡ f4187a41-5313-43a4-a8cd-8a7bdd0ecdbc
+begin
+	n_k = 50
+	shft = 0.0
+	k_grid = exp.(range(log(shft + 0.1), stop = log(100), length = n_k)) .- shft
+	scatter(1:n_k, k_grid)
+end
+
+# ╔═╡ c59b6a97-4db2-4c83-85c0-68123c536c51
+
 
 # ╔═╡ 0d2c4186-201c-4c78-9316-34aa8fea5ca6
 md"""
@@ -252,10 +263,10 @@ md"""
 function controlled_markov_chain(grid, sol, T)
 	IJV = mapreduce(vcat, grid) do state
 		from_tpl = state
-		from = grid_linear[from_tpl...]
+		from = grid_linear(grid)[from_tpl...]
 		to_dist = T(from_tpl, action(sol, from_tpl))
 		map(zip(to_dist.vals, to_dist.probs)) do (to_tpl, pr)
-			(; from, to = grid_linear[to_tpl...], pr)
+			(; from, to = grid_linear(grid)[to_tpl...], pr)
 		end
 	end |> StructArray
 
@@ -280,6 +291,20 @@ function stationary_distribution(mc, grid)
 	π = reshape(π, size(grid)) |> Matrix	
 end
 
+# ╔═╡ 9d41884c-003b-4af6-8163-11bfa5513a79
+function simulated_stationary_distribution(mc, grid)
+	N = 1_000_000_000
+	π = ones(size(mc, 1))
+	π ./= sum(π)
+
+	π₁ = @chain begin
+		(mc^N)'* π
+		reshape(size(grid))
+		sum(dims = 2)
+		vec
+	end
+end
+
 # ╔═╡ 898b1440-ca66-4807-9592-6bb06331930f
 md"""
 # Saving in a productive asset
@@ -293,25 +318,39 @@ get_w(A, K, L; α) = (1-α) * A * (K/L)^α
 
 # ╔═╡ 7f0e140b-fe8f-4c49-ad9e-dbe08bd19651
 begin
-	K_guess = 0.1
+	K_guess = 2
 	L = 1
 	r = get_r(1, K_guess, L; params.α)
 	w = get_w(1, K_guess, L; params.α)
 	#r, w = 0.10, 1
-	(; T, R, β) = household_dp(; r, w, params)
-	(; mdp, sol) = solve_household(; T, R, β, grid, k_grid)
+	(; T, R, β) = household_dp(; r, w, params, k_grid, z_grid, z_P)
+	(; mdp, sol) = solve_household(; T, R, β, k_grid, z_grid)
 
-	mc = controlled_markov_chain(grid, sol, T)
-	π = stationary_distribution(mc, grid)
+	
+	mc = controlled_markov_chain(grid(k_grid, z_grid), sol, T)
+	π = simulated_stationary_distribution(mc, grid(k_grid, z_grid))
 	K = dot(sum(π, dims=2), k_grid)
 	(; K, r, w)
 end
+
+# ╔═╡ cb6b3540-4a7a-4829-b9b4-3c2356bae2d9
+scatter(log.(k_grid), simulated_stationary_distribution(mc, grid(k_grid, z_grid)))
+
+# ╔═╡ ba945aa5-cd22-4a78-b5e4-72682c8c49e8
+begin
+	N = 1_000_000_000
+	norm(mc^N - mc^(N+1))
+end
+
+# ╔═╡ 50d34503-cc71-4149-965f-0ad6e8349d5b
+mc^N
 
 # ╔═╡ 3b05bd8c-8cab-41f8-a7ff-98941013ddeb
 lines(k_grid, dropdims(sum(π, dims=2), dims=2))
 
 # ╔═╡ d8ff6a80-c01d-4878-a926-8bc31f47279b
 let	
+	grid = grid(k_grid, z_grid)
 	fig = Figure()
 	ax_value = Axis(fig[1,1], title = "value")
 	ax_policy = Axis(fig[1,2], title = "policy")
@@ -366,8 +405,8 @@ end
 
 # ╔═╡ eb81c692-fc6f-4957-9c56-dda2a0925f75
 let
-	mc = controlled_markov_chain(grid, sol, T)
-	π = stationary_distribution(mc, grid)
+	mc = controlled_markov_chain(grid(k_grid, z_grid), sol, T)
+	π = stationary_distribution(mc, grid(k_grid, z_grid))
 
 	fig = Figure()
 	ax = Axis(fig[1,1])
@@ -395,6 +434,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DiscreteValueIteration = "4b033969-44f6-5439-a48b-c11fa3648068"
 FreqTables = "da1fdf0e-e0ff-5433-a45f-9bb5ff651cb1"
@@ -414,6 +454,7 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 AlgebraOfGraphics = "~0.6.0"
 Arpack = "~0.5.3"
 CairoMakie = "~0.6.6"
+Chain = "~0.4.10"
 DataFrames = "~1.3.0"
 DiscreteValueIteration = "~0.4.5"
 FreqTables = "~0.4.5"
@@ -561,6 +602,11 @@ deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Un
 git-tree-sha1 = "c308f209870fdbd84cb20332b6dfaf14bf3387f8"
 uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 version = "0.10.2"
+
+[[deps.Chain]]
+git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
+uuid = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+version = "0.4.10"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
@@ -1950,7 +1996,6 @@ version = "3.5.0+0"
 # ╠═b6a1b579-6185-415b-af38-a29d294099e8
 # ╠═2a1422c5-6ec9-479e-9472-60b476ce95a4
 # ╟─b2ed4cb5-e533-4daa-9e9c-1d80bb60c0d0
-# ╠═f4187a41-5313-43a4-a8cd-8a7bdd0ecdbc
 # ╟─aab747fa-7501-4dbc-8a58-dfb3336bacf1
 # ╠═75e694ad-2c16-4806-af5f-e3e7642050b3
 # ╠═d6b61a69-a1dc-4fe1-8411-617969b2e4d2
@@ -1959,7 +2004,14 @@ version = "3.5.0+0"
 # ╠═75afb8c8-4666-4162-8a45-e90d554306dc
 # ╠═d4ae5a54-87de-4366-94a6-be94573d4470
 # ╠═083f5528-b602-4699-b782-e3a521cb1cea
+# ╠═454eea7b-682c-4640-a9c5-a91bceb02840
+# ╠═f4187a41-5313-43a4-a8cd-8a7bdd0ecdbc
 # ╠═7f0e140b-fe8f-4c49-ad9e-dbe08bd19651
+# ╠═30c96dda-e544-4cca-b904-9c91eb1ef6f9
+# ╠═cb6b3540-4a7a-4829-b9b4-3c2356bae2d9
+# ╠═ba945aa5-cd22-4a78-b5e4-72682c8c49e8
+# ╠═50d34503-cc71-4149-965f-0ad6e8349d5b
+# ╠═c59b6a97-4db2-4c83-85c0-68123c536c51
 # ╠═3b05bd8c-8cab-41f8-a7ff-98941013ddeb
 # ╠═d8ff6a80-c01d-4878-a926-8bc31f47279b
 # ╟─0d2c4186-201c-4c78-9316-34aa8fea5ca6
@@ -1979,6 +2031,7 @@ version = "3.5.0+0"
 # ╠═5974a7f1-058b-4abd-bd86-102ad0bd8092
 # ╠═28d7e91b-c5f0-4230-b61f-e305de3d57c3
 # ╠═4442496d-3176-45e0-be4a-2dc7951b8b0c
+# ╠═9d41884c-003b-4af6-8163-11bfa5513a79
 # ╠═eb81c692-fc6f-4957-9c56-dda2a0925f75
 # ╟─898b1440-ca66-4807-9592-6bb06331930f
 # ╠═adddd0c7-4163-43b4-8360-15f66583231a
