@@ -1,7 +1,7 @@
-\documentclass[a4paper,11pt]{article}
+\documentclass[a4paper,12pt]{article}
 
-\usepackage{titling}
-\setlength{\droptitle}{-4cm}
+%\usepackage{titling}
+%\setlength{\droptitle}{-4cm}
 %\predate{}
 %\postdate{}
 %\preauthor{}
@@ -13,46 +13,53 @@
 \usepackage[longnamesfirst]{natbib}
 \bibliographystyle{ecta}
 
-\title{Topics in Distributional Macroeconomics}
-\date{\vspace{-2ex} Fabian Greimel\thanks{University of Amsterdam, \url{https://www.greimel.eu}.}}
-\author{First Year Elective Course at Tinbergen Institute}
-
-%\author{Fabian Greimel}
-
 \begin{document}
+\noindent {\LARGE Topics in Distributional Macroeconomics}
 
-\maketitle
+\medskip \noindent {\large Elective Course, Tinbergen Institute, May/June 2022}
+
+\subsection*{Lecturers}
+
+Fabian Greimel (coordinator), \url{https://www.greimel.eu}
 
 \noindent
+Stefanie J. Huber, \url{https://sites.google.com/site/stefaniehuber/}
+
+\noindent
+Enrico Perotti, \url{https://www.enricoperotti.eu}
+
+
+\subsection*{Description}
+
 The term ``distributional macroeconomics'' was introduced by Benjamin Moll as a replacement for ``macroeconomics with heterogeneous agents'' to promote the view that the \emph{macroeconomy is a distribution} of state variables (e.g.\ income and wealth).\footnote{See \url{ https://benjaminmoll.com/wp-content/uploads/2019/07/DM_long.pdf}.}
 
 This course will explore some implications of income and wealth heterogeneity for macroeconomic dynamics and macroeconomic policy. First, we want to understand how secular trends (falling interest rates and rising debt) are connected to rising inequality. And second, we want to understand how heterogeneity matters for the aggregate response to macroeconomic shocks.
 
-The focus of the course is on topics, rather than computational methods. (These are covered in second year electives.) We will use simplified models to replicate results from papers and compare the results to empirical evidence. I will provide ready-to-run code in the form of interactive \href{https://github.com/fonsp/Pluto.jl}{\texttt{Pluto.jl}} notebooks. 
+The focus of the course is on topics, rather than computational methods. (These are covered in second year electives.) We will use simplified models to replicate results from papers and compare the results to empirical evidence. For most topics, we will provide ready-to-run code in the form of interactive \href{https://github.com/fonsp/Pluto.jl}{\texttt{Pluto.jl}} notebooks. 
 
-The course is based on recent research papers. Most papers build on the Bewley-Huggett-Aiyagari model, some build on the two-agent (Saver-Spender) model. 
-
-\subsection*{Grading}
-
-\begin{enumerate}
-\item Group homeworks
-\item Presentation of a paper
-\item Short research proposal
-\end{enumerate}
+%The course is based on recent research papers. Most papers build on the Bewley-Huggett-Aiyagari model, some build on the two-agent (Saver-Spender) model. 
 
 \subsection*{Topics}
 
 \begin{enumerate}
-\item Consumer Credit and Default
-\item Household Balance Sheets and Recessions
-\item Consequences of Rising Inequality
-\item House Price Expectations
-\item Monetary Policy and Heterogeneity (HANK)
+\item Consumer Credit and Default (Greimel)
+\item Household Balance Sheets and Recessions (Greimel)
+\item Behavioral Macroeconomics (Huber)
+\item Inequality, Interest Rates and Household Debt (Greimel \& Perotti)
+\item Monetary Policy, Heterogeneity and HANK (Greimel)
 \end{enumerate}
 
-\subsection*{Structure and Content (tentative)}
+\subsection*{Evaluation}
 
-\paragraph{Week 1: Introduction and Consumer Credit}
+\begin{enumerate}
+\item Group homeworks
+\item Presentation of a paper
+\item Research proposal
+\end{enumerate}
+
+\subsection*{Structure and Content}
+
+\paragraph{Week 1: Introduction and consumer credit (Greimel)}
 \begin{enumerate}
 \item Introduction
   \begin{enumerate}
@@ -63,11 +70,10 @@ The course is based on recent research papers. Most papers build on the Bewley-H
   \item infinite lifetime vs perpetual youth vs lifecycle model
   \end{enumerate}
 
-\item Consumer Credit and Default \citep{athreya2002welfare,chatterjee2007quantitative,livshits2007consumer}
-\item Survey: \citet{exler2020consumer}
+\item Consumer Credit and Default \citep{athreya2002welfare,chatterjee2007quantitative,livshits2007consumer}, surveyed by \citet{exler2020consumer}
 \end{enumerate}
 
-\paragraph{Week 2: Household Balance Sheets}
+\paragraph{Week 2: Household balance sheets (Greimel)}
 
 \begin{enumerate}
 \item Household Balance Sheets and the Great Recession
@@ -83,30 +89,36 @@ The course is based on recent research papers. Most papers build on the Bewley-H
   \end{enumerate}
 \end{enumerate}
 
-\paragraph{Week 3: Consequences of Rising Inequality}
+\paragraph{Week 3: Behavioral macroeconomics (Huber)}
+\begin{enumerate}
+\item Empirical Evidence on cross-country heterogeneity in House Price Booms and Busts \citep{Huber:2019}
+\item The Rent versus Buy Decision: User Cost Approach
+  versus Behavioral Concepts
+  \citep{Huber:2022,Huber:2020}
+\item Social Networks, Experience Effects and Expectations 
+  \citep{Kuchler:2019, bailey2018housing, Malmendier:2019, kaplan2020housing}
+\end{enumerate}
+
+
+\paragraph{Week 4: Inequality, interest rates and household debt in the long-run}
 
 \begin{enumerate}
-\item Falling Interest Rates
-  \begin{enumerate}
-  \item Saving Glut of the Rich \citep{kumhof2015inequality}
-  \item Indebted Demand \citep{mian2021indebted-demand}
-  \end{enumerate}
-\item Rising Mortgage Debt
-  \begin{enumerate}
-  \item \citet{bertrand2016trickle}, \citet{bellet2019mcmansion}
-  \item \citet{drechsel2021falling-behind}
-  \end{enumerate}
   
-\item Guest lecture by Enrico Perotti on Redistributive Growth
+\item First Part (Greimel)
+  \begin{itemize}
+  \item Saving Glut of the Rich  \citep{kumhof2015inequality,mian2021indebted-demand}
+  \item Social comparisons and trickle-down consumption
+    \citep{bertrand2016trickle, bellet2019mcmansion, drechsel2021falling-behind}
+  \end{itemize}
+  
+\item Second Part (Perotti)
+  \begin{itemize}
+  \item Redistributive Growth \citep{doettling2020secular}
+  \end{itemize}
 \end{enumerate}
 
-\paragraph{Week 4: House Price Expectations}
-\begin{enumerate}
-\item Expectations and the Housing Boom and Bust \citep{kaplan2018microeconomic}
-\item Social Networks and House Price Expectations \citep{bailey2019beliefs-leverage,bailey2018housing}
-\end{enumerate}
 
-\paragraph{Week 5: Monetary Policy and Heterogeneity (HANK)}
+\paragraph{Week 5: Monetary Policy, Heterogeneity and HANK (Greimel)}
 \begin{itemize}
 \item Microeconomics Heterogeneity and Macroeconomic Shocks \citep{kaplan2018microeconomic}
 \item Original HANK \citep{kaplan2018monetary}
@@ -123,6 +135,7 @@ The course is based on recent research papers. Most papers build on the Bewley-H
   \end{itemize}
 \item Other
   \begin{itemize}
+  \item \citet{bailey2019beliefs-leverage}
   \item \citet{laibson2022mpc-to-mpx}
   \item more suggestions to follow
   \item \dots or make your own suggestion
