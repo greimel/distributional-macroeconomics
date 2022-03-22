@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.7
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
@@ -27,37 +27,53 @@ end
 # ╔═╡ 7e7bfc99-85e1-4bd7-bdad-0718d97d32ef
 using NLsolve, ForwardDiff
 
-# ╔═╡ 1189b2f1-2a1d-4370-af3f-bd11dfec69b7
-begin
-	struct MySlider 
-	    range::AbstractRange
-	    default::Number
-	end
-	function Base.show(io::IO, ::MIME"text/html", slider::MySlider)
-	    print(io, """
-			<input type="range" 
-			min="$(first(slider.range))" 
-			step="$(step(slider.range))"
-			max="$(last(slider.range))" 
-			value="$(slider.default)"
-			oninput="this.nextElementSibling.value=this.value">
-			<output>$(slider.default)</output>""")
-	end
-end
+# ╔═╡ ce809135-4a0a-4245-93ec-f9bd305ba70c
+md"""
+`redistributive-growth.jl` | **Version 1.0** | _last updated on Mar 22, 2022_ | _Contributed by [Andrea Titton](https://github.com/NoFishLikeIan)_
+"""
+
+# ╔═╡ 034c3e01-2d20-4e53-8658-00b6ada6e8ff
+md"""
+# Redistributive Growth
+
+_based on Döttling and Perotti (2017)_
+"""
+
+# ╔═╡ f89219a3-04db-4a3a-a5e5-12565abd901d
+md"
+Assume $h$ and $l$ are constant at some value. We can plot the production function.
+"
+
+# ╔═╡ c32fd8bd-96bd-4a27-9e34-187fe47eef86
+md"
+The firm will pay marginal productivity to its factors of production hence we can compute prices numerically by taking the gradient of $Y(H, h, K, l)$.
+"
+
+# ╔═╡ 2edf80ec-b52e-487f-a868-483c343ca741
+md"To get a sense of what is going, we can check the evolution of the four prices, for the same inputs, as the productivity $\eta$ of intangible capital increases."
+
+# ╔═╡ d5e8a6d2-d12c-40b9-9cb1-a2af4fe336a5
+md"## Numerical equilibrium"
+
+# ╔═╡ b7c061d7-f965-46b6-9e40-4a8468d7704c
+
+
+# ╔═╡ 7a904f5e-27bb-4b11-a6ab-1c0682f0f3b5
+md"""
+# Appendix
+"""
 
 # ╔═╡ c8901bd4-ec5b-47c6-87da-e1d745e91e2b
 fraction = range(0, 1, length = 101)
 
 # ╔═╡ bc94b474-f090-4fec-bf7e-b934d5626db8
 md"
-# Döttling and Perotti (2017)
-
 ## Firms
 
-1. Productivity of intangible capital $\eta$, $(@bind η MySlider(fraction, 0.5))
-2. Marginal productivity of labour $\alpha$, $(@bind α MySlider(fraction, 0.5))
-2. Substitution $\rho$, $(@bind ρ MySlider(fraction, 0.5))
-3. Techonology $A$,  $(@bind A MySlider(1:1:100, 1))
+1. Productivity of intangible capital $\eta$, $(@bind η Slider(fraction, default=0.5, show_value=true))
+2. Marginal productivity of labour $\alpha$, $(@bind α Slider(fraction, default=0.5, show_value=true))
+2. Substitution $\rho$, $(@bind ρ Slider(fraction, default=0.5, show_value=true))
+3. Techonology $A$,  $(@bind A Slider(1:100, default=1, show_value=true))
 "
 
 # ╔═╡ 52baab0f-959e-4ecf-a992-99d418d3aad2
@@ -70,11 +86,6 @@ function Y(H, h, K, l; η = η, α = α, ρ = ρ, A = A)
 	return A * agg^(1 - ρ)
 	
 end
-
-# ╔═╡ f89219a3-04db-4a3a-a5e5-12565abd901d
-md"
-Assume $h$ and $l$ are constant at some value. We can plot the production function.
-"
 
 # ╔═╡ 27d09184-6161-4c80-ad68-40bbce69bdfa
 let
@@ -90,11 +101,6 @@ let
 	)
 end
 
-# ╔═╡ c32fd8bd-96bd-4a27-9e34-187fe47eef86
-md"
-The firm will pay marginal productivity to its factors of production hence we can compute prices numerically by taking the gradient of $Y(H, h, K, l)$.
-"
-
 # ╔═╡ 6f8d5e7a-43b6-4fb9-b1ec-ff70657c5c68
 begin
 	function computeprices(H, h, K, l; params...)
@@ -106,9 +112,6 @@ begin
 	end
 	computeprices(x) = collect(computeprices(x[1], x[2], x[3], x[4])) 
 end
-
-# ╔═╡ 2edf80ec-b52e-487f-a868-483c343ca741
-md"To get a sense of what is going, we can check the evolution of the four prices, for the same inputs, as the productivity $\eta$ of intangible capital increases."
 
 # ╔═╡ c29b074f-eee9-4c3e-94a3-a22d3b866a08
 let
@@ -145,11 +148,11 @@ md"
 
 Innovators produce intangible capital of which they can 
 
-5. appropriate a fraction $\omega$ $(@bind ω MySlider(fraction, 0.5))
+5. appropriate a fraction $\omega$ $(@bind ω Slider(fraction, default=0.5, show_value=true))
 
 for a constant 
 
-6. marginal benefit $\psi$ $(@bind ψ MySlider(0:0.01:4, 1.))
+6. marginal benefit $\psi$ $(@bind ψ Slider(0:0.01:4, default=1.0, show_value=true))
 
 hence, in equilibrium,
 
@@ -159,17 +162,6 @@ $H_t = I_{t-1} = R_t \frac{\omega}{\psi}$
 
 # ╔═╡ db8a15a6-dfb2-4480-aedd-a945e9547552
 H(R) = R * ω / ψ
-
-# ╔═╡ f87c5ee8-b938-45f7-9910-efaa5bb084eb
-md"
-## Representative household
-
-A household lives for two periods. The utility of a household is linear in period $t + 1$ consumption $u(c_{t+1})$ and $v(L_t)$ in land owned at time $t$. 
-
-A fraction $\phi$ $(@bind ϕ MySlider(fraction, 0.5)) 
-
-of the households is born with high skills. The rest are low skilled workers.
-"
 
 # ╔═╡ 8d2462c7-4e57-447a-8be1-5a171c420c9a
 begin
@@ -187,11 +179,16 @@ begin
 	d(R) = (1 - ω) * H(R) * R
 end
 
-# ╔═╡ d5e8a6d2-d12c-40b9-9cb1-a2af4fe336a5
-md"## Numerical equilibrium"
+# ╔═╡ f87c5ee8-b938-45f7-9910-efaa5bb084eb
+md"
+## Representative household
 
-# ╔═╡ b7c061d7-f965-46b6-9e40-4a8468d7704c
+A household lives for two periods. The utility of a household is linear in period $t + 1$ consumption $u(c_{t+1})$ and $v(L_t)$ in land owned at time $t$. 
 
+A fraction $\phi$ $(@bind ϕ Slider(fraction, default=0.5, show_value=true)) 
+
+of the households is born with high skills. The rest are low skilled workers.
+"
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -562,6 +559,12 @@ git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.1+0"
 
+[[LERC_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "bf36f528eec6634efc60d7ec062008f171071434"
+uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
+version = "3.0.0+1"
+
 [[LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "e5b909bcf985c5e2605737d2ce278ed791b89be6"
@@ -635,10 +638,10 @@ uuid = "4b2f31a3-9ecc-558c-b454-b3730dcb73e9"
 version = "2.35.0+0"
 
 [[Libtiff_jll]]
-deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
-git-tree-sha1 = "340e257aada13f95f98ee352d316c3bed37c8ab9"
+deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "c9551dd26e31ab17b86cbd00c2ede019c08758eb"
 uuid = "89763e89-9b03-5906-acba-b20f662cd828"
-version = "4.3.0+0"
+version = "4.3.0+1"
 
 [[Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -653,7 +656,7 @@ uuid = "d3d80556-e9d4-5f37-9878-2ab0fcc64255"
 version = "7.1.1"
 
 [[LinearAlgebra]]
-deps = ["Libdl"]
+deps = ["Libdl", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[LogExpFunctions]]
@@ -727,6 +730,10 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "887579a3eb005446d514ab7aeac5d1d027658b8f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+1"
+
+[[OpenBLAS_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
+uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 
 [[OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -828,7 +835,7 @@ deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [[Random]]
-deps = ["Serialization"]
+deps = ["SHA", "Serialization"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[RecipesBase]]
@@ -1152,6 +1159,10 @@ git-tree-sha1 = "5982a94fcba20f02f42ace44b9894ee2b140fe47"
 uuid = "0ac62f75-1d6f-5e53-bd7c-93b484bb37c0"
 version = "0.15.1+0"
 
+[[libblastrampoline_jll]]
+deps = ["Artifacts", "Libdl", "OpenBLAS_jll"]
+uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
+
 [[libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "daacc84a041563f965be61859a36e17c4e4fcd55"
@@ -1198,11 +1209,8 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
-# ╠═c3251794-957e-11ec-2f92-bb807c5959ea
-# ╟─1189b2f1-2a1d-4370-af3f-bd11dfec69b7
-# ╠═0f9329b6-16e5-4fa6-9615-7b4c88d15904
-# ╠═7e7bfc99-85e1-4bd7-bdad-0718d97d32ef
-# ╠═c8901bd4-ec5b-47c6-87da-e1d745e91e2b
+# ╟─ce809135-4a0a-4245-93ec-f9bd305ba70c
+# ╟─034c3e01-2d20-4e53-8658-00b6ada6e8ff
 # ╟─bc94b474-f090-4fec-bf7e-b934d5626db8
 # ╠═52baab0f-959e-4ecf-a992-99d418d3aad2
 # ╟─f89219a3-04db-4a3a-a5e5-12565abd901d
@@ -1217,5 +1225,10 @@ version = "0.9.1+5"
 # ╠═8d2462c7-4e57-447a-8be1-5a171c420c9a
 # ╟─d5e8a6d2-d12c-40b9-9cb1-a2af4fe336a5
 # ╠═b7c061d7-f965-46b6-9e40-4a8468d7704c
+# ╟─7a904f5e-27bb-4b11-a6ab-1c0682f0f3b5
+# ╠═c3251794-957e-11ec-2f92-bb807c5959ea
+# ╠═0f9329b6-16e5-4fa6-9615-7b4c88d15904
+# ╠═7e7bfc99-85e1-4bd7-bdad-0718d97d32ef
+# ╠═c8901bd4-ec5b-47c6-87da-e1d745e91e2b
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
