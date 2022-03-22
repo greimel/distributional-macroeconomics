@@ -55,13 +55,13 @@ md"""
 """
 
 # ╔═╡ 2bee2fc7-3322-457f-a835-028c80eaf059
-TITLE = "A Great Course"
+TITLE = "Topics in Distributional Macroeconomics"
 
 # ╔═╡ a0057e4c-0bcf-4970-8a2b-0412ad5af510
-SUBTITLE = "Content and Code"
+SUBTITLE = "PhD-level Elective Course"
 
 # ╔═╡ 4be56e57-fea0-4fbe-9659-44bed594b1b2
-INSTITUTION = "University of Greatness"
+INSTITUTION = "Tinbergen Institute"
 
 # ╔═╡ ab7186a4-2287-41da-a939-70f142bfeacd
 TERM = "Spring 2022"
@@ -79,7 +79,7 @@ available at `https://username.github.io/YourPackage.jl/` then the pre-path shou
 
 # ╔═╡ 88e1e91d-0d48-42e0-b4ab-4866624fd745
 begin
-	PREPATH = "pluto-course-template"
+	PREPATH = "distributional-macroeconomics"
 	@skip_as_script PREPATH = ""
 end
 
@@ -89,7 +89,7 @@ md"""
 """
 
 # ╔═╡ c5e00f30-e734-4b59-97b9-8e5f59fd131e
-add_notebook_header = true
+add_notebook_header = false
 
 # ╔═╡ 0b81d3ff-fa78-48c3-878c-24f9d6a34f20
 show_section_number = false
@@ -210,8 +210,9 @@ end
 
 # ╔═╡ 3e93e57c-3660-416f-9874-d43abf99e60e
 INSTRUCTORS = [
-	(name = "Person 1", href = ""),
-	(name = "Person 2", href = "")
+	(name = "Fabian Greimel", href = "https://www.greimel.eu/"),
+	(name = "Stefanie J. Huber", href = "https://sites.google.com/site/stefaniehuber/"),
+	(name = "Enrico Perotti", href = "https://www.enricoperotti.eu/"),
 ] |> instructors
 
 # ╔═╡ feaed8af-05d0-4b80-9f69-8f827f9343a8
@@ -253,7 +254,7 @@ function sidebar_code(book_model)
     <div class="container sidebar-sticky">
     <div class="sidebar-about">
     <br>
-    <img src="$(SLASH_PREPATH)/assets/julia-logo.svg" style="margin-left:1em; width: 80px; height: auto; display: inline">
+    <img src="$(SLASH_PREPATH)/assets/tinbergen-institute-logo.svg" style="margin-left:1em; width: 80px; height: auto; display: inline">
     <div style="font-weight: bold; margin-bottom: 0.5em"><a href="$(SLASH_PREPATH)/semesters/">$(TERM)</a> <span style="opacity: 0.6;">| $(INSTITUTION)</span></div>
     <h1><a href="$(SLASH_PREPATH)/">$(TITLE)</a></h1>
     <h2>$(SUBTITLE)</h2>
