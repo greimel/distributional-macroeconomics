@@ -27,6 +27,13 @@ end
 # ╔═╡ 7e7bfc99-85e1-4bd7-bdad-0718d97d32ef
 using NLsolve, ForwardDiff
 
+# ╔═╡ 8b57327a-733e-441a-9da6-5afedd6fe8f7
+md"""
+!!! danger "Under construction!"
+
+	**This notebook is not ready for public consumption.** Use at your own risk.
+"""
+
 # ╔═╡ ce809135-4a0a-4245-93ec-f9bd305ba70c
 md"""
 `redistributive-growth.jl` | **Version 1.0** | _last updated on Mar 22, 2022_ | _Contributed by [Andrea Titton](https://github.com/NoFishLikeIan)_
@@ -1209,6 +1216,7 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
+# ╟─8b57327a-733e-441a-9da6-5afedd6fe8f7
 # ╟─ce809135-4a0a-4245-93ec-f9bd305ba70c
 # ╟─034c3e01-2d20-4e53-8658-00b6ada6e8ff
 # ╟─bc94b474-f090-4fec-bf7e-b934d5626db8
