@@ -146,7 +146,11 @@ function setup_Q(states_indices, policies_indices, z_chain)
 end
 
 # ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
-function consumption((; z, a), (; a_next), (; q, w))
+function consumption((; z, a), (; a_next), (; q, w, Δr))
+	if a_next < 0 && Δr > 0
+		r = (1/q - 1) + (a_next < 0) * Δr
+		q = 1/(1+r)
+	end
 	c = w * z + a - q * a_next
 end
 
@@ -191,7 +195,7 @@ r = 0.01
 q(r) = 1/(1+r)
 
 # ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
-prices = (q = q(r), w = 1.0)
+prices = (q = q(r), w = 1.0, Δr = r/2)
 
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
@@ -215,7 +219,7 @@ function setup_DDP(household, statespace, prices)
 end
 
 # ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
-ss = statespace(; a_vals = range(1e-10, 1.3, length = 50), z_chain)
+ss = statespace(; a_vals = range(-2, 1.3, length = 50), z_chain)
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
