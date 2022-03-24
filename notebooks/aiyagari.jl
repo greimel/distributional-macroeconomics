@@ -24,15 +24,12 @@ md"""
 """
 
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
-function setup_Q!(Q, s_i_vals, z_chain)
-    for next_s_i in 1:size(Q, 3)
-        for a_i in 1:size(Q, 2)
-            for s_i in 1:size(Q, 1)
-                z_i = s_i_vals[s_i, 2]
-                next_z_i = s_i_vals[next_s_i, 2]
-                next_a_i = s_i_vals[next_s_i, 1]
-                if next_a_i == a_i
-                    Q[s_i, a_i, next_s_i] = z_chain.p[z_i, next_z_i]
+function setup_Q!(Q, states_indices, policies_indices, z_chain)
+    for (i_next_state, next) ∈ enumerate(states_indices)
+        for (i_policy, (; a_i)) ∈ enumerate(policies_indices)
+            for (i_state, (; z_i)) ∈ enumerate(states_indices)
+                if next.a_i == a_i
+                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
                 end
             end
         end
@@ -86,17 +83,25 @@ Household = @with_kw (r = 0.01,
                       a_max = 20.0,
                       a_size = 200,
                       a_vals = range(a_min, a_max, length = a_size),
-			          a_vals_new = [(; a) for a ∈ a_vals],
+	
                       z_size = length(z_chain.state_values),
                       n = a_size * z_size,
-					  s_vals_new = [(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec,
-                      s_vals = gridmake(a_vals, z_chain.state_values),
+					  states = 
+						  [(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec,
+					  states_indices = 
+						  [(; a_i, z_i) for a_i ∈ 1:a_size, z_i ∈ 1:z_size] |> vec,
+    		          policies = 
+						  [(; a) for a ∈ a_vals] |> vec,
+			          policies_indices = 
+						  [(; a_i) for a_i ∈ 1:a_size] |> vec,
+	
+					  s_vals = gridmake(a_vals, z_chain.state_values),
                       s_i_vals = gridmake(1:a_size, 1:z_size),
                       u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ),
 					  prices = (; q, w),
-                      R = setup_R(s_vals_new, a_vals_new, prices, u),
+                      R = setup_R(states, policies, prices, u),
                       # -Inf is the utility of dying (0 consumption)
-                      Q = setup_Q!(zeros(n, a_size, n), s_i_vals, z_chain))
+                      Q = setup_Q!(zeros(n, a_size, n), states_indices, policies_indices, z_chain))
 
 # ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 md"""
