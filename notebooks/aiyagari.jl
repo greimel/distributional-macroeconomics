@@ -41,14 +41,14 @@ function setup_Q!(Q, s_i_vals, z_chain)
 end
 
 # ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
-function consumption((; z, a), (; q, w), policy)
+function consumption((; z, a), policy, (; q, w))
 	a_new = policy.a
 	c = w * z + a - q * a_new 	
 end
 
 # ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
-function reward(state, prices, policy, u)
-	c = consumption(state, prices, policy)
+function reward(state, policy, prices, u)
+	c = consumption(state, policy, prices)
     if c > 0
 		u(c)
 	else
@@ -56,11 +56,14 @@ function reward(state, prices, policy, u)
 	end
 end
 
+# ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
+#reward.(am.s_vals_new, permutedims(am.a_vals_new), Ref(am.prices), am.u)
+
 # ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
 function setup_R!(R, states, policies, prices, u)
     for (a_i, policy) ∈ enumerate(policies)
         for (s_i, state) ∈ enumerate(states)
-            R[s_i, a_i] = reward(state, prices, policy, u)
+            R[s_i, a_i] = reward(state, policy, prices, u)
         end
     end
     return R
@@ -100,31 +103,26 @@ md"""
 ## State space
 """
 
-# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
+# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
+r = 0.01
 
+# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
+q(r) = 1/(1+r)
+
+# ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
+ε = 0.000000001
+
+# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
+z_chain = MarkovChain([1-ε ε; ε 1-ε], [0.1; 1.0])
+
+# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
+# Create an instance of Household
+am = Household(; a_min = 0, a_max = 6.0, q = q(r), w = 0.956, z_chain);
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
 ## Solve Households' problem
 """
-
-# ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
-md"""
-## Policy functions – How much to invest next period?
-"""
-
-# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.013
-
-# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
-q(r) = 1/(1+r)
-
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-# Create an instance of Household
-am = Household(; a_min = -3, a_max = 25.0, q = q(r), w = 0.956);
-
-# ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
-reward.(am.s_vals_new, Ref(am.prices), permutedims(am.a_vals_new), am.u)
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
@@ -138,13 +136,18 @@ results = solve(am_ddp, PFI)
 # Simplify names
 (; z_size, a_size, n, a_vals) = am;
 
+# ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
+z_vals = am.z_chain.state_values
+
+# ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
+md"""
+## Policy functions – How much to invest next period?
+"""
+
 # ╔═╡ c3c267fc-286a-4808-b9e0-26292aac1a20
 # Get all optimal actions across the set of
 # a indices with z fixed in each column
 a_star = reshape([a_vals[results.sigma[s_i]] for s_i in 1:n], a_size, z_size)
-
-# ╔═╡ 0edf1cb1-1b34-4d9c-855c-8629c409bc6d
-z_vals = am.z_chain.state_values
 
 # ╔═╡ b400e20c-1317-4aa6-b131-44f6022783a7
 begin
@@ -170,6 +173,11 @@ end
 
 # ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
 dot(vec(sum(π, dims=2)), am.a_vals)
+
+# ╔═╡ 3390393a-48a7-47b9-8855-fd11098c107a
+md"""
+## Solving for the equilibrium
+"""
 
 # ╔═╡ f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 begin
@@ -213,15 +221,15 @@ end
 
 # ╔═╡ 7a1e858d-266c-45de-9c2e-0925dbd48d48
 # Create an instance of Household
-#am = Household(β = β, a_max = 20.0)
+am2 = Household(β = β, a_max = 20.0);
 
 # ╔═╡ 1062e7f6-6a3d-4725-a3c2-479462aa139a
 # Create a grid of r values at which to compute demand and supply of capital
-r_vals = range(0.000001, 0.04, length = 20)
+r_vals = range(0.001, 0.04, length = 20)
 
 # ╔═╡ 4bebd0c9-2334-4901-8b90-98e7aeb26971
 # Compute supply of capital
-k_vals = prices_to_capital_stock.(Ref(am), r_vals)
+k_vals = prices_to_capital_stock.(Ref(am2), r_vals)
 
 # ╔═╡ 04ac8dc5-626b-47ff-ab33-18edb541c86a
 # Plot against demand for capital by firms
@@ -1484,6 +1492,10 @@ version = "0.9.1+5"
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
 # ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
+# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
+# ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
+# ╠═9be81a15-7117-4911-8254-4848df50c059
+# ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
@@ -1493,12 +1505,10 @@ version = "0.9.1+5"
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
 # ╠═c3c267fc-286a-4808-b9e0-26292aac1a20
 # ╠═b400e20c-1317-4aa6-b131-44f6022783a7
-# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
-# ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
-# ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
 # ╠═c9771579-bf40-4f39-b272-4bd5b3be9730
 # ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
+# ╟─3390393a-48a7-47b9-8855-fd11098c107a
 # ╠═f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 # ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
 # ╠═fbfb389c-b67b-4705-92f8-086742e59303
