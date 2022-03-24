@@ -48,7 +48,7 @@ md"""
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 md"""
-# Unsecured debt and default: Athreya (2002)
+# Unsecured debt and default
 """
 
 # ╔═╡ a274b461-a5df-446a-8374-f04267f5db69
@@ -105,6 +105,7 @@ function reward(state, policy, prices, params, u)
 	(; d_next, a_next) = policy
 	(; λ) = params
 
+	
 	default = d == 0 && d_next == 1
 	constrained = d == 1 || d_next == 1
 	
@@ -125,19 +126,19 @@ end
 #reward.(am.s_vals_new, permutedims(am.a_vals_new), Ref(am.prices), am.u)
 
 # ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, states, policies, prices, params, u)
+function setup_R!(R, states, policies, (; w, q), params, u, default_probabilities)
     for (a_i, policy) ∈ enumerate(policies)
         for (s_i, state) ∈ enumerate(states)
-            R[s_i, a_i] = reward(state, policy, prices, params, u)
+            R[s_i, a_i] = reward(state, policy, (; w, q = q * (1- default_probabilities[s_i, a_i])), params, u)
         end
     end
     return R
 end
 
 # ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
-function setup_R(states, policies, prices, params, u)
+function setup_R(states, policies, prices, params, u, default_probilities)
 	R = zeros(length(states), length(policies))
-	setup_R!(R, states, policies, prices, params, u)
+	setup_R!(R, states, policies, prices, params, u, default_probilities)
 end
 
 # ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
@@ -157,6 +158,35 @@ md"""
 ## Solve Households' problem
 """
 
+# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
+# Use the instance to build a discrete dynamic program
+#am_ddp = setup_DDP(am, ss, prices, params, default_probilities);
+
+# ╔═╡ 40c2424e-96ff-4a3f-b8d3-4e98872089bc
+function update_default_probs!(default_probs, Q, d_next, ϕ = 0.5)
+	#default_probs = similar(am_ddp.R)
+
+	for i_p ∈ 1:size(default_probs, 2)
+		for i_s ∈ 1:size(default_probs, 1)
+			default_probs[i_s, i_p] = (1-ϕ)*default_probs[i_s, i_p] + ϕ * dot(Q[i_s, i_p, :], d_next)
+		end
+	end
+	default_probs
+end
+
+# ╔═╡ bf5420bc-5847-4dcf-9972-9ac6378dbd03
+function update_default_probs(Q, d_next)
+	default_probs = zeros(size(Q, 1), size(Q, 2))
+
+	update_default_probs!(default_probs, Q, d_next)
+
+	default_probs
+end
+
+# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
+# Solve using policy function iteration
+#results_df0, σ = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+
 # ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 function solve_details(ddp, states, policies; solver = PFI)
 	results = solve(ddp, solver)
@@ -165,8 +195,9 @@ function solve_details(ddp, states, policies; solver = PFI)
 	df.state = states
 	df.policy = policies[results.sigma]
 	df.π = stationary_distributions(results.mc)[:, 1][1]
-
-	df
+	df.default_probability_next = results.mc.p * df.d
+	
+	df, results.sigma
 end
 
 # ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
@@ -237,11 +268,11 @@ params = (; λ, Δr, ρ)
 z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
 
 # ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
-function setup_DDP(household, statespace, prices, params)
+function setup_DDP(household, statespace, prices, params, default_probabilities)
 	(; β, u) = household
 	(; states, policies, states_indices, policies_indices) = statespace
     
-	R = setup_R(states, policies, prices, params, u)
+	R = setup_R(states, policies, prices, params, u, default_probabilities)
 	Q = setup_Q(states, states_indices, policies, policies_indices, z_chain, params)
 
 	DiscreteDP(R, Q, β)
@@ -250,23 +281,27 @@ end
 # ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
 ss = statespace(; a_vals = range(-1, 1.0, length = 200), z_chain)
 
-# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
-# Use the instance to build a discrete dynamic program
-am_ddp = setup_DDP(am, ss, prices, params);
+# ╔═╡ b91f93d0-3bcb-45bf-8ae0-3e388db0c593
+(; am_ddp, results_df0) = let
+	default_probabilities = fill(0.0, 800, 400)
+	am_ddp = setup_DDP(am, ss, prices, params, default_probabilities)
 
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-# Solve using policy function iteration
-results0 = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+	results_df0, σ = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+
+#	update_default_probs!(default_probabilities, am_ddp.Q, results_df0.d_next)
+#	am_ddp = setup_DDP(am, ss, prices, params, default_probabilities)
+
+#	results_df0, _ =  solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+
+	(; am_ddp, results_df0)
+end
 
 # ╔═╡ 5a1cd51e-b378-450f-99b3-b033baff0ab8
-results = @chain results0 begin
+results = @chain results_df0 begin
 	@transform(:consumption = consumption(:state, :policy, prices, params))
 	@transform(:saving = :a_next - :a)
 	select!(Not([:state, :policy]))
 end
-
-# ╔═╡ 5f391f68-b784-4482-93fa-676175b6d17d
-results
 
 # ╔═╡ 48eced48-2b86-4199-8637-4619c40c55e9
 let
@@ -296,6 +331,17 @@ end
 	@groupby(:z)
 	@combine(first(:a))
 end
+
+# ╔═╡ 7cf49d32-d3fc-421e-bcf2-e690d69467cb
+md"""
+## What's the probability of defaulting next period?
+"""
+
+# ╔═╡ 043dc9bf-842c-4cce-ac74-9a871f3368a5
+
+
+# ╔═╡ daf585bf-46d2-4a5b-81fb-77062f51ea6a
+results.d
 
 # ╔═╡ 51615ade-06d2-40dd-9d54-f0dab0fe5e92
 md"""
@@ -1796,7 +1842,7 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─bd569ec0-644e-4f94-ae43-aac97d583f50
-# ╠═f8af393f-9d66-4a58-87f5-91f8b73eb4fe
+# ╟─f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╟─a274b461-a5df-446a-8374-f04267f5db69
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
@@ -1818,12 +1864,14 @@ version = "3.5.0+0"
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
 # ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
+# ╠═b91f93d0-3bcb-45bf-8ae0-3e388db0c593
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
+# ╠═40c2424e-96ff-4a3f-b8d3-4e98872089bc
+# ╠═bf5420bc-5847-4dcf-9972-9ac6378dbd03
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╠═5a1cd51e-b378-450f-99b3-b033baff0ab8
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
-# ╠═5f391f68-b784-4482-93fa-676175b6d17d
 # ╟─b2c8040f-d377-4b2a-b40f-00b234303391
 # ╠═fe3cb967-ce8e-4de8-8289-9e72189e17f9
 # ╠═8dc245ed-77b5-4308-aabb-762cf86ae248
@@ -1832,6 +1880,9 @@ version = "3.5.0+0"
 # ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 # ╟─48eced48-2b86-4199-8637-4619c40c55e9
 # ╟─0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
+# ╟─7cf49d32-d3fc-421e-bcf2-e690d69467cb
+# ╠═043dc9bf-842c-4cce-ac74-9a871f3368a5
+# ╠═daf585bf-46d2-4a5b-81fb-77062f51ea6a
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
 # ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
 # ╠═0ace3bd5-3c87-431d-85c5-7707b7e2eb77
