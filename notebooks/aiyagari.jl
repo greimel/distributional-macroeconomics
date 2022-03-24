@@ -117,11 +117,11 @@ md"""
 r = 0.013
 
 # ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
-q = 1/(1+r)
+q(r) = 1/(1+r)
 
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
-am = Household(; a_min = -3, a_max = 7.0, q, w = 0.956);
+am = Household(; a_min = -3, a_max = 7.0, q = q(r), w = 0.956);
 
 # ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
 reward.(am.s_vals_new, Ref(am.prices), permutedims(am.a_vals_new), am.u)
@@ -197,9 +197,9 @@ function prices_to_capital_stock(am, r)
     # Set up problem
     w = r_to_w(r)
     (; a_vals_new, s_vals_new, u) = am
-    setup_R!(am.R, s_vals_new, a_vals_new, (; w, q=1/(1+r)), u)
+    R_new = setup_R(s_vals_new, a_vals_new, (; w, q=1/(1+r)), u)
 
-    aiyagari_ddp = DiscreteDP(am.R, am.Q, am.β)
+    aiyagari_ddp = DiscreteDP(R_new, am.Q, am.β)
 
     # Compute the optimal policy
     results = solve(aiyagari_ddp, PFI)
