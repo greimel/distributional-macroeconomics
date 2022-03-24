@@ -30,13 +30,41 @@ using StatsBase: weights
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 md"""
-# Aiyagari with QuantEcon
+# Bewley-Huggett-Aiyagari
+"""
+
+# ╔═╡ a274b461-a5df-446a-8374-f04267f5db69
+md"""
+# Households' problem
 """
 
 # ╔═╡ fa42601c-ccbf-4009-8c59-595542c241c8
 md"""
 ## Setup
 """
+
+# ╔═╡ 9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
+function statespace(;
+			a_vals = range(1e-10, 20.0, length = 200),
+			z_chain
+		)
+	states = 
+		[(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec
+	states_indices = 
+		[(; a_i, z_i) for a_i ∈ 1:length(a_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
+    policies = 
+	    [(; a_next) for a_next ∈ a_vals] |> vec
+	policies_indices = 
+	    [(; a_next_i) for a_next_i ∈ 1:length(a_vals)] |> vec
+
+	(; states, states_indices, policies, policies_indices, z_chain)
+end
+
+# ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+Household = @with_kw ( σ = 1.0,
+                      β = 0.96,	
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ),
+)
 
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
 function setup_Q!(Q, states_indices, policies_indices, z_chain)
@@ -50,6 +78,13 @@ function setup_Q!(Q, states_indices, policies_indices, z_chain)
         end
     end
     return Q
+end
+
+# ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
+function setup_Q(states_indices, policies_indices, z_chain)
+	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
+	setup_Q!(Q, states_indices, policies_indices, z_chain)
+	Q
 end
 
 # ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
@@ -86,37 +121,6 @@ function setup_R(states, policies, prices, u)
 	setup_R!(R, states, policies, prices, u)
 end
 
-# ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
-Household = @with_kw (r = 0.01,
-					  q = 1/(1+r),
-                      w = 1.0,
-                      σ = 1.0,
-                      β = 0.96,
-                      z_chain = MarkovChain([0.9 0.1; 0.1 0.9], [0.1; 1.0]),
-                      a_min = 1e-10,
-                      a_max = 20.0,
-                      a_size = 200,
-                      a_vals = range(a_min, a_max, length = a_size),
-	
-                      z_size = length(z_chain.state_values),
-                      n = a_size * z_size,
-					  states = 
-						  [(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec,
-					  states_indices = 
-						  [(; a_i, z_i) for a_i ∈ 1:a_size, z_i ∈ 1:z_size] |> vec,
-    		          policies = 
-						  [(; a_next) for a_next ∈ a_vals] |> vec,
-			          policies_indices = 
-						  [(; a_next_i) for a_next_i ∈ 1:a_size] |> vec,
-	
-					  #s_vals = gridmake(a_vals, z_chain.state_values),
-                      #s_i_vals = gridmake(1:a_size, 1:z_size),
-                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ),
-					  prices = (; q, w),
-                      R = setup_R(states, policies, prices, u),
-                      # -Inf is the utility of dying (0 consumption)
-                      Q = setup_Q!(zeros(n, a_size, n), states_indices, policies_indices, z_chain))
-
 # ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 md"""
 ## State space
@@ -128,15 +132,32 @@ r = 0.01
 # ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
 q(r) = 1/(1+r)
 
+# ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
+prices = (q = q(r), w = 1.0)
+
+# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
+# Create an instance of Household
+am = Household()
+
 # ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
-ε = 0.01
+ε = 0.1
 
 # ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
 z_chain = MarkovChain([1-ε ε; ε 1-ε], [0.1; 1.0])
 
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-# Create an instance of Household
-am = Household(; a_min = 0, a_max = 6.0, q = q(r), w = 0.956, z_chain);
+# ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
+function setup_DDP(household, statespace, prices)
+	(; β, u) = household
+	(; states, policies, states_indices, policies_indices) = statespace
+    
+	R = setup_R(states, policies, prices, u)
+	Q = setup_Q(states_indices, policies_indices, z_chain)
+
+	DiscreteDP(R, Q, β)
+end
+
+# ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
+ss = statespace(; z_chain)
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
@@ -145,11 +166,7 @@ md"""
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
-am_ddp = DiscreteDP(am.R, am.Q, am.β);
-
-# ╔═╡ 0361d9ad-e266-452a-933c-432c6f3ef232
-# Simplify names
-(; z_size, a_size, n, a_vals) = am;
+am_ddp = setup_DDP(am, ss, prices);
 
 # ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 function solve_details(ddp, states, policies; solver = PFI)
@@ -165,11 +182,11 @@ end
 
 # ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
 # Solve using policy function iteration
-results0 = solve_details(am_ddp, am.states, am.policies, solver = PFI)
+results0 = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 
 # ╔═╡ 5a1cd51e-b378-450f-99b3-b033baff0ab8
 results = @chain results0 begin
-	@transform(:consumption = consumption(:state, :policy, am.prices))
+	@transform(:consumption = consumption(:state, :policy, prices))
 	@transform(:saving = :a_next - :a)
 	select!(Not([:state, :policy]))
 end
@@ -232,6 +249,19 @@ md"""
 	@combine(mean(:value, weights(:π)))
 end
 
+# ╔═╡ 8af3171b-ba81-4b13-bd81-c2a8a1c311ed
+md"""
+# Huggett equilibrium
+"""
+
+# ╔═╡ 545c2acc-d07e-49d2-9476-690afacc6782
+
+
+# ╔═╡ 37e26bec-97a2-407b-ba89-442024330220
+md"""
+# Aiyagari equilibrium
+"""
+
 # ╔═╡ 3390393a-48a7-47b9-8855-fd11098c107a
 md"""
 ## Solving for the equilibrium
@@ -258,16 +288,14 @@ function rd(K)
 end
 
 # ╔═╡ 4af5f025-fd09-495e-82c7-59aec0f635d4
-function prices_to_capital_stock(am, r)
+function prices_to_capital_stock(am, statespace, r)
 
     # Set up problem
     w = r_to_w(r)
-    (; policies, states, u) = am
-    R_new = setup_R(states, policies, (; w, q=q(r)), u)
-
-    ddp = DiscreteDP(R_new, am.Q, am.β)
-
-	results = solve_details(ddp, states, policies, solver = PFI)
+	
+	ddp = setup_DDP(am, statespace, (; w, q=q(r)))
+	
+	results = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
 
 	# Return K
     return 	K = mean(results.a, weights(results.π))
@@ -275,7 +303,7 @@ end
 
 # ╔═╡ 7a1e858d-266c-45de-9c2e-0925dbd48d48
 # Create an instance of Household
-am2 = Household(β = β, a_max = 20.0);
+am2 = Household()
 
 # ╔═╡ 1062e7f6-6a3d-4725-a3c2-479462aa139a
 # Create a grid of r values at which to compute demand and supply of capital
@@ -283,7 +311,11 @@ r_vals = range(0.001, 0.04, length = 20)
 
 # ╔═╡ 4bebd0c9-2334-4901-8b90-98e7aeb26971
 # Compute supply of capital
-k_vals = prices_to_capital_stock.(Ref(am2), r_vals)
+k_vals = prices_to_capital_stock.(
+	Ref(am2),
+	Ref(statespace(; z_chain = MarkovChain([0.9 0.1; 0.1 0.9], [0.1; 1.0]))),
+	r_vals
+)
 
 # ╔═╡ 04ac8dc5-626b-47ff-ab33-18edb541c86a
 # Plot against demand for capital by firms
@@ -1966,9 +1998,13 @@ version = "0.9.1+5"
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╟─a274b461-a5df-446a-8374-f04267f5db69
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
+# ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
 # ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+# ╠═df975df6-90db-408b-a908-52fb4b0637f6
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
+# ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
 # ╠═7a15adab-ae5e-4bf1-ac61-ae90d4393552
 # ╠═e3930baf-0560-4994-a637-7cb1923ce33c
 # ╠═4342d4de-65f0-4ecf-bb2f-7546e337e7de
@@ -1977,14 +2013,15 @@ version = "0.9.1+5"
 # ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
 # ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
+# ╠═59d7c6f7-4704-4866-9280-22d37b328499
 # ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
+# ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╠═5a1cd51e-b378-450f-99b3-b033baff0ab8
-# ╠═0361d9ad-e266-452a-933c-432c6f3ef232
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
 # ╟─48eced48-2b86-4199-8637-4619c40c55e9
@@ -1994,6 +2031,9 @@ version = "0.9.1+5"
 # ╠═0ace3bd5-3c87-431d-85c5-7707b7e2eb77
 # ╟─e816135f-7f19-4a47-9ed1-fbc935506e17
 # ╠═c9771579-bf40-4f39-b272-4bd5b3be9730
+# ╟─8af3171b-ba81-4b13-bd81-c2a8a1c311ed
+# ╠═545c2acc-d07e-49d2-9476-690afacc6782
+# ╟─37e26bec-97a2-407b-ba89-442024330220
 # ╟─3390393a-48a7-47b9-8855-fd11098c107a
 # ╠═f9f2c729-b79e-4e55-b7fc-fe73bae0e405
 # ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
