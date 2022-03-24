@@ -80,7 +80,7 @@ Household = @with_kw (r = 0.01,
                       β = 0.96,
                       z_chain = MarkovChain([0.9 0.1; 0.1 0.9], [0.1; 1.0]),
                       a_min = 1e-10,
-                      a_max = 18.0,
+                      a_max = 20.0,
                       a_size = 200,
                       a_vals = range(a_min, a_max, length = a_size),
 			          a_vals_new = [(; a) for a ∈ a_vals],
@@ -121,7 +121,7 @@ q(r) = 1/(1+r)
 
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
-am = Household(; a_min = -3, a_max = 7.0, q = q(r), w = 0.956);
+am = Household(; a_min = -3, a_max = 25.0, q = q(r), w = 0.956);
 
 # ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
 reward.(am.s_vals_new, Ref(am.prices), permutedims(am.a_vals_new), am.u)
