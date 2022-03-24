@@ -40,20 +40,36 @@ function setup_Q!(Q, s_i_vals, z_chain)
     return Q
 end
 
+# ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
+function consumption((; z, a), (; q, w), policy)
+	a_new = policy.a
+	c = w * z + a - q * a_new 	
+end
+
+# ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
+function reward(state, prices, policy, u)
+	c = consumption(state, prices, policy)
+    if c > 0
+		u(c)
+	else
+		-Inf
+	end
+end
+
 # ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, a_vals, s_vals, q, w, u)
-    for new_a_i in 1:size(R, 2)
-        a_new = a_vals[new_a_i]
-        for s_i in 1:size(R, 1)
-            a = s_vals[s_i, 1]
-            z = s_vals[s_i, 2]
-            c = w * z + a - q * a_new 
-            if c > 0
-                R[s_i, new_a_i] = u(c)
-            end
+function setup_R!(R, states, policies, prices, u)
+    for (a_i, policy) ∈ enumerate(policies)
+        for (s_i, state) ∈ enumerate(states)
+            R[s_i, a_i] = reward(state, prices, policy, u)
         end
     end
     return R
+end
+
+# ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
+function setup_R(states, policies, prices, u)
+	R = zeros(length(states), length(policies))
+	setup_R!(R, states, policies, prices, u)
 end
 
 # ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
@@ -67,18 +83,34 @@ Household = @with_kw (r = 0.01,
                       a_max = 18.0,
                       a_size = 200,
                       a_vals = range(a_min, a_max, length = a_size),
+			          a_vals_new = [(; a) for a ∈ a_vals],
                       z_size = length(z_chain.state_values),
                       n = a_size * z_size,
+					  s_vals_new = [(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec,
                       s_vals = gridmake(a_vals, z_chain.state_values),
                       s_i_vals = gridmake(1:a_size, 1:z_size),
                       u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ),
-                      R = setup_R!(fill(-Inf, n, a_size), a_vals, s_vals, q, w, u),
+					  prices = (; q, w),
+                      R = setup_R(s_vals_new, a_vals_new, prices, u),
                       # -Inf is the utility of dying (0 consumption)
                       Q = setup_Q!(zeros(n, a_size, n), s_i_vals, z_chain))
+
+# ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
+md"""
+## State space
+"""
+
+# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
+
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
 ## Solve Households' problem
+"""
+
+# ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
+md"""
+## Policy functions – How much to invest next period?
 """
 
 # ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
@@ -90,6 +122,9 @@ q = 1/(1+r)
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
 am = Household(; a_min = -3, a_max = 7.0, q, w = 0.956);
+
+# ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
+reward.(am.s_vals_new, Ref(am.prices), permutedims(am.a_vals_new), am.u)
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
@@ -161,8 +196,8 @@ function prices_to_capital_stock(am, r)
 
     # Set up problem
     w = r_to_w(r)
-    @unpack a_vals, s_vals, u = am
-    setup_R!(am.R, a_vals, s_vals, r, w, u)
+    (; a_vals_new, s_vals_new, u) = am
+    setup_R!(am.R, s_vals_new, a_vals_new, (; w, q=1/(1+r)), u)
 
     aiyagari_ddp = DiscreteDP(am.R, am.Q, am.β)
 
@@ -182,7 +217,7 @@ end
 
 # ╔═╡ 1062e7f6-6a3d-4725-a3c2-479462aa139a
 # Create a grid of r values at which to compute demand and supply of capital
-r_vals = range(0.005, 0.04, length = 20)
+r_vals = range(0.000001, 0.04, length = 20)
 
 # ╔═╡ 4bebd0c9-2334-4901-8b90-98e7aeb26971
 # Compute supply of capital
@@ -1443,12 +1478,19 @@ version = "0.9.1+5"
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
 # ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
+# ╠═7a15adab-ae5e-4bf1-ac61-ae90d4393552
+# ╠═e3930baf-0560-4994-a637-7cb1923ce33c
+# ╠═4342d4de-65f0-4ecf-bb2f-7546e337e7de
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
+# ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
+# ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
+# ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╠═0361d9ad-e266-452a-933c-432c6f3ef232
 # ╠═0edf1cb1-1b34-4d9c-855c-8629c409bc6d
+# ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
 # ╠═c3c267fc-286a-4808-b9e0-26292aac1a20
 # ╠═b400e20c-1317-4aa6-b131-44f6022783a7
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
