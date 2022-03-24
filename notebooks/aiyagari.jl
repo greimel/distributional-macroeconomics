@@ -261,8 +261,13 @@ md"""
 # ╔═╡ 48eced48-2b86-4199-8637-4619c40c55e9
 let
 	fg = @chain results begin
-		stack([:a_next, :consumption, :saving])
-		data(_) * mapping(:a => L"current assets $a$", :value => "policy", layout = :variable, color = :z => nonnumeric) * visual(Lines)
+		stack(Not([:a, :z, :π])) #[:a_next, :consumption, :saving])
+		data(_) * mapping(
+			:a => L"current assets $a$",
+			:value => "policy",
+			layout = :variable,
+			color = :z => nonnumeric,
+		) * visual(Lines)
 		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 	end
 
@@ -355,7 +360,7 @@ function prices_to_capital_stock(am, statespace, r)
     # Set up problem
     w = r_to_w(r)
 	
-	ddp = setup_DDP(am, statespace, (; w, q=q(r)))
+	ddp = setup_DDP(am, statespace, (; w, q=q(r), Δr = 0.0))
 	
 	results = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
 
