@@ -48,7 +48,7 @@ md"""
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 md"""
-# Unsecured debt and default: Athreya
+# Unsecured debt and default: Athreya (2002)
 """
 
 # ╔═╡ a274b461-a5df-446a-8374-f04267f5db69
@@ -85,39 +85,8 @@ function Household(; σ = 1.0, β = 0.96,
 	(; β, u)
 end
 
-# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
-function setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain, ρ = 0.2)
-    for (I_next, (next, i_next)) ∈ enumerate(zip(states, states_indices))
-		d_next = next.d
-        for (I_policy, (policy, i_policy)) ∈ enumerate(zip(policies, policies_indices))
-			d_chosen = policy.d_next
-            for (I_state, (state, i_state)) ∈ enumerate(zip(states, states_indices))
-				d = state.d
-                if i_next.a_i == i_policy.a_next_i
-					pr = z_chain.p[i_state.z_i, i_next.z_i]
-					if d == 0 && d_next == d_chosen
-                    	Q[I_state, I_policy, I_next] = pr
-					elseif d == 1 && 1 == d_next
-						Q[I_state, I_policy, I_next] = ρ * pr
-					elseif d == 1 && 0 == d_next
-						Q[I_state, I_policy, I_next] = (1-ρ) * pr
-					end
-                end
-            end
-        end
-    end
-    return Q
-end
-
-# ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
-function setup_Q(states, states_indices, policies, policies_indices, z_chain)
-	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
-	setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain)
-	Q
-end
-
 # ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
-function consumption((; z, a, d), (; d_next, a_next), (; q, w, Δr))
+function consumption((; z, a, d), (; d_next, a_next), (; q, w), (; Δr))
 	default = d == 0 && d_next == 1
 	constrained = d == 1 || d_next == 1
 	
@@ -130,8 +99,46 @@ function consumption((; z, a, d), (; d_next, a_next), (; q, w, Δr))
 	c = w * z + repay - q * a_next
 end
 
+# ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
+function reward(state, policy, prices, params, u)
+	(; d) = state
+	(; d_next, a_next) = policy
+	(; λ) = params
+
+	default = d == 0 && d_next == 1
+	constrained = d == 1 || d_next == 1
+	
+	if constrained && a_next < 0
+		c = -999999.0 + 100 * a_next
+	else
+		c = consumption(state, policy, prices, params)
+	end
+	
+    if c > 0
+		u(c) - λ * default
+	else
+		- 1_000_000 + c
+	end
+end
+
 # ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
 #reward.(am.s_vals_new, permutedims(am.a_vals_new), Ref(am.prices), am.u)
+
+# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
+function setup_R!(R, states, policies, prices, params, u)
+    for (a_i, policy) ∈ enumerate(policies)
+        for (s_i, state) ∈ enumerate(states)
+            R[s_i, a_i] = reward(state, policy, prices, params, u)
+        end
+    end
+    return R
+end
+
+# ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
+function setup_R(states, policies, prices, params, u)
+	R = zeros(length(states), length(policies))
+	setup_R!(R, states, policies, prices, params, u)
+end
 
 # ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 md"""
@@ -167,44 +174,48 @@ md"""
 ## Policy functions – How much to invest next period?
 """
 
+# ╔═╡ b2c8040f-d377-4b2a-b40f-00b234303391
+md"""
+## Parameters to play with
+
+policy parameters: ``\lambda`` (punishment/stigma) and ``\rho`` (exclusion from financial markets)
+"""
+
 # ╔═╡ fe3cb967-ce8e-4de8-8289-9e72189e17f9
 λ = 0.6
 
-# ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
-function reward(state, policy, prices, u)
-	(; d) = state
-	(; d_next, a_next) = policy
+# ╔═╡ 8dc245ed-77b5-4308-aabb-762cf86ae248
+ρ = 0.75
 
-	default = d == 0 && d_next == 1
-	constrained = d == 1 || d_next == 1
-	
-	if constrained && a_next < 0
-		c = -999999.0
-	else
-		c = consumption(state, policy, prices)
-	end
-	
-    if c > 0
-		u(c) - λ * default
-	else
-		- 1_000_000 + c
-	end
-end
-
-# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, states, policies, prices, u)
-    for (a_i, policy) ∈ enumerate(policies)
-        for (s_i, state) ∈ enumerate(states)
-            R[s_i, a_i] = reward(state, policy, prices, u)
+# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
+function setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain, params)
+    for (I_next, (next, i_next)) ∈ enumerate(zip(states, states_indices))
+		d_next = next.d
+        for (I_policy, (policy, i_policy)) ∈ enumerate(zip(policies, policies_indices))
+			d_chosen = policy.d_next
+            for (I_state, (state, i_state)) ∈ enumerate(zip(states, states_indices))
+				d = state.d
+                if i_next.a_i == i_policy.a_next_i
+					pr = z_chain.p[i_state.z_i, i_next.z_i]
+					if d == 0 && d_next == d_chosen
+                    	Q[I_state, I_policy, I_next] = pr
+					elseif d == 1 && 1 == d_next
+						Q[I_state, I_policy, I_next] = (1-ρ) * pr
+					elseif d == 1 && 0 == d_next
+						Q[I_state, I_policy, I_next] = ρ * pr
+					end
+                end
+            end
         end
     end
-    return R
+    return Q
 end
 
-# ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
-function setup_R(states, policies, prices, u)
-	R = zeros(length(states), length(policies))
-	setup_R!(R, states, policies, prices, u)
+# ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
+function setup_Q(states, states_indices, policies, policies_indices, z_chain, params)
+	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
+	setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain, params)
+	Q
 end
 
 # ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
@@ -216,6 +227,9 @@ r = 0.0188
 # ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
 prices = (; q = q(r), w = 1.0, Δr)
 
+# ╔═╡ 455ea341-79c3-4a18-af41-7c80cadfc2a1
+params = (; λ, Δr, ρ)
+
 # ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 ε = 0.25
 
@@ -223,12 +237,12 @@ prices = (; q = q(r), w = 1.0, Δr)
 z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
 
 # ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
-function setup_DDP(household, statespace, prices)
+function setup_DDP(household, statespace, prices, params)
 	(; β, u) = household
 	(; states, policies, states_indices, policies_indices) = statespace
     
-	R = setup_R(states, policies, prices, u)
-	Q = setup_Q(states, states_indices, policies, policies_indices, z_chain)
+	R = setup_R(states, policies, prices, params, u)
+	Q = setup_Q(states, states_indices, policies, policies_indices, z_chain, params)
 
 	DiscreteDP(R, Q, β)
 end
@@ -238,7 +252,7 @@ ss = statespace(; a_vals = range(-1, 1.0, length = 200), z_chain)
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
-am_ddp = setup_DDP(am, ss, prices);
+am_ddp = setup_DDP(am, ss, prices, params);
 
 # ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
 # Solve using policy function iteration
@@ -246,7 +260,7 @@ results0 = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 
 # ╔═╡ 5a1cd51e-b378-450f-99b3-b033baff0ab8
 results = @chain results0 begin
-	@transform(:consumption = consumption(:state, :policy, prices))
+	@transform(:consumption = consumption(:state, :policy, prices, params))
 	@transform(:saving = :a_next - :a)
 	select!(Not([:state, :policy]))
 end
@@ -1799,6 +1813,7 @@ version = "3.5.0+0"
 # ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 # ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
 # ╠═59d7c6f7-4704-4866-9280-22d37b328499
+# ╠═455ea341-79c3-4a18-af41-7c80cadfc2a1
 # ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
 # ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
@@ -1809,7 +1824,9 @@ version = "3.5.0+0"
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
 # ╠═5f391f68-b784-4482-93fa-676175b6d17d
+# ╟─b2c8040f-d377-4b2a-b40f-00b234303391
 # ╠═fe3cb967-ce8e-4de8-8289-9e72189e17f9
+# ╠═8dc245ed-77b5-4308-aabb-762cf86ae248
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
 # ╠═213239c6-74cc-405a-8eab-08899fc3cf42
 # ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
