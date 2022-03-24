@@ -198,10 +198,10 @@ prices = (q = q(r), w = 1.0)
 am = Household()
 
 # ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
-ε = 0.3
+ε = 0.25
 
 # ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
-z_chain = MarkovChain([1-ε ε; ε 1-ε], [0.1; 1.0])
+z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
 
 # ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
 function setup_DDP(household, statespace, prices)
@@ -215,7 +215,7 @@ function setup_DDP(household, statespace, prices)
 end
 
 # ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
-ss = statespace(; a_vals = range(1e-10, 7, length = 200), z_chain)
+ss = statespace(; a_vals = range(1e-10, 1.3, length = 50), z_chain)
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
