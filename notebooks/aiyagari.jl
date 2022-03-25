@@ -4,6 +4,25 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
+# ╔═╡ 99cdef3b-691b-4837-97d3-9e867870712d
+using MarkdownLiteral: @markdown
+
+# ╔═╡ beb1a4df-fab4-4467-9c36-474cb06a9db2
+using Roots: init_state, init_options, Brent, update_state
+
+# ╔═╡ 119acd7b-8076-4c8e-9992-8fb23dc5e2c9
+using PlutoUI: Button
+
 # ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
 using PlutoUI
 
@@ -160,7 +179,7 @@ function reward(state, policy, prices, u)
     if c > 0
 		u(c)
 	else
-		-Inf
+		-100_000 + 100 * c
 	end
 end
 
@@ -194,12 +213,15 @@ r = 0.01
 # ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
 q(r) = 1/(1+r)
 
+# ╔═╡ 9f4a757b-1689-4d03-9195-1cbfc6a0a7e9
+r_from_q(q) = 1/q - 1
+
 # ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
 prices = (q = q(r), w = 1.0, Δr = r/2)
 
 # ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
 # Create an instance of Household
-am = Household()
+hh = Household()
 
 # ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 ε = 0.25
@@ -218,21 +240,14 @@ function setup_DDP(household, statespace, prices)
 	DiscreteDP(R, Q, β)
 end
 
-# ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
-ss = statespace(; a_vals = range(-2, 1.3, length = 50), z_chain)
-
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
 ## Solve Households' problem
 """
 
-# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
-# Use the instance to build a discrete dynamic program
-am_ddp = setup_DDP(am, ss, prices);
-
 # ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-function solve_details(ddp, states, policies; solver = PFI)
-	results = solve(ddp, solver)
+function solve_details0(ddp, states, policies; solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
 
 	df = [DataFrame(states) DataFrame(policies[results.sigma])]
 	df.state = states
@@ -242,21 +257,67 @@ function solve_details(ddp, states, policies; solver = PFI)
 	df
 end
 
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-# Solve using policy function iteration
-results0 = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+# ╔═╡ 4fa93659-4a83-4874-8595-ca59c16faa0e
+function solve_details(ddp, states, policies; solver = PFI)
+	df = solve_details0(ddp, states, policies; solver)
 
-# ╔═╡ 5a1cd51e-b378-450f-99b3-b033baff0ab8
-results = @chain results0 begin
-	@transform(:consumption = consumption(:state, :policy, prices))
-	@transform(:saving = :a_next - :a)
-	select!(Not([:state, :policy]))
-end
+	@chain df begin
+		@transform(:consumption = consumption(:state, :policy, prices))
+		@transform(:saving = :a_next - :a)
+		select!(Not([:state, :policy]))
+	end
+end	
 
 # ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
 md"""
 ## Policy functions – How much to invest next period?
 """
+
+# ╔═╡ 51615ade-06d2-40dd-9d54-f0dab0fe5e92
+md"""
+## Stationary distribution
+"""
+
+# ╔═╡ e816135f-7f19-4a47-9ed1-fbc935506e17
+md"""
+## Aggregate outcomes
+"""
+
+# ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
+function aggregates(results)
+	@chain results begin
+		stack(Not(:π))
+		@groupby(:variable)
+		@combine(:aggregate = sum(:value, weights(:π)))
+		zip(_.variable, _.aggregate)
+		Dict
+	end
+end
+
+# ╔═╡ 8af3171b-ba81-4b13-bd81-c2a8a1c311ed
+md"""
+# Huggett equilibrium
+"""
+
+# ╔═╡ e8c74b26-21d9-4d5b-af88-17969dd62887
+function solve_ddp(hh, ss, prices)
+	ddp = setup_DDP(hh, ss, prices)
+	results = solve_details(ddp, ss.states, ss.policies, solver = PFI)
+	ζ = aggregates(results)["a_next"]
+
+	(; ζ, results)
+end
+
+# ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
+ss = statespace(; a_vals = range(-2, 5.0, length = 200), z_chain)
+
+# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
+# Use the instance to build a discrete dynamic program
+am_ddp = setup_DDP(hh, ss, prices);
+
+# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
+# Solve using policy function iteration
+results = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 
 # ╔═╡ 48eced48-2b86-4199-8637-4619c40c55e9
 let
@@ -285,11 +346,6 @@ end
 	@combine(first(:a))
 end
 
-# ╔═╡ 51615ade-06d2-40dd-9d54-f0dab0fe5e92
-md"""
-## Stationary distribution
-"""
-
 # ╔═╡ f9ea2cc1-43b7-4953-8183-f0165448265b
 @chain results begin
 	data(_) * mapping(:a, :π, color = :z => nonnumeric) * visual(Lines)
@@ -304,25 +360,180 @@ end
 	draw
 end
 
-# ╔═╡ e816135f-7f19-4a47-9ed1-fbc935506e17
-md"""
-## Aggregate outcomes
-"""
-
-# ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
-@chain results begin
-	stack(Not(:π))
-	@groupby(:variable)
-	@combine(mean(:value, weights(:π)))
-end
-
-# ╔═╡ 8af3171b-ba81-4b13-bd81-c2a8a1c311ed
-md"""
-# Huggett equilibrium
-"""
+# ╔═╡ 4d34729d-43e0-4f4b-a700-a6b8c896d7e9
+agg = aggregates(results)
 
 # ╔═╡ 545c2acc-d07e-49d2-9476-690afacc6782
+md"""
+* interest rate: ``r = `` $r 
+* excess saving: ``\zeta = `` $(round(agg["a_next"], digits = 4))
+"""
 
+# ╔═╡ 490edcd9-8bd5-4f85-9586-196f55390988
+md"""
+### 1. Finding a bracket
+"""
+
+# ╔═╡ c4f2a723-91ac-4e83-8ec8-d3550ea3aff9
+md"""
+* $(@bind go Button("Start new!"))
+* $(@bind update Button("Update!"))
+* $(@bind go_back Button("Go back!"))
+"""
+
+# ╔═╡ 179ce1c1-7bbc-4423-b184-3043b6c0da82
+begin
+	go2 = go
+	past_r = Float64[]
+	past_ζ = Float64[]
+end
+
+# ╔═╡ 46b74033-3882-4b14-89ad-8db468d85f07
+begin
+	go2
+	if length(past_r) == 0
+		push!(past_r, r)
+		push!(past_ζ, agg["a_next"])
+	end
+end
+
+# ╔═╡ d9529db6-fe87-4b2a-8017-759762119ff3
+begin
+	go_back
+	popped = 1
+	if length(past_r) > 1 && length(past_ζ) > 1
+		pop!(past_r)
+		pop!(past_ζ)
+	end
+end
+
+# ╔═╡ dc5c4cf1-2bca-4361-b4f5-2e15bc79ab9d
+FF(r) = begin
+	(; results, ζ) = solve_ddp(hh, ss, (; prices.w, prices.Δr, q = q(r)))
+
+	π = @chain results begin
+		@groupby(:a)
+		@combine(:π = sum(:π))
+		_.π
+	end
+
+	@info lines(π)
+	ζ
+end
+
+# ╔═╡ fa9db330-23f9-4e32-b993-6fef1fc6a925
+md"""
+### 2. Finding the equilibrium
+"""
+
+# ╔═╡ e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
+function update_r(past_r, past_ζ)
+	prev_r = past_r[end]
+	prev_ζ = past_ζ[end]
+	# Compute step size
+  	if length(past_r) == 1 && length(past_ζ) == 1
+    	Δ = - sign(prev_ζ) * min(abs(prev_ζ) / 100, 0.01) * prev_r
+	else
+		pprev_r = past_r[end-1]
+		pprev_ζ = past_ζ[end-1]
+		
+    	slp = (prev_ζ - pprev_ζ) / (prev_r - pprev_r)
+    	factor = abs(prev_ζ) < 0.8 ? 0.5 : 1.0 # go slower closer to the root TODO needs to check relative error
+    	Δr = - prev_ζ / slp * factor
+    	if sign(prev_ζ) == sign(Δr)
+      		Δr = - Δr
+       		@warn("demand went in wrong direction")
+    	end
+    	Δ = Δr
+  	end
+	Δ
+end
+
+# ╔═╡ 06079505-cf27-4965-aa6d-90e0f63e093a
+function update_results!(past_r, past_ζ, hh, ss, (; w, Δr))
+	r_old = past_r[end]
+	r_update =  update_r(past_r, past_ζ)
+
+	N_try = 10
+	ϕ = 1.0
+	
+	for i_try ∈ 1:N_try
+	
+		r_new = r_old + ϕ * r_update
+		(; ζ, results) = solve_ddp(hh, ss, (; w, q = q(r_new), Δr))
+
+		π = @chain results begin
+			@groupby(:a)
+			@combine(:π = sum(:π))
+			_.π
+		end
+
+		@info lines(π, axis = (title = "ϕ = $ϕ", ))
+
+		if !(π[1] ≈ 1.0) && !(π[end] ≈ 1.0)
+			push!(past_r, r_new)
+			push!(past_ζ, ζ)
+			@info (; r_old, ϕ, i_try, r_new)
+			break
+		end
+
+		if i_try == N_try
+			@info (; i_try)
+		end
+		ϕ = ϕ / 2 
+	end
+	
+	past_r[end:-1:end-1], past_ζ[end:-1:end-1]
+end
+
+# ╔═╡ 9ba9e707-27db-4134-bf4f-a8eb768e9a95
+update; pushed = 1; go2; update_results!(past_r, past_ζ, hh, ss, prices)
+
+# ╔═╡ 269f64c7-523e-402c-ad72-f4a2a3316090
+popped, pushed; @info length(past_r), length(past_ζ)
+
+# ╔═╡ 72021aa4-e376-4f7a-b3af-dd113b535ac9
+begin
+	popped, pushed
+	if any(>(0), past_ζ) && any(<(0), past_ζ)
+		@info md" # Bracket found!"
+		bracket_found = true
+	else
+		@info "Bracket not found"
+		bracket_found = false
+	end
+end
+
+# ╔═╡ 7ea1c5c1-6852-4975-b181-67120e3fde51
+if bracket_found
+	df = @chain DataFrame(; past_r, past_ζ) begin
+		sort(:past_ζ)
+	end
+
+	i_pos = findfirst(>(0), df.past_ζ)
+	i_neg = findlast(<(0), df.past_ζ)
+
+	df_brackets = df[[i_neg, i_pos],:]	
+	#@info df_brackets
+
+	xs = df_brackets.past_r
+	fxs = df_brackets.past_ζ
+	
+	brent_init_state = init_state(Brent(), FF, xs..., fxs...)
+	brent_options    = init_options(Brent(), brent_init_state)
+
+	brent_init_state
+end
+
+# ╔═╡ 6a03e5cf-2f26-4ff5-8137-f5ab5b3401e2
+state = [brent_init_state]
+
+# ╔═╡ 9c6211bb-04e1-4030-ae17-a417fe76d7e4
+begin
+	state[1], converged = update_state(Brent(), FF, state[1], brent_options)
+	(; fxn1, fxn0, fc) = state[1]
+	(; fxn1, fxn0, fc)
+end
 
 # ╔═╡ 37e26bec-97a2-407b-ba89-442024330220
 md"""
@@ -413,8 +624,10 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MarkdownLiteral = "736d6165-7244-6769-4267-6b50796e6954"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
@@ -424,8 +637,10 @@ CairoMakie = "~0.7.5"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.2"
+MarkdownLiteral = "~0.1.1"
 PlutoUI = "~0.7.23"
 QuantEcon = "~0.16.3"
+Roots = "~1.4.0"
 StatsBase = "~0.33.14"
 """
 
@@ -598,6 +813,17 @@ git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
+[[deps.CommonMark]]
+deps = ["Crayons", "JSON", "URIs"]
+git-tree-sha1 = "4cd7063c9bdebdbd55ede1af70f3c2f48fab4215"
+uuid = "a80b9123-70ca-4bc0-993e-6e3bcb318db6"
+version = "0.8.6"
+
+[[deps.CommonSolve]]
+git-tree-sha1 = "68a0743f578349ada8bc911a5cbd5a2ef6ed6d1f"
+uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
+version = "0.2.0"
+
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
 git-tree-sha1 = "7b8a93dba8af7e3b42fecabf646260105ac373f7"
@@ -613,6 +839,12 @@ version = "3.41.0"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
+
+[[deps.ConstructionBase]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f74e9d5388b8620b4cee35d4c5a618dd4dc547f4"
+uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
+version = "1.3.0"
 
 [[deps.Contour]]
 deps = ["StaticArrays"]
@@ -1184,6 +1416,12 @@ version = "0.4.1"
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
+[[deps.MarkdownLiteral]]
+deps = ["CommonMark", "HypertextLiteral"]
+git-tree-sha1 = "0d3fa2dd374934b62ee16a4721fe68c418b92899"
+uuid = "736d6165-7244-6769-4267-6b50796e6954"
+version = "0.1.1"
+
 [[deps.Match]]
 git-tree-sha1 = "1d9bc5c1a6e7ee24effb93f175c9342f9154d97f"
 uuid = "7eb4fadd-790c-5f42-8a69-bfa0b872bfbf"
@@ -1535,6 +1773,12 @@ git-tree-sha1 = "68db32dff12bb6127bac73c209881191bf0efbb7"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
 version = "0.3.0+0"
 
+[[deps.Roots]]
+deps = ["CommonSolve", "Printf", "Setfield"]
+git-tree-sha1 = "6085b8ac184add45b586ed8d74468310948dcfe8"
+uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+version = "1.4.0"
+
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 
@@ -1557,6 +1801,12 @@ version = "1.1.0"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+
+[[deps.Setfield]]
+deps = ["ConstructionBase", "Future", "MacroTools", "Requires"]
+git-tree-sha1 = "38d88503f695eb0301479bc9b0d4320b378bafe5"
+uuid = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+version = "0.8.2"
 
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
@@ -1712,6 +1962,11 @@ deps = ["Random", "Test"]
 git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.6"
+
+[[deps.URIs]]
+git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.3.0"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -1883,16 +2138,16 @@ version = "3.5.0+0"
 # ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
 # ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
+# ╠═9f4a757b-1689-4d03-9195-1cbfc6a0a7e9
 # ╠═59d7c6f7-4704-4866-9280-22d37b328499
 # ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
-# ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
-# ╠═5a1cd51e-b378-450f-99b3-b033baff0ab8
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
+# ╠═4fa93659-4a83-4874-8595-ca59c16faa0e
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
 # ╠═48eced48-2b86-4199-8637-4619c40c55e9
 # ╠═0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
@@ -1901,8 +2156,29 @@ version = "3.5.0+0"
 # ╠═0ace3bd5-3c87-431d-85c5-7707b7e2eb77
 # ╟─e816135f-7f19-4a47-9ed1-fbc935506e17
 # ╠═c9771579-bf40-4f39-b272-4bd5b3be9730
+# ╠═4d34729d-43e0-4f4b-a700-a6b8c896d7e9
 # ╟─8af3171b-ba81-4b13-bd81-c2a8a1c311ed
-# ╠═545c2acc-d07e-49d2-9476-690afacc6782
+# ╠═99cdef3b-691b-4837-97d3-9e867870712d
+# ╟─545c2acc-d07e-49d2-9476-690afacc6782
+# ╠═179ce1c1-7bbc-4423-b184-3043b6c0da82
+# ╠═46b74033-3882-4b14-89ad-8db468d85f07
+# ╠═e8c74b26-21d9-4d5b-af88-17969dd62887
+# ╠═06079505-cf27-4965-aa6d-90e0f63e093a
+# ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
+# ╟─490edcd9-8bd5-4f85-9586-196f55390988
+# ╟─c4f2a723-91ac-4e83-8ec8-d3550ea3aff9
+# ╠═269f64c7-523e-402c-ad72-f4a2a3316090
+# ╟─9ba9e707-27db-4134-bf4f-a8eb768e9a95
+# ╟─72021aa4-e376-4f7a-b3af-dd113b535ac9
+# ╠═d9529db6-fe87-4b2a-8017-759762119ff3
+# ╠═beb1a4df-fab4-4467-9c36-474cb06a9db2
+# ╠═dc5c4cf1-2bca-4361-b4f5-2e15bc79ab9d
+# ╟─fa9db330-23f9-4e32-b993-6fef1fc6a925
+# ╟─7ea1c5c1-6852-4975-b181-67120e3fde51
+# ╠═6a03e5cf-2f26-4ff5-8137-f5ab5b3401e2
+# ╠═9c6211bb-04e1-4030-ae17-a417fe76d7e4
+# ╠═119acd7b-8076-4c8e-9992-8fb23dc5e2c9
+# ╠═e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
 # ╟─37e26bec-97a2-407b-ba89-442024330220
 # ╟─3390393a-48a7-47b9-8855-fd11098c107a
 # ╠═f9f2c729-b79e-4e55-b7fc-fe73bae0e405
