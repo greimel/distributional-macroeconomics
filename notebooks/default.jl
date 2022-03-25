@@ -86,13 +86,12 @@ function Household(; σ = 1.0, β = 0.96,
 end
 
 # ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
-function consumption((; z, a, d), (; d_next, a_next), (; q, w), (; Δr))
+function consumption((; z, a, d), (; d_next, a_next), (; q, w), (; Δr), def_prob)
 	default = d == 0 && d_next == 1
 	constrained = d == 1 || d_next == 1
 	
-	if a_next < 0 && Δr > 0
-		r = (1/q - 1) + (a_next < 0) * Δr
-		q = 1/(1+r)
+	if a_next < 0 
+		q = q * (1-def_prob)
 	end
 
 	repay = default ? 0 : a
@@ -100,7 +99,7 @@ function consumption((; z, a, d), (; d_next, a_next), (; q, w), (; Δr))
 end
 
 # ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
-function reward(state, policy, prices, params, u)
+function reward(state, policy, prices, params, u, def_prob)
 	(; d) = state
 	(; d_next, a_next) = policy
 	(; λ) = params
@@ -112,7 +111,7 @@ function reward(state, policy, prices, params, u)
 	if constrained && a_next < 0
 		c = -999999.0 + 100 * a_next
 	else
-		c = consumption(state, policy, prices, params)
+		c = consumption(state, policy, prices, params, def_prob)
 	end
 	
     if c > 0
@@ -129,7 +128,7 @@ end
 function setup_R!(R, states, policies, (; w, q), params, u, default_probabilities)
     for (a_i, policy) ∈ enumerate(policies)
         for (s_i, state) ∈ enumerate(states)
-            R[s_i, a_i] = reward(state, policy, (; w, q = q * (1- default_probabilities[s_i, a_i])), params, u)
+            R[s_i, a_i] = reward(state, policy, (; w, q), params, u, default_probabilities[s_i, a_i])
         end
     end
     return R
@@ -288,19 +287,30 @@ ss = statespace(; a_vals = range(-1, 1.0, length = 200), z_chain)
 
 	results_df0, σ = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 
-#	update_default_probs!(default_probabilities, am_ddp.Q, results_df0.d_next)
-#	am_ddp = setup_DDP(am, ss, prices, params, default_probabilities)
+	for i in 1:10
+		update_default_probs!(default_probabilities, am_ddp.Q, results_df0.d_next)
+		am_ddp = setup_DDP(am, ss, prices, params, default_probabilities)
 
-#	results_df0, _ =  solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+		results_df0, σ =  solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+	end
 
+	results_df0.default_probability = [default_probabilities[i,s] for (i, s) ∈ enumerate(σ)]
+	
 	(; am_ddp, results_df0)
-end
+end;
 
 # ╔═╡ 5a1cd51e-b378-450f-99b3-b033baff0ab8
 results = @chain results_df0 begin
-	@transform(:consumption = consumption(:state, :policy, prices, params))
+	@transform(:consumption = consumption(:state, :policy, prices, params, :default_probability))
 	@transform(:saving = :a_next - :a)
 	select!(Not([:state, :policy]))
+end
+
+# ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
+@chain results begin
+	stack(Not(:π))
+	@groupby(:variable)
+	@combine(mean(:value, weights(:π)))
 end
 
 # ╔═╡ 48eced48-2b86-4199-8637-4619c40c55e9
@@ -366,13 +376,6 @@ end
 md"""
 ## Aggregate outcomes
 """
-
-# ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
-@chain results begin
-	stack(Not(:π))
-	@groupby(:variable)
-	@combine(mean(:value, weights(:π)))
-end
 
 # ╔═╡ fd97aa43-5e80-4be9-92d1-44d9fc371b84
 md"""
@@ -1869,7 +1872,7 @@ version = "3.5.0+0"
 # ╠═40c2424e-96ff-4a3f-b8d3-4e98872089bc
 # ╠═bf5420bc-5847-4dcf-9972-9ac6378dbd03
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
-# ╠═5a1cd51e-b378-450f-99b3-b033baff0ab8
+# ╟─5a1cd51e-b378-450f-99b3-b033baff0ab8
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
 # ╟─b2c8040f-d377-4b2a-b40f-00b234303391
@@ -1878,6 +1881,7 @@ version = "3.5.0+0"
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
 # ╠═213239c6-74cc-405a-8eab-08899fc3cf42
 # ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
+# ╟─c9771579-bf40-4f39-b272-4bd5b3be9730
 # ╟─48eced48-2b86-4199-8637-4619c40c55e9
 # ╟─0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
 # ╟─7cf49d32-d3fc-421e-bcf2-e690d69467cb
@@ -1887,7 +1891,6 @@ version = "3.5.0+0"
 # ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
 # ╠═0ace3bd5-3c87-431d-85c5-7707b7e2eb77
 # ╟─e816135f-7f19-4a47-9ed1-fbc935506e17
-# ╟─c9771579-bf40-4f39-b272-4bd5b3be9730
 # ╟─fd97aa43-5e80-4be9-92d1-44d9fc371b84
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
