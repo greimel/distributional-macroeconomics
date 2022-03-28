@@ -83,7 +83,7 @@ md"""
 &\begin{aligned}
 	\text{subject to } 
 		&u(c) = \log(c) \\
-		&c_t + k_{t-1}(1 + r - \delta) = k_t + y_t \cdot w \\
+		&c_t + k_t = k_{t-1}(1 + r - \delta) + y_t \cdot w \\
 		&\log(y_t) \sim \text{some Markov Chain} \\
 		&y_0, k_{-1} \text{ given}
 \end{aligned}
@@ -2122,7 +2122,7 @@ version = "3.5.0+0"
 # ╟─f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╟─a274b461-a5df-446a-8374-f04267f5db69
-# ╟─30e30208-17ed-4ba5-a8db-12a16e9326c6
+# ╠═30e30208-17ed-4ba5-a8db-12a16e9326c6
 # ╟─d462c281-4b71-4763-9a78-99cc6e8fd55d
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
