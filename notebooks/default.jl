@@ -294,14 +294,14 @@ ss = statespace(; a_vals = range(-1, 1.0, length = 200), z_chain)
 		results_df0, σ =  solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 	end
 
-	results_df0.default_probability = [default_probabilities[i,s] for (i, s) ∈ enumerate(σ)]
+	#results_df0.default_probability = [default_probabilities[i,s] for (i, s) ∈ enumerate(σ)]
 	
 	(; am_ddp, results_df0)
 end;
 
 # ╔═╡ 5a1cd51e-b378-450f-99b3-b033baff0ab8
 results = @chain results_df0 begin
-	@transform(:consumption = consumption(:state, :policy, prices, params, :default_probability))
+	@transform(:consumption = consumption(:state, :policy, prices, params, :default_probability_next))
 	@transform(:saving = :a_next - :a)
 	select!(Not([:state, :policy]))
 end
