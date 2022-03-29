@@ -7,9 +7,6 @@ using InteractiveUtils
 # ╔═╡ f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
 using Optim
 
-# ╔═╡ d23d8a88-51fc-4926-9a22-29b98f2f2cdd
-using StructArrays
-
 # ╔═╡ 4c27c529-5be1-4795-85b6-29b8cad31d83
 using DataFrames, Chain, DataFrameMacros
 
@@ -184,27 +181,25 @@ function setup_Q(states_indices, policies_indices, z_chain)
 end
 
 # ╔═╡ bec56670-e130-4727-871e-d7a676f67713
-T = typeof((; reward = 1.0, c = 1.0, h_next = 0.0, a_next = 1.0,  ω_next = 1.0))
+T = typeof((; reward = 1.0, c = 1.0, h_next = 0.0, a_next = 1.0,  ω_next = 1.0, h̄ = 1.0))
 
 # ╔═╡ 76721e80-a0fb-45dd-b88c-75d5447aa7e9
 function fill_R_policies!(R, additional_policies, states, policies, prices, params; u=u)
 	for (i_state, state) ∈ enumerate(states)
 		for (i_policy, policy) ∈ enumerate(policies)		
-		
-			res = maximize(h_next -> reward(state, policy, h_next, prices, params; u).reward, eps(), h_max(policy, prices, params))
+
+			h̄ = h_max(policy, prices, params)
+			res = maximize(h_next -> reward(state, policy, h_next, prices, params; u).reward, eps(), h̄)
 		
 			h_opt = Optim.maximizer(res)
 		
 			out = reward(state, policy, h_opt, prices, params; u)
 		
 			R[i_state, i_policy] = out.reward
-			additional_policies[i_state, i_policy] = out
+			additional_policies[i_state, i_policy] = (; out..., h̄)
 		end
 	end
 end
-
-# ╔═╡ a45a17b0-b578-4f44-8ef8-6988177ca035
-
 
 # ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
 function solve_details0(ddp, statespace, other_policies; solver = PFI)
@@ -308,34 +303,8 @@ end
 # ╔═╡ 212f8242-4e7b-43b0-a690-32a40f4c768f
 household = Household()
 
-# ╔═╡ fa077c0f-3240-4627-86e4-47e30d49151e
-let
-	i_state = 100
-	state = ss.states[i_state]
-
-	fig = Figure()
-	ax = Axis(fig[1,1])
-	for (i_policy, policy) ∈ enumerate(ss.policies)
-
-		h_vals = range(eps(), h_max(policy, prices, params), length = 20)
-
-		obj(h) =  reward(state, policy, h, prices, params; household.u)
-
-		res = maximize(h -> obj(h).reward, extrema(h_vals)...)
-
-		if i_policy == 1 || i_policy % 4 == 0
-			lines!(ax, h_vals, h -> obj(h).reward)
-			vlines!(ax, Optim.maximizer(res))
-		end
-	end
-	fig
-end
-
 # ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
 (; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
-
-# ╔═╡ b8f09340-73e9-47be-8d6c-17fcc5632544
-StructArray(additional_policies).ω_next
 
 # ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
 policies_df = mapreduce(vcat, enumerate(eachrow(additional_policies))) do (i, row)
@@ -351,12 +320,6 @@ end
 	data(_) * mapping(:ω_next, :value, layout = :variable, color = :state => nonnumeric) * visual(Lines)
 	draw(facet = (linkyaxes = false,))
 end
-
-# ╔═╡ dbd6366b-ffe3-4176-a805-ceb98cc051ba
-(; results) = solve_details0(ddp, ss, additional_policies)
-
-# ╔═╡ e3b069e5-945c-47d3-bf39-96e64778e430
-results.v
 
 # ╔═╡ defef805-2322-4d3a-a448-83ca3b7367a6
 results_df = solve_details(ddp, ss, additional_policies)
@@ -387,16 +350,6 @@ end
 	draw
 end
 
-# ╔═╡ 1d833812-0590-4425-8d97-127f466174e7
-begin
-	fig = Figure()
-	ax_h = Axis(fig[1,1])
-	ax_r = Axis(fig[1,2], limits = (nothing, (0, 2)))
-	lines!.(ax_h, first(eachrow(StructArray(additional_policies).h_next), 100))
-	lines!.(ax_r, first(eachrow(R), 100))
-	fig
-end
-
 # ╔═╡ 5aa1d752-cba3-417a-a350-ba6e7b406354
 Δ = 0.01
 
@@ -422,7 +375,6 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
-StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 AlgebraOfGraphics = "~0.6.5"
@@ -433,7 +385,6 @@ DataFrames = "~1.3.2"
 Optim = "~1.6.2"
 PlutoUI = "~0.7.37"
 QuantEcon = "~0.16.3"
-StructArrays = "~0.6.5"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1882,20 +1833,13 @@ version = "3.5.0+0"
 # ╠═9c588d0f-c41c-4369-88c6-4ecb8378c9f0
 # ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
 # ╠═bec56670-e130-4727-871e-d7a676f67713
-# ╠═fa077c0f-3240-4627-86e4-47e30d49151e
 # ╠═76721e80-a0fb-45dd-b88c-75d5447aa7e9
-# ╠═b8f09340-73e9-47be-8d6c-17fcc5632544
 # ╠═a38666f0-f96a-46e8-bc02-d3fddeffd0a9
 # ╠═3090315b-7959-4458-a4f6-f3c61e62a987
 # ╠═e097086d-0835-4145-8369-273fd024d6ce
-# ╠═dbd6366b-ffe3-4176-a805-ceb98cc051ba
-# ╠═e3b069e5-945c-47d3-bf39-96e64778e430
 # ╠═defef805-2322-4d3a-a448-83ca3b7367a6
 # ╠═6e2d8ea1-af34-4294-bdec-ae709e88e3f6
 # ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
-# ╠═d23d8a88-51fc-4926-9a22-29b98f2f2cdd
-# ╠═1d833812-0590-4425-8d97-127f466174e7
-# ╠═a45a17b0-b578-4f44-8ef8-6988177ca035
 # ╠═3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
 # ╠═0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
 # ╠═4c27c529-5be1-4795-85b6-29b8cad31d83
