@@ -118,66 +118,47 @@ q(\underbrace{(\cdot, y_t)}_{\tilde s_t}, \underbrace{(a_t, h_t)}_{\tilde a_t}, 
 ```
 """
 
-# ╔═╡ 0969acfd-542c-4f95-92c9-316f382fe5f5
-state = (; ω = 3.0, y = 1.0)
-
-# ╔═╡ ba6bbd0d-f982-4fae-a403-b0ac160c5534
-action = (; ω_next = 2.0)
-
-# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
-prices = (; p = 1.0, r = 0.02, w = 1.0)
-
-# ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
-params = (; δ = 0.02, ϕ = 0.9)
-
 # ╔═╡ 5ccd7567-0004-4d0e-9427-f60a44673b87
 ξ = 0.3
+
+# ╔═╡ 5d4b4f3a-42ca-4a8a-8188-ec6d963a5ef3
+md"""
+# Setting up the `DDP`
+"""
+
+# ╔═╡ 62a7cadf-b47a-4ac1-be5b-98c9413b4808
+md"""
+## Reward `R`
+"""
 
 # ╔═╡ e8cccfb3-a12a-4050-b5c3-2d7a0990d6a9
 function consumption((; ω, z), (; ω_next), h_next, (; r, w, p), (; δ)) 
 	ω - ω_next/(1+r) + z * w - p * h_next * (1 - (1-δ)/(1+r))
 end
 
-# ╔═╡ 6b3b0277-9119-4705-b65b-f657536547a5
-consumption((ω = 1, z = 1), (ω_next = 1,), 1, (r = 0.01, w = 1, p = 1), (δ = 0.02,))
-
 # ╔═╡ 845c11bc-e605-47ff-821f-a6b61e9e10c5
 a_next((; ω_next), h_next, (; p, r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
+
+# ╔═╡ cfe30e78-73cd-4b84-bd16-f58fb43d9e5a
+function consumption2(
+		(; ω, z), policy, h_next, prices, params;
+		a_next = a_next(policy, h_next, prices, params)
+	)
+	(; w, p) = prices
+	
+	z * w + ω - a_next - p*h_next
+end
 
 # ╔═╡ 0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
 h_max((; ω_next), (; p, r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
 
 # ╔═╡ 9403d178-674d-4d6e-a0d4-27a217469898
 function reward(state, policy, h_next, prices, params; u)
-	#(; w, p) = prices
 	a_n = a_next(policy, h_next, prices, params) 
-	#c = z * w + ω - a_n - p*h_next
 	c = consumption(state, policy, h_next, prices, params)
+	#c2 = consumption2(state, policy, h_next, prices, params; a_next=a_n)
+	#@assert c ≈ c2
 	(; reward = u(c, h_next; ξ), c, h_next, a_next = a_n, policy...)
-end
-
-# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
-ω_grid = range(0.1, 0.8, length = 100)
-
-# ╔═╡ 92e84b5d-0f8a-47de-ae10-f216ed72fe14
-function setup_Q!(Q, states_indices, policies_indices, z_chain)
-    for (i_next_state, next) ∈ enumerate(states_indices)
-        for (i_policy, (; ω_next_i)) ∈ enumerate(policies_indices)
-            for (i_state, (; z_i)) ∈ enumerate(states_indices)
-                if next.ω_i == ω_next_i
-                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
-                end
-            end
-        end
-    end
-    return Q
-end
-
-# ╔═╡ 9c588d0f-c41c-4369-88c6-4ecb8378c9f0
-function setup_Q(states_indices, policies_indices, z_chain)
-	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
-	setup_Q!(Q, states_indices, policies_indices, z_chain)
-	Q
 end
 
 # ╔═╡ bec56670-e130-4727-871e-d7a676f67713
@@ -200,6 +181,51 @@ function fill_R_policies!(R, additional_policies, states, policies, prices, para
 		end
 	end
 end
+
+# ╔═╡ 1a1eb9eb-cd8b-4cfc-a74e-d6502e17624b
+md"""
+## Transitions `Q`
+"""
+
+# ╔═╡ 92e84b5d-0f8a-47de-ae10-f216ed72fe14
+function setup_Q!(Q, states_indices, policies_indices, z_chain)
+    for (i_next_state, next) ∈ enumerate(states_indices)
+        for (i_policy, (; ω_next_i)) ∈ enumerate(policies_indices)
+            for (i_state, (; z_i)) ∈ enumerate(states_indices)
+                if next.ω_i == ω_next_i
+                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
+                end
+            end
+        end
+    end
+    return Q
+end
+
+# ╔═╡ 9c588d0f-c41c-4369-88c6-4ecb8378c9f0
+function setup_Q(states_indices, policies_indices, z_chain)
+	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
+	setup_Q!(Q, states_indices, policies_indices, z_chain)
+	Q
+end
+
+# ╔═╡ ab1cd091-3876-412a-8123-aea9cf06bf43
+md"""
+# Solve `DDP`
+"""
+
+# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
+prices = (; p = 1.0, r = 0.04, w = 1.0)
+
+# ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
+params = (; δ = 0.02, ϕ = 0.8)
+
+# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
+ω_grid = range(0.1, 20.0, length = 200)
+
+# ╔═╡ 4c984317-5324-43c1-a26e-c4905c183fb8
+md"""
+# Analyze results
+"""
 
 # ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
 function solve_details0(ddp, statespace, other_policies; solver = PFI)
@@ -283,9 +309,13 @@ end
 # ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
 ss = statespace(; ω_vals = ω_grid, z_chain)
 
+# ╔═╡ 40031cfb-6b7a-4789-8d2c-5b15040a1b31
+σ = 2.0
+
 # ╔═╡ 3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
-_u_(c, h; ξ) = if c > 0 && h > 0
-	c^(1-ξ) * h^ξ
+_u_(c, h; ξ=ξ, σ=σ) = if c > 0 && h > 0
+	C = c^(1-ξ) * h^ξ
+	C^(1-σ) / (1-σ)
 else #h > 0
 	-Inf
 #	h^ξ + 100 * c - 100
@@ -316,6 +346,7 @@ end
 # ╔═╡ 3090315b-7959-4458-a4f6-f3c61e62a987
 @chain policies_df begin
 	@subset(:state % 10 == 0)
+	@subset(:reward > -Inf)
 	stack([:c, :h_next, :a_next, :reward])
 	data(_) * mapping(:ω_next, :value, layout = :variable, color = :state => nonnumeric) * visual(Lines)
 	draw(facet = (linkyaxes = false,))
@@ -354,7 +385,7 @@ end
 Δ = 0.01
 
 # ╔═╡ bfa69b95-8f5d-4987-861f-1df3c75b4e3b
-_u_(2 - Δ, 0.01 + Δ/1.0, ξ = 0.5)
+_u_(2 - Δ, 0.01 + Δ/1.0, ξ = 0.5, σ = 2.0)
 
 # ╔═╡ 69bdedb0-937b-43d6-b5bc-37484fd14eb2
 md"""
@@ -1816,27 +1847,40 @@ version = "3.5.0+0"
 # ╟─075ea631-db48-43de-9c07-9bda9f7d66ad
 # ╟─50ab36c4-5274-4498-8478-dcb28d20677a
 # ╠═b2dff4ba-aee7-44fa-86d6-c00c1e1fd81d
-# ╠═0969acfd-542c-4f95-92c9-316f382fe5f5
-# ╠═ba6bbd0d-f982-4fae-a403-b0ac160c5534
-# ╠═8770963c-06b6-4559-a65c-b75623ca1599
-# ╠═bddb801d-0506-4b58-925b-3e44d3f52f3c
 # ╠═5ccd7567-0004-4d0e-9427-f60a44673b87
+# ╟─5d4b4f3a-42ca-4a8a-8188-ec6d963a5ef3
+# ╠═995eed7b-13d6-4d52-9606-414684a742ab
+# ╟─62a7cadf-b47a-4ac1-be5b-98c9413b4808
 # ╠═e8cccfb3-a12a-4050-b5c3-2d7a0990d6a9
-# ╠═6b3b0277-9119-4705-b65b-f657536547a5
+# ╠═cfe30e78-73cd-4b84-bd16-f58fb43d9e5a
 # ╠═845c11bc-e605-47ff-821f-a6b61e9e10c5
 # ╠═0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
 # ╠═9403d178-674d-4d6e-a0d4-27a217469898
-# ╠═f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
-# ╠═5fa457ed-4ade-4a36-a01e-e4e1635a2383
-# ╠═995eed7b-13d6-4d52-9606-414684a742ab
-# ╠═92e84b5d-0f8a-47de-ae10-f216ed72fe14
-# ╠═9c588d0f-c41c-4369-88c6-4ecb8378c9f0
-# ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
 # ╠═bec56670-e130-4727-871e-d7a676f67713
 # ╠═76721e80-a0fb-45dd-b88c-75d5447aa7e9
+# ╠═f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
+# ╟─1a1eb9eb-cd8b-4cfc-a74e-d6502e17624b
+# ╠═92e84b5d-0f8a-47de-ae10-f216ed72fe14
+# ╠═9c588d0f-c41c-4369-88c6-4ecb8378c9f0
+# ╟─ab1cd091-3876-412a-8123-aea9cf06bf43
+# ╠═7533daf6-3391-4010-b748-113cc8d6f2e7
+# ╠═cbe321fb-4ebc-4057-b4dc-c278fb3132a7
+# ╠═105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
+# ╠═e54f5d50-e62a-4b36-83fd-1a14350ad339
+# ╠═212f8242-4e7b-43b0-a690-32a40f4c768f
+# ╠═40031cfb-6b7a-4789-8d2c-5b15040a1b31
+# ╠═3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
+# ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
+# ╠═5aa1d752-cba3-417a-a350-ba6e7b406354
+# ╠═bfa69b95-8f5d-4987-861f-1df3c75b4e3b
+# ╠═8770963c-06b6-4559-a65c-b75623ca1599
+# ╠═bddb801d-0506-4b58-925b-3e44d3f52f3c
+# ╠═5fa457ed-4ade-4a36-a01e-e4e1635a2383
+# ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
+# ╠═e097086d-0835-4145-8369-273fd024d6ce
 # ╠═a38666f0-f96a-46e8-bc02-d3fddeffd0a9
 # ╠═3090315b-7959-4458-a4f6-f3c61e62a987
-# ╠═e097086d-0835-4145-8369-273fd024d6ce
+# ╟─4c984317-5324-43c1-a26e-c4905c183fb8
 # ╠═defef805-2322-4d3a-a448-83ca3b7367a6
 # ╠═6e2d8ea1-af34-4294-bdec-ae709e88e3f6
 # ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
@@ -1847,15 +1891,6 @@ version = "3.5.0+0"
 # ╠═b642e1d7-91bb-4fb5-9b6c-13efe409d791
 # ╠═429dc22c-91ac-4835-a67c-97666b5a0353
 # ╟─5661154e-620e-4a65-aec0-321b72516391
-# ╠═7533daf6-3391-4010-b748-113cc8d6f2e7
-# ╠═cbe321fb-4ebc-4057-b4dc-c278fb3132a7
-# ╠═105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
-# ╠═e54f5d50-e62a-4b36-83fd-1a14350ad339
-# ╠═212f8242-4e7b-43b0-a690-32a40f4c768f
-# ╠═3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
-# ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
-# ╠═5aa1d752-cba3-417a-a350-ba6e7b406354
-# ╠═bfa69b95-8f5d-4987-861f-1df3c75b4e3b
 # ╟─69bdedb0-937b-43d6-b5bc-37484fd14eb2
 # ╠═58cc5669-e4d3-4a43-b162-ec40258022a3
 # ╠═685ad2f8-b86f-404d-93b2-e734ffbf0ab7
