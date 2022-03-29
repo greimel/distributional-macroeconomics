@@ -192,26 +192,32 @@ function fill_R_policies!(R, additional_policies, states, policies, prices, para
 end
 
 # ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
-function solve_details0(ddp, statespace; solver = PFI)
+function solve_details0(ddp, statespace, other_policies; solver = PFI)
 	results = QuantEcon.solve(ddp, solver)
 
 	(; states, policies) = statespace
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	df = hcat(
+		DataFrame(states),
+		DataFrame(policies[results.sigma]),
+		DataFrame(other_policies[results.sigma]),
+		makeunique = true
+	)
 	df.state = states
 	df.policy = policies[results.sigma]
+	df.additional_policies = other_policies[results.sigma]
 	df.π = stationary_distributions(results.mc)[:, 1][1]
 
 	df
 end
 
 # ╔═╡ 0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
-function solve_details(ddp, statespace; solver = PFI)
-	df = solve_details0(ddp, statespace; solver)
+function solve_details(ddp, statespace, additional_policies; solver = PFI)
+	df = solve_details0(ddp, statespace, additional_policies; solver)
 
 	@chain df begin
 		#@transform(:consumption = consumption(:state, :policy, prices))
 		@transform(:saving = :ω_next - :ω)
-		select!(Not([:state, :policy]))
+		select!(Not([:state, :policy, :additional_policies]))
 	end
 end
 
@@ -267,7 +273,7 @@ ss = statespace(; ω_vals = ω_grid, z_chain)
 _u_(c, h; ξ) = if c > 0 && h > 0
 	c^(1-ξ) * h^ξ
 else h > 0
-	h^ξ + 100 * c - 1000
+	h^ξ + 100 * c - 100_000
 end
 
 # ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
@@ -301,7 +307,7 @@ end
 end
 
 # ╔═╡ dbd6366b-ffe3-4176-a805-ceb98cc051ba
-results = solve_details(ddp, ss)
+results = solve_details(ddp, ss, additional_policies)
 
 # ╔═╡ 6e2d8ea1-af34-4294-bdec-ae709e88e3f6
 let
