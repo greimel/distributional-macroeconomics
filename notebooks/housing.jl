@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
 using Optim
 
+# ╔═╡ d23d8a88-51fc-4926-9a22-29b98f2f2cdd
+using StructArrays
+
 # ╔═╡ 4c27c529-5be1-4795-85b6-29b8cad31d83
 using DataFrames, Chain, DataFrameMacros
 
@@ -128,27 +131,36 @@ action = (; ω_next = 2.0)
 prices = (; p = 1.0, r = 0.02, w = 1.0)
 
 # ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
-params = (; δ = 0.02, ϕ = 0.6)
+params = (; δ = 0.02, ϕ = 0.9)
 
 # ╔═╡ 5ccd7567-0004-4d0e-9427-f60a44673b87
 ξ = 0.3
 
+# ╔═╡ e8cccfb3-a12a-4050-b5c3-2d7a0990d6a9
+function consumption((; ω, z), (; ω_next), h_next, (; r, w, p), (; δ)) 
+	ω - ω_next/(1+r) + z * w - p * h_next * (1 - (1-δ)/(1+r))
+end
+
+# ╔═╡ 6b3b0277-9119-4705-b65b-f657536547a5
+consumption((ω = 1, z = 1), (ω_next = 1,), 1, (r = 0.01, w = 1, p = 1), (δ = 0.02,))
+
 # ╔═╡ 845c11bc-e605-47ff-821f-a6b61e9e10c5
-a_next(ω_next, h_next, (; p, r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
+a_next((; ω_next), h_next, (; p, r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
 
 # ╔═╡ 0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
 h_max((; ω_next), (; p, r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
 
 # ╔═╡ 9403d178-674d-4d6e-a0d4-27a217469898
-function reward((; ω, z), (; ω_next), h_next, prices, params; u)
-	(; w, p) = prices
-	a_n = a_next(ω_next, h_next, prices, params) 
-	c = z * w + ω - a_n - p*h_next
-	(; reward = u(c, h_next; ξ), c, h_next, a_next = a_n, ω, ω_next)
+function reward(state, policy, h_next, prices, params; u)
+	#(; w, p) = prices
+	a_n = a_next(policy, h_next, prices, params) 
+	#c = z * w + ω - a_n - p*h_next
+	c = consumption(state, policy, h_next, prices, params)
+	(; reward = u(c, h_next; ξ), c, h_next, a_next = a_n, policy...)
 end
 
 # ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
-ω_grid = range(1e-10, 5.0, length = 100)
+ω_grid = range(0.1, 0.8, length = 100)
 
 # ╔═╡ 92e84b5d-0f8a-47de-ae10-f216ed72fe14
 function setup_Q!(Q, states_indices, policies_indices, z_chain)
@@ -172,14 +184,14 @@ function setup_Q(states_indices, policies_indices, z_chain)
 end
 
 # ╔═╡ bec56670-e130-4727-871e-d7a676f67713
-T = typeof((; reward = 1.0, c = 1.0, h_next = 1.0, a_next = 1.0, ω = 1.0, ω_next = 1.0))
+T = typeof((; reward = 1.0, c = 1.0, h_next = 0.0, a_next = 1.0,  ω_next = 1.0))
 
 # ╔═╡ 76721e80-a0fb-45dd-b88c-75d5447aa7e9
 function fill_R_policies!(R, additional_policies, states, policies, prices, params; u=u)
 	for (i_state, state) ∈ enumerate(states)
 		for (i_policy, policy) ∈ enumerate(policies)		
 		
-			res = maximize(h_next -> reward(state, policy, h_next, prices, params; u).reward, 0.0, h_max(policy, prices, params))
+			res = maximize(h_next -> reward(state, policy, h_next, prices, params; u).reward, eps(), h_max(policy, prices, params))
 		
 			h_opt = Optim.maximizer(res)
 		
@@ -191,28 +203,35 @@ function fill_R_policies!(R, additional_policies, states, policies, prices, para
 	end
 end
 
+# ╔═╡ a45a17b0-b578-4f44-8ef8-6988177ca035
+
+
 # ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
 function solve_details0(ddp, statespace, other_policies; solver = PFI)
 	results = QuantEcon.solve(ddp, solver)
 
 	(; states, policies) = statespace
+
+	opp = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(results.sigma))
+	
 	df = hcat(
 		DataFrame(states),
 		DataFrame(policies[results.sigma]),
-		DataFrame(other_policies[results.sigma]),
+		opp,
 		makeunique = true
 	)
+	df.value = results.v
 	df.state = states
 	df.policy = policies[results.sigma]
 	df.additional_policies = other_policies[results.sigma]
 	df.π = stationary_distributions(results.mc)[:, 1][1]
 
-	df
+	(; df, results)
 end
 
 # ╔═╡ 0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
 function solve_details(ddp, statespace, additional_policies; solver = PFI)
-	df = solve_details0(ddp, statespace, additional_policies; solver)
+	(; df) = solve_details0(ddp, statespace, additional_policies; solver)
 
 	@chain df begin
 		#@transform(:consumption = consumption(:state, :policy, prices))
@@ -272,8 +291,9 @@ ss = statespace(; ω_vals = ω_grid, z_chain)
 # ╔═╡ 3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
 _u_(c, h; ξ) = if c > 0 && h > 0
 	c^(1-ξ) * h^ξ
-else h > 0
-	h^ξ + 100 * c - 100_000
+else #h > 0
+	-Inf
+#	h^ξ + 100 * c - 100
 end
 
 # ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
@@ -288,8 +308,34 @@ end
 # ╔═╡ 212f8242-4e7b-43b0-a690-32a40f4c768f
 household = Household()
 
+# ╔═╡ fa077c0f-3240-4627-86e4-47e30d49151e
+let
+	i_state = 100
+	state = ss.states[i_state]
+
+	fig = Figure()
+	ax = Axis(fig[1,1])
+	for (i_policy, policy) ∈ enumerate(ss.policies)
+
+		h_vals = range(eps(), h_max(policy, prices, params), length = 20)
+
+		obj(h) =  reward(state, policy, h, prices, params; household.u)
+
+		res = maximize(h -> obj(h).reward, extrema(h_vals)...)
+
+		if i_policy == 1 || i_policy % 4 == 0
+			lines!(ax, h_vals, h -> obj(h).reward)
+			vlines!(ax, Optim.maximizer(res))
+		end
+	end
+	fig
+end
+
 # ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
 (; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
+
+# ╔═╡ b8f09340-73e9-47be-8d6c-17fcc5632544
+StructArray(additional_policies).ω_next
 
 # ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
 policies_df = mapreduce(vcat, enumerate(eachrow(additional_policies))) do (i, row)
@@ -307,11 +353,17 @@ end
 end
 
 # ╔═╡ dbd6366b-ffe3-4176-a805-ceb98cc051ba
-results = solve_details(ddp, ss, additional_policies)
+(; results) = solve_details0(ddp, ss, additional_policies)
+
+# ╔═╡ e3b069e5-945c-47d3-bf39-96e64778e430
+results.v
+
+# ╔═╡ defef805-2322-4d3a-a448-83ca3b7367a6
+results_df = solve_details(ddp, ss, additional_policies)
 
 # ╔═╡ 6e2d8ea1-af34-4294-bdec-ae709e88e3f6
 let
-	fg = @chain results begin
+	fg = @chain results_df begin
 		stack(Not([:ω, :z, :π])) #[:a_next, :consumption, :saving])
 		data(_) * mapping(
 			:ω => L"current assets $\omega$",
@@ -330,10 +382,26 @@ let
 end
 
 # ╔═╡ cab4e602-8e7c-4f0b-b090-3c37961882de
-@chain results begin
+@chain results_df begin
 	data(_) * mapping(:ω, :π, color = :z => nonnumeric) * visual(Lines)
 	draw
 end
+
+# ╔═╡ 1d833812-0590-4425-8d97-127f466174e7
+begin
+	fig = Figure()
+	ax_h = Axis(fig[1,1])
+	ax_r = Axis(fig[1,2], limits = (nothing, (0, 2)))
+	lines!.(ax_h, first(eachrow(StructArray(additional_policies).h_next), 100))
+	lines!.(ax_r, first(eachrow(R), 100))
+	fig
+end
+
+# ╔═╡ 5aa1d752-cba3-417a-a350-ba6e7b406354
+Δ = 0.01
+
+# ╔═╡ bfa69b95-8f5d-4987-861f-1df3c75b4e3b
+_u_(2 - Δ, 0.01 + Δ/1.0, ξ = 0.5)
 
 # ╔═╡ 69bdedb0-937b-43d6-b5bc-37484fd14eb2
 md"""
@@ -354,6 +422,7 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 AlgebraOfGraphics = "~0.6.5"
@@ -364,6 +433,7 @@ DataFrames = "~1.3.2"
 Optim = "~1.6.2"
 PlutoUI = "~0.7.37"
 QuantEcon = "~0.16.3"
+StructArrays = "~0.6.5"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1800,6 +1870,8 @@ version = "3.5.0+0"
 # ╠═8770963c-06b6-4559-a65c-b75623ca1599
 # ╠═bddb801d-0506-4b58-925b-3e44d3f52f3c
 # ╠═5ccd7567-0004-4d0e-9427-f60a44673b87
+# ╠═e8cccfb3-a12a-4050-b5c3-2d7a0990d6a9
+# ╠═6b3b0277-9119-4705-b65b-f657536547a5
 # ╠═845c11bc-e605-47ff-821f-a6b61e9e10c5
 # ╠═0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
 # ╠═9403d178-674d-4d6e-a0d4-27a217469898
@@ -1810,13 +1882,20 @@ version = "3.5.0+0"
 # ╠═9c588d0f-c41c-4369-88c6-4ecb8378c9f0
 # ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
 # ╠═bec56670-e130-4727-871e-d7a676f67713
+# ╠═fa077c0f-3240-4627-86e4-47e30d49151e
 # ╠═76721e80-a0fb-45dd-b88c-75d5447aa7e9
+# ╠═b8f09340-73e9-47be-8d6c-17fcc5632544
 # ╠═a38666f0-f96a-46e8-bc02-d3fddeffd0a9
 # ╠═3090315b-7959-4458-a4f6-f3c61e62a987
 # ╠═e097086d-0835-4145-8369-273fd024d6ce
 # ╠═dbd6366b-ffe3-4176-a805-ceb98cc051ba
+# ╠═e3b069e5-945c-47d3-bf39-96e64778e430
+# ╠═defef805-2322-4d3a-a448-83ca3b7367a6
 # ╠═6e2d8ea1-af34-4294-bdec-ae709e88e3f6
 # ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
+# ╠═d23d8a88-51fc-4926-9a22-29b98f2f2cdd
+# ╠═1d833812-0590-4425-8d97-127f466174e7
+# ╠═a45a17b0-b578-4f44-8ef8-6988177ca035
 # ╠═3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
 # ╠═0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
 # ╠═4c27c529-5be1-4795-85b6-29b8cad31d83
@@ -1831,6 +1910,8 @@ version = "3.5.0+0"
 # ╠═212f8242-4e7b-43b0-a690-32a40f4c768f
 # ╠═3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
 # ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
+# ╠═5aa1d752-cba3-417a-a350-ba6e7b406354
+# ╠═bfa69b95-8f5d-4987-861f-1df3c75b4e3b
 # ╟─69bdedb0-937b-43d6-b5bc-37484fd14eb2
 # ╠═58cc5669-e4d3-4a43-b162-ec40258022a3
 # ╠═685ad2f8-b86f-404d-93b2-e734ffbf0ab7
