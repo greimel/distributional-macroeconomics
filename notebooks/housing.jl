@@ -13,6 +13,15 @@ using DataFrames, Chain, DataFrameMacros
 # ╔═╡ e366730a-8538-48d0-8160-29fb0918bcb3
 using CairoMakie, AlgebraOfGraphics
 
+# ╔═╡ b642e1d7-91bb-4fb5-9b6c-13efe409d791
+using AlgebraOfGraphics: draw
+
+# ╔═╡ 7533daf6-3391-4010-b748-113cc8d6f2e7
+using QuantEcon
+
+# ╔═╡ 58cc5669-e4d3-4a43-b162-ec40258022a3
+using PlutoUI
+
 # ╔═╡ e69d0b3c-58b8-45e5-8d38-954aac2007c3
 md"""
 !!! danger "Under construction!"
@@ -115,89 +124,169 @@ state = (; ω = 3.0, y = 1.0)
 # ╔═╡ ba6bbd0d-f982-4fae-a403-b0ac160c5534
 action = (; ω_next = 2.0)
 
-# ╔═╡ 8dc6e77f-d82c-40cc-afb6-18a761831495
-w = 1.0
+# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
+prices = (; p = 1.0, r = 0.02, w = 1.0)
 
-# ╔═╡ ac6ddb49-49b3-4e7f-ad3d-dc41a51c222b
-p = 1.0
-
-# ╔═╡ 0615bb95-d28b-4a19-99d5-4aebcfded82b
-r = 0.05
-
-# ╔═╡ 318f7969-1db6-499f-af3b-b5d67e3fc40d
-δ = 0.02
+# ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
+params = (; δ = 0.02, ϕ = 0.6)
 
 # ╔═╡ 5ccd7567-0004-4d0e-9427-f60a44673b87
 ξ = 0.3
 
-# ╔═╡ 84790759-8b46-420d-af9c-0eee39e44676
-ϕ = 0.6
-
 # ╔═╡ 845c11bc-e605-47ff-821f-a6b61e9e10c5
-a_next(ω_next, h_next) = (ω_next - p * (1-δ) * h_next) / (1 + r)
+a_next(ω_next, h_next, (; p, r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
 
 # ╔═╡ 0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
-h_max(ω_next, p, r) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
+h_max((; ω_next), (; p, r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
 
-# ╔═╡ b9cc0c4f-532f-4fa2-a351-59595e3356e2
-ω_grid = range(0, 5, length = 100)
+# ╔═╡ 9403d178-674d-4d6e-a0d4-27a217469898
+function reward((; ω, z), (; ω_next), h_next, prices, params; u)
+	(; w, p) = prices
+	a_n = a_next(ω_next, h_next, prices, params) 
+	c = z * w + ω - a_n - p*h_next
+	(; reward = u(c, h_next; ξ), c, h_next, a_next = a_n, ω, ω_next)
+end
 
-# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
+# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
+ω_grid = range(1e-10, 5.0, length = 100)
 
+# ╔═╡ 92e84b5d-0f8a-47de-ae10-f216ed72fe14
+function setup_Q!(Q, states_indices, policies_indices, z_chain)
+    for (i_next_state, next) ∈ enumerate(states_indices)
+        for (i_policy, (; ω_next_i)) ∈ enumerate(policies_indices)
+            for (i_state, (; z_i)) ∈ enumerate(states_indices)
+                if next.ω_i == ω_next_i
+                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
+                end
+            end
+        end
+    end
+    return Q
+end
 
-# ╔═╡ a2f0f54f-36ed-4eda-810c-ed8657a615ea
-
+# ╔═╡ 9c588d0f-c41c-4369-88c6-4ecb8378c9f0
+function setup_Q(states_indices, policies_indices, z_chain)
+	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
+	setup_Q!(Q, states_indices, policies_indices, z_chain)
+	Q
+end
 
 # ╔═╡ bec56670-e130-4727-871e-d7a676f67713
 T = typeof((; reward = 1.0, c = 1.0, h_next = 1.0, a_next = 1.0, ω = 1.0, ω_next = 1.0))
 
-# ╔═╡ 10b71202-02e2-4d0b-a41c-cdabfc6ac69e
-u(c, h; ξ) = if c > 0 && h > 0
+# ╔═╡ 76721e80-a0fb-45dd-b88c-75d5447aa7e9
+function fill_R_policies!(R, additional_policies, states, policies, prices, params; u=u)
+	for (i_state, state) ∈ enumerate(states)
+		for (i_policy, policy) ∈ enumerate(policies)		
+		
+			res = maximize(h_next -> reward(state, policy, h_next, prices, params; u).reward, 0.0, h_max(policy, prices, params))
+		
+			h_opt = Optim.maximizer(res)
+		
+			out = reward(state, policy, h_opt, prices, params; u)
+		
+			R[i_state, i_policy] = out.reward
+			additional_policies[i_state, i_policy] = out
+		end
+	end
+end
+
+# ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
+function solve_details0(ddp, statespace; solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	(; states, policies) = statespace
+	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	df.state = states
+	df.policy = policies[results.sigma]
+	df.π = stationary_distributions(results.mc)[:, 1][1]
+
+	df
+end
+
+# ╔═╡ 0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
+function solve_details(ddp, statespace; solver = PFI)
+	df = solve_details0(ddp, statespace; solver)
+
+	@chain df begin
+		#@transform(:consumption = consumption(:state, :policy, prices))
+		@transform(:saving = :ω_next - :ω)
+		select!(Not([:state, :policy]))
+	end
+end
+
+# ╔═╡ 5661154e-620e-4a65-aec0-321b72516391
+md"""
+# Solving the DDP
+"""
+
+# ╔═╡ cbe321fb-4ebc-4057-b4dc-c278fb3132a7
+ε = 0.25
+
+# ╔═╡ 105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
+z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
+
+# ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
+function setup_DDP(household, statespace, prices, params)
+	(; β, u) = household
+	(; states, policies, states_indices, policies_indices) = statespace
+
+	## Rewards and policies
+	R = zeros(length(states),length(policies))
+	additional_policies = Array{T}(undef, size(R)...)
+	fill_R_policies!(R, additional_policies, states, policies, prices, params; u)
+
+	## Transition function
+	Q = setup_Q(states_indices, policies_indices, z_chain)
+
+	ddp = DiscreteDP(R, Q, β)
+	(; ddp, R, additional_policies)
+end	
+
+# ╔═╡ e54f5d50-e62a-4b36-83fd-1a14350ad339
+function statespace(;
+			ω_vals = range(1e-10, 20.0, length = 200),
+			z_chain
+		)
+	states = 
+		[(; ω, z) for ω ∈ ω_vals, z ∈ z_chain.state_values] |> vec
+	states_indices = 
+		[(; ω_i, z_i) for ω_i ∈ 1:length(ω_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
+    policies = 
+	    [(; ω_next) for ω_next ∈ ω_vals] |> vec
+	policies_indices = 
+	    [(; ω_next_i) for ω_next_i ∈ 1:length(ω_vals)] |> vec
+
+	(; states, states_indices, policies, policies_indices, z_chain)
+end
+
+# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
+ss = statespace(; ω_vals = ω_grid, z_chain)
+
+# ╔═╡ 3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
+_u_(c, h; ξ) = if c > 0 && h > 0
 	c^(1-ξ) * h^ξ
 else h > 0
 	h^ξ + 100 * c - 1000
 end
 
-# ╔═╡ 9403d178-674d-4d6e-a0d4-27a217469898
-function reward((; ω, y), ω_next, h_next; u=u)
-	a_n = a_next(ω_next, h_next) 
-	c = y * w + ω - a_n - p*h_next
-	(; reward = u(c, h_next; ξ), c, h_next, a_next = a_n, ω, ω_next)
-end
-
 # ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
-reward((; ω=2, y=1), 2.8, 1.0)
+reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=_u_)
 
-# ╔═╡ 76721e80-a0fb-45dd-b88c-75d5447aa7e9
-function fill_R_policies!(R, policies, ω_grid)
-	for (i, ω) ∈ enumerate(ω_grid)
-		for (i_next, ω_next) ∈ enumerate(ω_grid)
-	
-			y = 1
-			
-		
-			res = maximize(h_next -> reward((; ω, y), ω_next, h_next, u=u).reward, 0.0, h_max(ω_next, p, r))
-		
-			h_opt = Optim.maximizer(res)
-		
-			out = reward((; ω, y), ω_next, h_opt)
-		
-			R[i, i_next] = out.reward
-			policies[i, i_next] = out
-		end
-	end
+# ╔═╡ a384b136-ba71-48b6-8568-d8b9d9f2411e
+function Household(; σ = 1.0, β = 0.96,	
+                    u = _u_)
+	(; β, u)
 end
 
-# ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
-begin
-	R = zeros(length(ω_grid),length(ω_grid))
-	policies = Array{T}(undef, size(R)...)
+# ╔═╡ 212f8242-4e7b-43b0-a690-32a40f4c768f
+household = Household()
 
-	fill_R_policies!(R, policies, ω_grid)
-end	
+# ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
+(; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
 
 # ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
-policies_df = mapreduce(vcat, enumerate(eachrow(policies))) do (i, row)
+policies_df = mapreduce(vcat, enumerate(eachrow(additional_policies))) do (i, row)
 	df = DataFrame(row)
 	df.state .= i
 	df
@@ -211,14 +300,42 @@ end
 	draw(facet = (linkyaxes = false,))
 end
 
-# ╔═╡ bf348bc9-a74d-492e-8cc8-bc0467a68c99
-md"""
-```math 
-\begin{align}
+# ╔═╡ dbd6366b-ffe3-4176-a805-ceb98cc051ba
+results = solve_details(ddp, ss)
 
-\end{align}
-```
+# ╔═╡ 6e2d8ea1-af34-4294-bdec-ae709e88e3f6
+let
+	fg = @chain results begin
+		stack(Not([:ω, :z, :π])) #[:a_next, :consumption, :saving])
+		data(_) * mapping(
+			:ω => L"current assets $\omega$",
+			:value => "policy",
+			layout = :variable,
+			color = :z => nonnumeric,
+		) * visual(Lines)
+		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+	end
+
+	ax = content(fg.figure[2,1])
+
+	abline!(ax, 0, 1, color = :gray, linestyle = (:dash, :loose))
+
+	fg
+end
+
+# ╔═╡ cab4e602-8e7c-4f0b-b090-3c37961882de
+@chain results begin
+	data(_) * mapping(:ω, :π, color = :z => nonnumeric) * visual(Lines)
+	draw
+end
+
+# ╔═╡ 69bdedb0-937b-43d6-b5bc-37484fd14eb2
+md"""
+# Appendix
 """
+
+# ╔═╡ 685ad2f8-b86f-404d-93b2-e734ffbf0ab7
+TableOfContents()
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -229,6 +346,8 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 
 [compat]
 AlgebraOfGraphics = "~0.6.5"
@@ -237,6 +356,8 @@ Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.2"
 Optim = "~1.6.2"
+PlutoUI = "~0.7.37"
+QuantEcon = "~0.16.3"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -251,6 +372,12 @@ deps = ["ChainRulesCore", "LinearAlgebra"]
 git-tree-sha1 = "6f1d9bc1c08f9f4a8fa92e3ea3cb50153a1b40d4"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "1.1.0"
+
+[[deps.AbstractPlutoDingetjes]]
+deps = ["Pkg"]
+git-tree-sha1 = "8eaf9f1b4921132a4cff3f36a1d9ba923b14a481"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.1.4"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "03e0550477d86222521d254b741d470ba17ea0b5"
@@ -278,6 +405,12 @@ version = "0.4.1"
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 
+[[deps.ArnoldiMethod]]
+deps = ["LinearAlgebra", "Random", "StaticArrays"]
+git-tree-sha1 = "f87e559f87a45bece9c9ed97458d3afe98b1ebb9"
+uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
+version = "0.1.0"
+
 [[deps.ArrayInterface]]
 deps = ["Compat", "IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
 git-tree-sha1 = "6e8fada11bb015ecf9263f64b156f98b546918c7"
@@ -301,6 +434,12 @@ version = "1.0.1"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BenchmarkTools]]
+deps = ["JSON", "Logging", "Printf", "Profile", "Statistics", "UUIDs"]
+git-tree-sha1 = "4c10eee4af024676200bc7752e536f858c6b8f93"
+uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+version = "1.3.1"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -353,6 +492,18 @@ deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
 git-tree-sha1 = "bf98fa45a0a4cee295de98d4c1462be26345b9a1"
 uuid = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
 version = "0.1.2"
+
+[[deps.CodecBzip2]]
+deps = ["Bzip2_jll", "Libdl", "TranscodingStreams"]
+git-tree-sha1 = "2e62a725210ce3c3c2e1a3080190e7ca491f18d7"
+uuid = "523fee87-0ab8-5b00-afb7-3ecf72e48cfd"
+version = "0.7.2"
+
+[[deps.CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "ded953804d019afa9a3f98981d99b33e3db7b6da"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.0"
 
 [[deps.ColorBrewer]]
 deps = ["Colors", "JSON", "Test"]
@@ -410,6 +561,12 @@ version = "0.5.7"
 git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
 uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 version = "4.1.1"
+
+[[deps.DSP]]
+deps = ["Compat", "FFTW", "IterTools", "LinearAlgebra", "Polynomials", "Random", "Reexport", "SpecialFunctions", "Statistics"]
+git-tree-sha1 = "3e03979d16275ed5d9078d50327332c546e24e68"
+uuid = "717857b8-e6f2-59f4-9121-6e50c889abd2"
+version = "0.7.5"
 
 [[deps.DataAPI]]
 git-tree-sha1 = "cc70b17275652eb47bc9e5f81635981f13cea5c8"
@@ -679,6 +836,23 @@ git-tree-sha1 = "65e4589030ef3c44d3b90bdc5aac462b4bb05567"
 uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
 version = "0.3.8"
 
+[[deps.Hyperscript]]
+deps = ["Test"]
+git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
+uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
+version = "0.0.4"
+
+[[deps.HypertextLiteral]]
+git-tree-sha1 = "2b078b5a615c6c0396c77810d92ee8c6f470d238"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.3"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
+
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
 uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
@@ -877,6 +1051,12 @@ git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
+[[deps.LightGraphs]]
+deps = ["ArnoldiMethod", "DataStructures", "Distributed", "Inflate", "LinearAlgebra", "Random", "SharedArrays", "SimpleTraits", "SparseArrays", "Statistics"]
+git-tree-sha1 = "432428df5f360964040ed60418dd5601ecd240b6"
+uuid = "093fc24a-ae57-5d10-9952-331d41423f4d"
+version = "1.3.5"
+
 [[deps.LineSearches]]
 deps = ["LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "Printf"]
 git-tree-sha1 = "f27132e551e959b3667d8c93eae90973225032dd"
@@ -940,6 +1120,18 @@ git-tree-sha1 = "1d9bc5c1a6e7ee24effb93f175c9342f9154d97f"
 uuid = "7eb4fadd-790c-5f42-8a69-bfa0b872bfbf"
 version = "1.2.0"
 
+[[deps.MathOptInterface]]
+deps = ["BenchmarkTools", "CodecBzip2", "CodecZlib", "JSON", "LinearAlgebra", "MutableArithmetics", "OrderedCollections", "Printf", "SparseArrays", "Test", "Unicode"]
+git-tree-sha1 = "09be99195f42c601f55317bd89f3c6bbaec227dc"
+uuid = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
+version = "1.1.1"
+
+[[deps.MathProgBase]]
+deps = ["LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "9abbe463a1e9fc507f12a69e7f29346c2cdc472c"
+uuid = "fdba3010-5040-5b88-9595-932c9decdf73"
+version = "0.7.8"
+
 [[deps.MathTeXEngine]]
 deps = ["AbstractTrees", "Automa", "DataStructures", "FreeTypeAbstraction", "GeometryBasics", "LaTeXStrings", "REPL", "RelocatableFolders", "Test"]
 git-tree-sha1 = "70e733037bbf02d691e78f95171a1fa08cdc6332"
@@ -968,11 +1160,29 @@ version = "0.3.3"
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 
+[[deps.MutableArithmetics]]
+deps = ["LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "ba8c0f8732a24facba709388c74ba99dcbfdda1e"
+uuid = "d8a4904e-b15c-11e9-3269-09a3773c0cb0"
+version = "1.0.0"
+
 [[deps.NLSolversBase]]
 deps = ["DiffResults", "Distributed", "FiniteDiff", "ForwardDiff"]
 git-tree-sha1 = "50310f934e55e5ca3912fb941dec199b49ca9b68"
 uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
 version = "7.8.2"
+
+[[deps.NLopt]]
+deps = ["MathOptInterface", "MathProgBase", "NLopt_jll"]
+git-tree-sha1 = "5a7e32c569200a8a03c3d55d286254b0321cd262"
+uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
+version = "0.6.5"
+
+[[deps.NLopt_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "9b1f15a08f9d00cdb2761dcfa6f453f5d0d6f973"
+uuid = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
+version = "2.7.1+0"
 
 [[deps.NaNMath]]
 git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
@@ -1124,10 +1334,22 @@ git-tree-sha1 = "bb16469fd5224100e422f0b027d26c5a25de1200"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.2.0"
 
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
+git-tree-sha1 = "bf0a1121af131d9974241ba53f601211e9303a9e"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.37"
+
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
 uuid = "647866c9-e3ac-4575-94e7-e3d426903924"
 version = "0.1.2"
+
+[[deps.Polynomials]]
+deps = ["LinearAlgebra", "MutableArithmetics", "RecipesBase"]
+git-tree-sha1 = "0107e2f7f90cc7f756fee8a304987c574bbd7583"
+uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
+version = "3.0.0"
 
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]
@@ -1153,9 +1375,18 @@ git-tree-sha1 = "dfb54c4e414caa595a1f2ed759b160f5a3ddcba5"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 version = "1.3.1"
 
+[[deps.Primes]]
+git-tree-sha1 = "984a3ee07d47d401e0b823b7d30546792439070a"
+uuid = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
+version = "0.5.1"
+
 [[deps.Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[[deps.Profile]]
+deps = ["Printf"]
+uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
 [[deps.ProgressMeter]]
 deps = ["Distributed", "Printf"]
@@ -1174,6 +1405,12 @@ deps = ["DataStructures", "LinearAlgebra"]
 git-tree-sha1 = "78aadffb3efd2155af139781b8a8df1ef279ea39"
 uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 version = "2.4.2"
+
+[[deps.QuantEcon]]
+deps = ["DSP", "DataStructures", "Distributions", "FFTW", "LightGraphs", "LinearAlgebra", "Markdown", "NLopt", "Optim", "Pkg", "Primes", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "Test"]
+git-tree-sha1 = "d777434be1b3536821caea3fc5c4d9fd9d350c4f"
+uuid = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+version = "0.16.3"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -1267,6 +1504,12 @@ git-tree-sha1 = "d263a08ec505853a5ff1c1ebde2070419e3f28e9"
 uuid = "73760f76-fbc4-59ce-8f25-708e95d2df96"
 version = "0.4.0"
 
+[[deps.SimpleTraits]]
+deps = ["InteractiveUtils", "MacroTools"]
+git-tree-sha1 = "5d7e3f4e11935503d3ecaf7186eac40602e7d231"
+uuid = "699a6c99-e7fa-54fc-8d76-47d257e15c1d"
+version = "0.9.4"
+
 [[deps.Sixel]]
 deps = ["Dates", "FileIO", "ImageCore", "IndirectArrays", "OffsetArrays", "REPL", "libsixel_jll"]
 git-tree-sha1 = "8fb59825be681d451c246a795117f317ecbcaa28"
@@ -1288,9 +1531,9 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[deps.SpecialFunctions]]
 deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "5ba658aeecaaf96923dce0da9e703bd1fe7666f9"
+git-tree-sha1 = "cbf21db885f478e4bd73b286af6e67d1beeebe4c"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.1.4"
+version = "1.8.4"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]
@@ -1548,28 +1791,42 @@ version = "3.5.0+0"
 # ╠═b2dff4ba-aee7-44fa-86d6-c00c1e1fd81d
 # ╠═0969acfd-542c-4f95-92c9-316f382fe5f5
 # ╠═ba6bbd0d-f982-4fae-a403-b0ac160c5534
-# ╠═8dc6e77f-d82c-40cc-afb6-18a761831495
-# ╠═ac6ddb49-49b3-4e7f-ad3d-dc41a51c222b
-# ╠═0615bb95-d28b-4a19-99d5-4aebcfded82b
-# ╠═318f7969-1db6-499f-af3b-b5d67e3fc40d
+# ╠═8770963c-06b6-4559-a65c-b75623ca1599
+# ╠═bddb801d-0506-4b58-925b-3e44d3f52f3c
 # ╠═5ccd7567-0004-4d0e-9427-f60a44673b87
-# ╠═84790759-8b46-420d-af9c-0eee39e44676
 # ╠═845c11bc-e605-47ff-821f-a6b61e9e10c5
 # ╠═0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
 # ╠═9403d178-674d-4d6e-a0d4-27a217469898
 # ╠═f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
-# ╠═b9cc0c4f-532f-4fa2-a351-59595e3356e2
+# ╠═5fa457ed-4ade-4a36-a01e-e4e1635a2383
 # ╠═995eed7b-13d6-4d52-9606-414684a742ab
+# ╠═92e84b5d-0f8a-47de-ae10-f216ed72fe14
+# ╠═9c588d0f-c41c-4369-88c6-4ecb8378c9f0
 # ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
-# ╠═a2f0f54f-36ed-4eda-810c-ed8657a615ea
 # ╠═bec56670-e130-4727-871e-d7a676f67713
 # ╠═76721e80-a0fb-45dd-b88c-75d5447aa7e9
 # ╠═a38666f0-f96a-46e8-bc02-d3fddeffd0a9
 # ╠═3090315b-7959-4458-a4f6-f3c61e62a987
+# ╠═e097086d-0835-4145-8369-273fd024d6ce
+# ╠═dbd6366b-ffe3-4176-a805-ceb98cc051ba
+# ╠═6e2d8ea1-af34-4294-bdec-ae709e88e3f6
+# ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
+# ╠═3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
+# ╠═0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
 # ╠═4c27c529-5be1-4795-85b6-29b8cad31d83
 # ╠═e366730a-8538-48d0-8160-29fb0918bcb3
+# ╠═b642e1d7-91bb-4fb5-9b6c-13efe409d791
 # ╠═429dc22c-91ac-4835-a67c-97666b5a0353
-# ╠═10b71202-02e2-4d0b-a41c-cdabfc6ac69e
-# ╠═bf348bc9-a74d-492e-8cc8-bc0467a68c99
+# ╟─5661154e-620e-4a65-aec0-321b72516391
+# ╠═7533daf6-3391-4010-b748-113cc8d6f2e7
+# ╠═cbe321fb-4ebc-4057-b4dc-c278fb3132a7
+# ╠═105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
+# ╠═e54f5d50-e62a-4b36-83fd-1a14350ad339
+# ╠═212f8242-4e7b-43b0-a690-32a40f4c768f
+# ╠═3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
+# ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
+# ╟─69bdedb0-937b-43d6-b5bc-37484fd14eb2
+# ╠═58cc5669-e4d3-4a43-b162-ec40258022a3
+# ╠═685ad2f8-b86f-404d-93b2-e734ffbf0ab7
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
