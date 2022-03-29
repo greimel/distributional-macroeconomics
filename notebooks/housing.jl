@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
 using Optim
 
+# ╔═╡ 7533daf6-3391-4010-b748-113cc8d6f2e7
+using QuantEcon
+
 # ╔═╡ 4c27c529-5be1-4795-85b6-29b8cad31d83
 using DataFrames, Chain, DataFrameMacros
 
@@ -15,9 +18,6 @@ using CairoMakie, AlgebraOfGraphics
 
 # ╔═╡ b642e1d7-91bb-4fb5-9b6c-13efe409d791
 using AlgebraOfGraphics: draw
-
-# ╔═╡ 7533daf6-3391-4010-b748-113cc8d6f2e7
-using QuantEcon
 
 # ╔═╡ 58cc5669-e4d3-4a43-b162-ec40258022a3
 using PlutoUI
@@ -158,7 +158,7 @@ function reward(state, policy, h_next, prices, params; u)
 	c = consumption(state, policy, h_next, prices, params)
 	#c2 = consumption2(state, policy, h_next, prices, params; a_next=a_n)
 	#@assert c ≈ c2
-	(; reward = u(c, h_next; ξ), c, h_next, a_next = a_n, policy...)
+	(; reward = u(c, h_next), c, h_next, a_next = a_n, policy...)
 end
 
 # ╔═╡ bec56670-e130-4727-871e-d7a676f67713
@@ -213,59 +213,6 @@ md"""
 # Solve `DDP`
 """
 
-# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
-prices = (; p = 1.0, r = 0.04, w = 1.0)
-
-# ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
-params = (; δ = 0.02, ϕ = 0.8)
-
-# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
-ω_grid = range(0.1, 20.0, length = 200)
-
-# ╔═╡ 4c984317-5324-43c1-a26e-c4905c183fb8
-md"""
-# Analyze results
-"""
-
-# ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
-function solve_details0(ddp, statespace, other_policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
-
-	(; states, policies) = statespace
-
-	opp = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(results.sigma))
-	
-	df = hcat(
-		DataFrame(states),
-		DataFrame(policies[results.sigma]),
-		opp,
-		makeunique = true
-	)
-	df.value = results.v
-	df.state = states
-	df.policy = policies[results.sigma]
-	df.additional_policies = other_policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
-
-	(; df, results)
-end
-
-# ╔═╡ 0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
-function solve_details(ddp, statespace, additional_policies; solver = PFI)
-	(; df) = solve_details0(ddp, statespace, additional_policies; solver)
-
-	@chain df begin
-		#@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :ω_next - :ω)
-		select!(Not([:state, :policy, :additional_policies]))
-	end
-end
-
-# ╔═╡ 5661154e-620e-4a65-aec0-321b72516391
-md"""
-# Solving the DDP
-"""
-
 # ╔═╡ cbe321fb-4ebc-4057-b4dc-c278fb3132a7
 ε = 0.25
 
@@ -306,32 +253,45 @@ function statespace(;
 	(; states, states_indices, policies, policies_indices, z_chain)
 end
 
-# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
-ss = statespace(; ω_vals = ω_grid, z_chain)
-
-# ╔═╡ 40031cfb-6b7a-4789-8d2c-5b15040a1b31
-σ = 2.0
-
 # ╔═╡ 3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
-_u_(c, h; ξ=ξ, σ=σ) = if c > 0 && h > 0
-	C = c^(1-ξ) * h^ξ
-	C^(1-σ) / (1-σ)
-else #h > 0
-	-Inf
-#	h^ξ + 100 * c - 100
+function make_u(; ξ, σ)
+	function u(c, h)
+		if c > 0 && h > 0
+			C = c^(1-ξ) * h^ξ
+			σ == 1 ? log(C) : C^(1-σ) / (1-σ)
+		else #h > 0
+			-Inf
+		#	h^ξ + 100 * c - 100
+		end
+	end
 end
 
-# ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
-reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=_u_)
-
 # ╔═╡ a384b136-ba71-48b6-8568-d8b9d9f2411e
-function Household(; σ = 1.0, β = 0.96,	
-                    u = _u_)
+function Household(; σ = 1.0, ξ = 0.3, β = 0.96,	
+                    u = make_u(; ξ, σ))
 	(; β, u)
 end
 
 # ╔═╡ 212f8242-4e7b-43b0-a690-32a40f4c768f
 household = Household()
+
+# ╔═╡ 5aa1d752-cba3-417a-a350-ba6e7b406354
+Δ = 0.01
+
+# ╔═╡ bfa69b95-8f5d-4987-861f-1df3c75b4e3b
+make_u(ξ = 0.5, σ = 2.0)(2 - Δ, 0.01 + Δ/1.0)
+
+# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
+prices = (; p = 1.0, r = 0.04, w = 1.0)
+
+# ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
+params = (; δ = 0.02, ϕ = 0.8)
+
+# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
+ω_grid = range(0.1, 20.0, length = 200)
+
+# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
+ss = statespace(; ω_vals = ω_grid, z_chain)
 
 # ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
 (; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
@@ -350,6 +310,45 @@ end
 	stack([:c, :h_next, :a_next, :reward])
 	data(_) * mapping(:ω_next, :value, layout = :variable, color = :state => nonnumeric) * visual(Lines)
 	draw(facet = (linkyaxes = false,))
+end
+
+# ╔═╡ 4c984317-5324-43c1-a26e-c4905c183fb8
+md"""
+# Analyze results
+"""
+
+# ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
+function solve_details0(ddp, statespace, other_policies; solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	(; states, policies) = statespace
+
+	opp = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(results.sigma))
+	
+	df = hcat(
+		DataFrame(states),
+		DataFrame(policies[results.sigma]),
+		opp,
+		makeunique = true
+	)
+	df.value = results.v
+	df.state = states
+	df.policy = policies[results.sigma]
+	df.additional_policies = other_policies[results.sigma]
+	df.π = stationary_distributions(results.mc)[:, 1][1]
+
+	(; df, results)
+end
+
+# ╔═╡ 0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
+function solve_details(ddp, statespace, additional_policies; solver = PFI)
+	(; df) = solve_details0(ddp, statespace, additional_policies; solver)
+
+	@chain df begin
+		#@transform(:consumption = consumption(:state, :policy, prices))
+		@transform(:saving = :ω_next - :ω)
+		select!(Not([:state, :policy, :additional_policies]))
+	end
 end
 
 # ╔═╡ defef805-2322-4d3a-a448-83ca3b7367a6
@@ -381,11 +380,8 @@ end
 	draw
 end
 
-# ╔═╡ 5aa1d752-cba3-417a-a350-ba6e7b406354
-Δ = 0.01
-
-# ╔═╡ bfa69b95-8f5d-4987-861f-1df3c75b4e3b
-_u_(2 - Δ, 0.01 + Δ/1.0, ξ = 0.5, σ = 2.0)
+# ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
+reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5, σ = 2))
 
 # ╔═╡ 69bdedb0-937b-43d6-b5bc-37484fd14eb2
 md"""
@@ -1846,7 +1842,7 @@ version = "3.5.0+0"
 # ╟─aa7682ea-30e1-4f9a-a553-0a7bc66c1553
 # ╟─075ea631-db48-43de-9c07-9bda9f7d66ad
 # ╟─50ab36c4-5274-4498-8478-dcb28d20677a
-# ╠═b2dff4ba-aee7-44fa-86d6-c00c1e1fd81d
+# ╟─b2dff4ba-aee7-44fa-86d6-c00c1e1fd81d
 # ╠═5ccd7567-0004-4d0e-9427-f60a44673b87
 # ╟─5d4b4f3a-42ca-4a8a-8188-ec6d963a5ef3
 # ╠═995eed7b-13d6-4d52-9606-414684a742ab
@@ -1868,7 +1864,6 @@ version = "3.5.0+0"
 # ╠═105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
 # ╠═e54f5d50-e62a-4b36-83fd-1a14350ad339
 # ╠═212f8242-4e7b-43b0-a690-32a40f4c768f
-# ╠═40031cfb-6b7a-4789-8d2c-5b15040a1b31
 # ╠═3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
 # ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
 # ╠═5aa1d752-cba3-417a-a350-ba6e7b406354
@@ -1890,7 +1885,6 @@ version = "3.5.0+0"
 # ╠═e366730a-8538-48d0-8160-29fb0918bcb3
 # ╠═b642e1d7-91bb-4fb5-9b6c-13efe409d791
 # ╠═429dc22c-91ac-4835-a67c-97666b5a0353
-# ╟─5661154e-620e-4a65-aec0-321b72516391
 # ╟─69bdedb0-937b-43d6-b5bc-37484fd14eb2
 # ╠═58cc5669-e4d3-4a43-b162-ec40258022a3
 # ╠═685ad2f8-b86f-404d-93b2-e734ffbf0ab7
