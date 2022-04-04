@@ -34,6 +34,17 @@
         ]
     },
     {
+        "title": "Housing",
+        "contents": [
+            {
+                "name": "Simple Housing",
+                "notebook_path": "notebooks/housing.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
+    },
+    {
         "title": "Long-run trends",
         "contents": [
             {
