@@ -19,6 +19,9 @@ using CairoMakie, AlgebraOfGraphics
 # ╔═╡ b642e1d7-91bb-4fb5-9b6c-13efe409d791
 using AlgebraOfGraphics: draw
 
+# ╔═╡ f142563e-3857-4d24-bbc0-6d4f34d0487f
+using StatsBase: weights
+
 # ╔═╡ 58cc5669-e4d3-4a43-b162-ec40258022a3
 using PlutoUI
 
@@ -217,7 +220,9 @@ md"""
 ε = 0.25
 
 # ╔═╡ 105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
-z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
+z_chain = MarkovChain([1-ε ε/2 ε/2;
+	ε/2 1-ε ε/2;
+	ε/2 ε/2 1-ε], [1.25, 1.0, 0.75])
 
 # ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
 function setup_DDP(household, statespace, prices, params)
@@ -267,7 +272,7 @@ function make_u(; ξ, σ)
 end
 
 # ╔═╡ a384b136-ba71-48b6-8568-d8b9d9f2411e
-function Household(; σ = 1.0, ξ = 0.3, β = 0.96,	
+function Household(; σ = 2.0, ξ = 0.3, β = 0.96,	
                     u = make_u(; ξ, σ))
 	(; β, u)
 end
@@ -281,36 +286,8 @@ household = Household()
 # ╔═╡ bfa69b95-8f5d-4987-861f-1df3c75b4e3b
 make_u(ξ = 0.5, σ = 2.0)(2 - Δ, 0.01 + Δ/1.0)
 
-# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
-prices = (; p = 1.0, r = 0.04, w = 1.0)
-
 # ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
 params = (; δ = 0.02, ϕ = 0.8)
-
-# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
-ω_grid = range(0.1, 20.0, length = 200)
-
-# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
-ss = statespace(; ω_vals = ω_grid, z_chain)
-
-# ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
-(; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
-
-# ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
-policies_df = mapreduce(vcat, enumerate(eachrow(additional_policies))) do (i, row)
-	df = DataFrame(row)
-	df.state .= i
-	df
-end
-
-# ╔═╡ 3090315b-7959-4458-a4f6-f3c61e62a987
-@chain policies_df begin
-	@subset(:state % 10 == 0)
-	@subset(:reward > -Inf)
-	stack([:c, :h_next, :a_next, :reward])
-	data(_) * mapping(:ω_next, :value, layout = :variable, color = :state => nonnumeric) * visual(Lines)
-	draw(facet = (linkyaxes = false,))
-end
 
 # ╔═╡ 4c984317-5324-43c1-a26e-c4905c183fb8
 md"""
@@ -351,6 +328,42 @@ function solve_details(ddp, statespace, additional_policies; solver = PFI)
 	end
 end
 
+# ╔═╡ be93671d-acc2-4056-adef-d2e565914796
+md"""
+# Equilibrium
+"""
+
+# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
+prices = (; p = 2.0, r = 0.05, w = 1.0)
+
+# ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
+reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5, σ = 2))
+
+# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
+ω_grid = range(0.1, 10, length = 200)
+
+# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
+ss = statespace(; ω_vals = ω_grid, z_chain)
+
+# ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
+(; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
+
+# ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
+policies_df = mapreduce(vcat, enumerate(eachrow(additional_policies))) do (i, row)
+	df = DataFrame(row)
+	df.state .= i
+	df
+end
+
+# ╔═╡ 3090315b-7959-4458-a4f6-f3c61e62a987
+@chain policies_df begin
+	@subset(:state % 10 == 0)
+	@subset(:reward > -Inf)
+	stack([:c, :h_next, :a_next, :reward])
+	data(_) * mapping(:ω_next, :value, layout = :variable, color = :state => nonnumeric) * visual(Lines)
+	draw(facet = (linkyaxes = false,))
+end
+
 # ╔═╡ defef805-2322-4d3a-a448-83ca3b7367a6
 results_df = solve_details(ddp, ss, additional_policies)
 
@@ -380,8 +393,33 @@ end
 	draw
 end
 
-# ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
-reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5, σ = 2))
+# ╔═╡ 37f20108-46e9-484e-9503-3b3900aa103a
+@chain results_df begin
+	stack([:a_next, :h_next, :ω_next], :π)
+	data(_) * mapping(:value, weights = :π, layout = :variable
+		) * AlgebraOfGraphics.density()
+	draw(facet = (linkyaxes = false, linkxaxes = false))
+end
+
+# ╔═╡ 44e9f5ff-81d7-42a6-85b3-103807318428
+H = 1
+
+# ╔═╡ f8d09a14-000a-4d94-ad7b-fe5918a5d2ff
+function aggregates(results)
+	@chain results begin
+		stack(Not(:π))
+		@groupby(:variable)
+		@combine(:aggregate = sum(:value, weights(:π)))
+		zip(_.variable, _.aggregate)
+		Dict
+	end
+end
+
+# ╔═╡ d88d177f-5bc7-4cdf-aebb-6cbbe0cab935
+agg = aggregates(results_df)
+
+# ╔═╡ da8b9700-b47b-418c-a2c9-dad963aef35f
+(h = agg["h_next"], a = agg["a_next"])
 
 # ╔═╡ 69bdedb0-937b-43d6-b5bc-37484fd14eb2
 md"""
@@ -402,6 +440,7 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 AlgebraOfGraphics = "~0.6.5"
@@ -412,6 +451,7 @@ DataFrames = "~1.3.2"
 Optim = "~1.6.2"
 PlutoUI = "~0.7.37"
 QuantEcon = "~0.16.3"
+StatsBase = "~0.33.16"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1868,9 +1908,7 @@ version = "3.5.0+0"
 # ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
 # ╠═5aa1d752-cba3-417a-a350-ba6e7b406354
 # ╠═bfa69b95-8f5d-4987-861f-1df3c75b4e3b
-# ╠═8770963c-06b6-4559-a65c-b75623ca1599
 # ╠═bddb801d-0506-4b58-925b-3e44d3f52f3c
-# ╠═5fa457ed-4ade-4a36-a01e-e4e1635a2383
 # ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
 # ╠═e097086d-0835-4145-8369-273fd024d6ce
 # ╠═a38666f0-f96a-46e8-bc02-d3fddeffd0a9
@@ -1878,14 +1916,23 @@ version = "3.5.0+0"
 # ╟─4c984317-5324-43c1-a26e-c4905c183fb8
 # ╠═defef805-2322-4d3a-a448-83ca3b7367a6
 # ╠═6e2d8ea1-af34-4294-bdec-ae709e88e3f6
-# ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
 # ╠═3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
 # ╠═0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
 # ╠═4c27c529-5be1-4795-85b6-29b8cad31d83
 # ╠═e366730a-8538-48d0-8160-29fb0918bcb3
 # ╠═b642e1d7-91bb-4fb5-9b6c-13efe409d791
 # ╠═429dc22c-91ac-4835-a67c-97666b5a0353
+# ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
+# ╟─be93671d-acc2-4056-adef-d2e565914796
+# ╠═8770963c-06b6-4559-a65c-b75623ca1599
+# ╠═5fa457ed-4ade-4a36-a01e-e4e1635a2383
+# ╠═da8b9700-b47b-418c-a2c9-dad963aef35f
+# ╟─37f20108-46e9-484e-9503-3b3900aa103a
+# ╠═d88d177f-5bc7-4cdf-aebb-6cbbe0cab935
+# ╠═44e9f5ff-81d7-42a6-85b3-103807318428
+# ╠═f8d09a14-000a-4d94-ad7b-fe5918a5d2ff
 # ╟─69bdedb0-937b-43d6-b5bc-37484fd14eb2
+# ╠═f142563e-3857-4d24-bbc0-6d4f34d0487f
 # ╠═58cc5669-e4d3-4a43-b162-ec40258022a3
 # ╠═685ad2f8-b86f-404d-93b2-e734ffbf0ab7
 # ╟─00000000-0000-0000-0000-000000000001
