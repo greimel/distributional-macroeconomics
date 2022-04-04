@@ -24,6 +24,12 @@
                 "notebook_path": "notebooks/athreya.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Soft borrowing constraint",
+                "notebook_path": "notebooks/defaults.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     },
