@@ -24,6 +24,23 @@
                 "notebook_path": "notebooks/athreya.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Soft borrowing constraint",
+                "notebook_path": "notebooks/default.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
+    },
+    {
+        "title": "Housing",
+        "contents": [
+            {
+                "name": "Simple Housing",
+                "notebook_path": "notebooks/housing.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     },
