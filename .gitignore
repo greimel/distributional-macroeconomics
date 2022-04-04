@@ -285,3 +285,5 @@ TSWLatexianTemp*
 
 # Makeindex log files
 *.lpz
+
+data-raw/
