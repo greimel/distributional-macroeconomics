@@ -27,7 +27,7 @@
             },
             {
                 "name": "Soft borrowing constraint",
-                "notebook_path": "notebooks/defaults.jl",
+                "notebook_path": "notebooks/default.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
