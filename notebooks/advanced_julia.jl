@@ -7,16 +7,21 @@ using InteractiveUtils
 # ╔═╡ b9aea038-b0f5-4101-b8d8-840caf80e9b2
 using PlutoUI
 
-# ╔═╡ cb20b3c0-b96b-11ec-0e93-8593db1c3b09
+# ╔═╡ e44404db-3327-4c52-8841-b5c10287a08e
 md"""
 The purpose of this notebook is to make you familiar with Julia syntax that is frequently used in the course material. It also points out the peculiarities of Pluto notebooks.
 """
 
+# ╔═╡ c704103c-3093-4f50-971e-c37eb14546de
+md"""
+# Advanced Julia
+"""
+
 # ╔═╡ ae686dfa-a6e1-4d30-89bf-03d1ea809849
 md"""
-# Named tuples and keyword arguments
+## Named tuples and keyword arguments
 
-## Named tuples
+### Named tuples
 
 Like many other programming languages, Julia allows you to create tuples. The elements of tuples can be accessed by using the corresponding index:
 """
@@ -55,7 +60,7 @@ end
 
 # ╔═╡ 3f80dd01-7203-4404-b38c-32757b2f4223
 md"""
-## Keyword arguments
+### Keyword arguments
 
 A similar syntax with a semicolon is used for keyword arguments that are identified by name (and not be their position as normal function arguments):
 """
@@ -70,7 +75,7 @@ some_function(; a = 3, b = 5)
 
 # ╔═╡ d705a9d5-97aa-4e7f-adcc-24ad53d9079b
 md"""
-# Vectorization with dot syntax
+## Vectorization with dot syntax
 
 You can apply a function to all elements of a vector by using the dot syntax:
 """
@@ -83,7 +88,7 @@ log.([1,2,3])
 
 # ╔═╡ 4c983a8b-abe9-4cc5-a7ab-102a0d05eedd
 md"""
-# The pipe operator
+## The pipe operator
 
 The pipe operator |> makes it possible to write down nested function calls in a more readable way. For example, the two expressions below do the same thing:
 """
@@ -101,9 +106,9 @@ md"""
 
 # ╔═╡ 5cc63149-7edf-45b0-a198-d0f308a52618
 md"""
-# Greek letters
+## Unicode characters
 
-You can use Greek letters (and other Unicode characters) in your Julia code. For example, type "\alpha" in the cell below (without the quotation marks) and press Tab on your keyboard. This should create an $\alpha$ symbol.
+You can use Greek letters and other Unicode characters in your Julia code. For example, type "\alpha" in the cell below (without the quotation marks) and press Tab on your keyboard. This should create an $\alpha$ symbol.
 """
 
 # ╔═╡ aa02b393-9b84-4b9f-9922-c79d880113e6
@@ -116,7 +121,7 @@ See the [Julia documention](https://docs.julialang.org/en/v1/manual/unicode-inpu
 
 # ╔═╡ 9e327f16-5320-4ca4-9a5c-f2049afa9fac
 md"""
-## The $\in$ symbol
+### The $\in$ symbol
 An elegant way of writing loops is to use the $\in$ symbol instead of writing "in". The $\in$ symbol can be created by typing "\in" pressing Tab.
 """
 
@@ -134,6 +139,8 @@ Press F1 to see shortcuts for Pluto notebooks.
 Use the Live docs in the bottom right corner to get more information about any Julia function or object.
 
 Check the [Github wiki](https://github.com/fonsp/Pluto.jl/wiki) for more information on Pluto notebooks.
+
+Ctrl + Click on an underlined variable or function to jump to its definition.
 
 ## Automated updating of cells
 
@@ -390,7 +397,8 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 """
 
 # ╔═╡ Cell order:
-# ╟─cb20b3c0-b96b-11ec-0e93-8593db1c3b09
+# ╟─e44404db-3327-4c52-8841-b5c10287a08e
+# ╟─c704103c-3093-4f50-971e-c37eb14546de
 # ╟─ae686dfa-a6e1-4d30-89bf-03d1ea809849
 # ╠═39f1cb09-3c61-464b-8258-2de5d446217b
 # ╠═29f29203-054d-4353-9431-59e0e5bb575a
