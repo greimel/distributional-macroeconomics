@@ -9,6 +9,12 @@
                 "preview_image_url": ""
             },
             {
+                "name": "More Julia",
+                "notebook_path": "notebooks/advanced_julia.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "Bewley-Huggett-Aiyagari",
                 "notebook_path": "notebooks/aiyagari.jl",
                 "video_id": "",
