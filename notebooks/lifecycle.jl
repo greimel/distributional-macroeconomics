@@ -135,21 +135,14 @@ md"""
 ## State space
 """
 
-# ╔═╡ 2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
-r = 0.01
+# ╔═╡ f4919974-710c-4b77-b43a-3f5bd40b5017
+r_guess(hh, scale=0.9) = (1/hh.β  - 1 + hh.m) * scale
 
 # ╔═╡ 9a58dc90-3d58-4974-914d-5e1c8fa61483
 q(r) = 1/(1+r)
 
 # ╔═╡ cef10fd0-2024-4f1a-800b-65ddf84afe7e
 r_from_q(q) = 1/q - 1
-
-# ╔═╡ 1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
-prices = (q = q(r), w = 1.0, Δr = r/2)
-
-# ╔═╡ 21035a54-3a47-46f2-8b14-dcd690d14d41
-# Create an instance of Household
-hh = Household()
 
 # ╔═╡ 23733473-fe77-45c5-b105-5b3e7196aaa1
 ε = 0.25
@@ -174,38 +167,7 @@ md"""
 """
 
 # ╔═╡ 25d6d446-1769-4f9f-ae65-3128993c2ae6
-ss = statespace(; a_vals = range(-2, 5.0, length = 200), z_chain)
-
-# ╔═╡ 1c615b77-c088-4d26-a6b4-f90c9317e62d
-# Use the instance to build a discrete dynamic program
-am_ddp = setup_DDP(hh, ss, prices);
-
-# ╔═╡ a2ba3828-4c49-45ff-8eb8-84d2ca15ed64
-function solve_details0(ddp, states, policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
-
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-	df.state = states
-	df.policy = policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
-
-	df
-end
-
-# ╔═╡ 34cb66d9-c5e3-4535-814d-4bc66862d670
-function solve_details(ddp, states, policies; solver = PFI)
-	df = solve_details0(ddp, states, policies; solver)
-
-	@chain df begin
-		@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :a_next - :a)
-		select!(Not([:state, :policy]))
-	end
-end
-
-# ╔═╡ 9bab335d-197b-43c7-a938-c83ac41ce141
-# Solve using policy function iteration
-results = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+ss = statespace(; a_vals = range(-2, 2.0, length = 200), z_chain)
 
 # ╔═╡ 7ab33280-7ae0-41d5-be30-1248d783b053
 md"""
@@ -236,6 +198,20 @@ end
 
 # ╔═╡ a35fceae-2318-49f9-95a2-adf312362f98
 J = 20
+
+# ╔═╡ 21035a54-3a47-46f2-8b14-dcd690d14d41
+# Create an instance of Household
+hh = Household(m = 1/J)
+
+# ╔═╡ 2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
+r = r_guess(hh, 0.8)
+
+# ╔═╡ 1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
+prices = (q = q(r), w = 1.0, Δr = r/2)
+
+# ╔═╡ 1c615b77-c088-4d26-a6b4-f90c9317e62d
+# Use the instance to build a discrete dynamic program
+am_ddp = setup_DDP(hh, ss, prices);
 
 # ╔═╡ e788a718-6151-4b7f-8ad0-4d1a68f538f6
 df_big = let
@@ -278,7 +254,7 @@ md"""
 # ╔═╡ e38d4c15-5f6b-4859-9b6b-243e11d4f89c
 @chain df_big begin
 	@groupby(:j)
-	@combine(:a = mean(:a, weights(:π)))
+	@combine(:a = mean(:a_next, weights(:π)))
 	data(_) * mapping(:j, :a) * visual(ScatterLines)
 	draw
 end
@@ -304,6 +280,15 @@ end
 	draw
 end
 
+# ╔═╡ 31dc8ad6-dde4-4f7f-96a8-cec96be181ac
+@chain df_big begin
+	@combine(
+		:a = mean(:a, weights(:π)),
+		:a_next = mean(:a_next, weights(:π)),
+	)
+
+end
+
 # ╔═╡ a2f3a52c-54c1-421a-afc1-9aa9bf58381f
 md"""
 ##  Perpetual youth
@@ -320,8 +305,166 @@ m = 1/45
 # ╔═╡ 489ee98c-02f1-463b-8d0d-826645fd5fbc
 hh_perp_youth = Household(; m)
 
-# ╔═╡ 25e7248d-c89c-46cd-aaff-1d0ce9090194
-recurrent_classes
+# ╔═╡ 403d7223-efb3-4ec6-9cc1-a0237a3af253
+function xxxsolve_details0(ddp, states, policies; solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	df.state = states
+	df.policy = policies[results.sigma]
+	# only(⋅) makes sure there is a unique stationary distribution
+	df.π = only(stationary_distributions(results.mc)) 
+
+	df
+end
+
+# ╔═╡ 3bc65535-93cc-476e-81ee-6dd0293e629a
+md"""
+# Appendix
+"""
+
+# ╔═╡ 4389a76d-4063-47f5-8626-ac9a2dd6219a
+md"""
+## Stationary distribution
+"""
+
+# ╔═╡ bd1c7729-fa87-4c84-9052-b4a858dab19e
+begin
+	abstract type StatDistSolver end
+	struct Eigen <: StatDistSolver end
+	struct GTH <: StatDistSolver end
+	struct Iterate <: StatDistSolver end
+end
+
+# ╔═╡ e7d2074b-93bc-4b97-afb2-a2e6880586b0
+function stationary_distribution(mc::MarkovChain, solver::StatDistSolver=GTH(); kwargs...)
+	stationary_distribution(mc.p, solver; kwargs...)
+end
+
+# ╔═╡ eb2dc2aa-a6ee-4b64-a910-7b78c4226f25
+function stationary_distribution(Q::AbstractMatrix, m, solver; kwargs...)
+	Q̃ = (1-m) * Q + m * I
+	stationary_distribution(Q̃, solver; kwargs...)
+end
+
+# ╔═╡ 5dd0b103-051d-426f-b832-dedaab04496e
+function stationary_distribution(Q::AbstractMatrix, m, π₀, _)
+	π = m * (π₀ / (I - (1-m) * Q))
+	π'
+end
+
+# ╔═╡ e419ffae-faaf-4845-bb17-0a6891d93d2f
+function stationary_distribution(Q::AbstractMatrix, m, π₀, ::Iterate; maxit = 400, π_guess = π₀, rtol = √eps())
+	π = copy(π_guess)
+	for i in 1:maxit
+		π_new = (1-m) * π * Q + m * π₀
+		if isapprox(π_new, π; rtol)
+			@info "Converged after $i iterations"
+			return π_new'
+		end
+		if i == maxit
+			@warn "Didn't converge after $i iterations"
+			return π_new'
+		end
+		π .= π_new
+	end
+	nothing
+end
+
+# ╔═╡ 6a41a2a2-ee26-4292-ac4b-1348d117ef43
+function stationary_distribution(Q::AbstractMatrix, ::GTH)
+	# this essentially copies the implementation of QuantEcon.jl
+	n = size(Q, 1)
+	π = zeros(n)
+	ids = only(attracting_components(DiGraph(Q)))
+	π[ids] .= gth_solve(Q[ids,ids])
+	π
+end	
+
+# ╔═╡ cd5f86f3-dc39-40ac-a6b1-4d258c097e85
+function stationary_distribution(Q::AbstractMatrix, ::Iterate; rtol = √eps(), maxit = 400)
+	Qn = copy(Q)
+	for i in 1:maxit
+		Qn_new = Qn * Q
+		if isapprox(Qn_new, Qn; rtol)
+			@info "Converged after $i iterations"
+			break
+		end
+		if i == maxit
+			@warn "Didn't converge after $i iterations"
+		end
+		Qn .= Qn_new
+	end
+	Qn[1,:]
+end	
+
+# ╔═╡ d5886ad1-c4ba-4aa4-b223-0588e4ede6df
+function real_if_real(x)
+	@assert isreal(x)
+	real(x)
+end
+
+# ╔═╡ c9b89eea-2c9b-4c23-811d-3a964af6b594
+function stationary_distribution(Q::AbstractMatrix, ::Eigen)
+	(; values, vectors) = eigen(Q')
+	# find unit-eigenvalue
+	i = only(findall(values .≈ 1.0))
+	# get corresponding eigenvector
+	π = vectors[:, i]
+	# make sure it isn't complex, normalize sum to 1
+	π = real_if_real(π)
+	π .= π / sum(π)
+end
+
+# ╔═╡ a2ba3828-4c49-45ff-8eb8-84d2ca15ed64
+function solve_details0(ddp, states, policies; m, π₀, solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	df.state = states
+	df.policy = policies[results.sigma]
+
+	σ = results.sigma
+	R_σ, Q_σ = RQ_sigma(ddp, σ)
+	
+	df.π = stationary_distribution(Q_σ, m, π₀, GTH()) 
+
+	df
+end
+
+# ╔═╡ 34cb66d9-c5e3-4535-814d-4bc66862d670
+function solve_details(ddp, states, policies; m, π₀, solver = PFI)
+	df = solve_details0(ddp, states, policies; m, π₀, solver)
+
+	@chain df begin
+		@transform(:consumption = consumption(:state, :policy, prices))
+		@transform(:saving = :a_next - :a)
+		select!(Not([:state, :policy]))
+	end
+end
+
+# ╔═╡ 9bab335d-197b-43c7-a938-c83ac41ce141
+# Solve using policy function iteration
+results_df = solve_details(am_ddp, ss.states, ss.policies; hh.m, π₀=initial_distribution', solver = PFI)
+
+# ╔═╡ 1263cb1f-8b43-40c1-aee7-ad22b140590b
+@chain results_df begin
+	@combine(
+		:a = mean(:a, weights(:π)),
+		:a_next = mean(:a_next, weights(:π)),
+	)
+
+end
+
+# ╔═╡ 3461fad3-6f89-409c-963c-aac43e7c7b37
+@chain results_df begin
+	groupby(:a)
+	@combine(
+		:π = sum(:π)
+	)
+	data(_) * mapping(:a, :π) * visual(Lines)
+	draw
+end
 
 # ╔═╡ e961d8d6-6a3f-49e3-a40e-feaa859513d3
 let
@@ -338,39 +481,17 @@ let
 	mc_aux = MarkovChain(copy(Q̃))
 
 	π = only(stationary_distributions(mc_aux))
-
-	π2 = let
-		(; values, vectors) = eigen(Q̃')
-		i_1 = findall(values .≈ 1.0)
-		π2 = vectors[:, i_1]
-		@assert isreal(π2)
-		π2 = real(π2)
-		π2 .= π2 / sum(π2)
-	end
-
-	
-	@assert π ≈ π2
-	ids = only(attracting_components(DiGraph(Q̃)))
-	@info ids
-	_π3_ = gth_solve(copy(Q̃[ids,ids]))
-	
-	π3 = zeros(length(π))
-	
-	π3[ids] .= _π3_
-	π3 .= π3 / sum(π3)
-
-	π ≈ π2 ≈ π3
-#	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-#	df.state = states
-#	df.policy = policies[results.sigma]
-#	df.π = stationary_distributions(results.mc)[:, 1][1]
-
-#	df
+	@assert π ≈ stationary_distribution(Q̃, Eigen())
+	@assert π ≈ stationary_distribution(Q̃, GTH())
+	@assert π ≈ stationary_distribution(Q̃, Iterate(), rtol = eps()^(3/4))
+	@assert π ≈ stationary_distribution(Q_σ, m, Eigen())
+	@assert	π ≈ stationary_distribution(Q_σ, m, π', GTH())
+	@assert π ≈	stationary_distribution(Q_σ, m, π', Iterate(); π_guess = fill(1/400, 1, 400), rtol = eps()^(3/4))
 end
 
-# ╔═╡ 3bc65535-93cc-476e-81ee-6dd0293e629a
+# ╔═╡ 5bbe227f-f88e-492b-b5ba-af477feede3d
 md"""
-# Appendix
+## Misc
 """
 
 # ╔═╡ 2928ba10-b096-4854-a211-6179c479cc93
@@ -1860,6 +1981,7 @@ version = "3.5.0+0"
 # ╠═557af9a8-0ff5-42de-8c37-3acf3837020e
 # ╟─8144fef5-1b68-4752-82cb-28082333bd3d
 # ╠═2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
+# ╠═f4919974-710c-4b77-b43a-3f5bd40b5017
 # ╠═9a58dc90-3d58-4974-914d-5e1c8fa61483
 # ╠═cef10fd0-2024-4f1a-800b-65ddf84afe7e
 # ╠═1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
@@ -1873,6 +1995,8 @@ version = "3.5.0+0"
 # ╠═a2ba3828-4c49-45ff-8eb8-84d2ca15ed64
 # ╠═34cb66d9-c5e3-4535-814d-4bc66862d670
 # ╠═6ccea34a-398f-4b09-a869-1d3a5c127921
+# ╠═1263cb1f-8b43-40c1-aee7-ad22b140590b
+# ╠═3461fad3-6f89-409c-963c-aac43e7c7b37
 # ╟─7ab33280-7ae0-41d5-be30-1248d783b053
 # ╟─f6ad252e-7ee8-4084-a354-1bca4074792c
 # ╠═f95b7fd3-d1bf-4fa3-91b8-76546191d114
@@ -1891,15 +2015,27 @@ version = "3.5.0+0"
 # ╠═e2193a09-f332-454d-991f-12ae621148d7
 # ╠═8783d2b5-99cc-4bdf-a290-9b3b3b2a05a5
 # ╠═33977af2-f470-434b-af98-ec846256cdb2
+# ╠═31dc8ad6-dde4-4f7f-96a8-cec96be181ac
 # ╟─a2f3a52c-54c1-421a-afc1-9aa9bf58381f
 # ╟─8b95d0a0-13d5-455d-acda-68ced0473467
 # ╠═82f9a75b-8a0a-4505-a879-17bd620f21bc
 # ╠═489ee98c-02f1-463b-8d0d-826645fd5fbc
 # ╠═56d57b34-b673-468a-9f7a-e909c8198307
-# ╠═25e7248d-c89c-46cd-aaff-1d0ce9090194
 # ╠═e961d8d6-6a3f-49e3-a40e-feaa859513d3
-# ╠═06eb6851-032d-4c24-83f5-43340dd61905
+# ╠═403d7223-efb3-4ec6-9cc1-a0237a3af253
 # ╟─3bc65535-93cc-476e-81ee-6dd0293e629a
+# ╟─4389a76d-4063-47f5-8626-ac9a2dd6219a
+# ╠═bd1c7729-fa87-4c84-9052-b4a858dab19e
+# ╠═e7d2074b-93bc-4b97-afb2-a2e6880586b0
+# ╠═eb2dc2aa-a6ee-4b64-a910-7b78c4226f25
+# ╠═5dd0b103-051d-426f-b832-dedaab04496e
+# ╠═e419ffae-faaf-4845-bb17-0a6891d93d2f
+# ╠═c9b89eea-2c9b-4c23-811d-3a964af6b594
+# ╠═6a41a2a2-ee26-4292-ac4b-1348d117ef43
+# ╠═cd5f86f3-dc39-40ac-a6b1-4d258c097e85
+# ╠═d5886ad1-c4ba-4aa4-b223-0588e4ede6df
+# ╠═06eb6851-032d-4c24-83f5-43340dd61905
+# ╟─5bbe227f-f88e-492b-b5ba-af477feede3d
 # ╠═e9867950-f878-42c3-983c-61fd30cebb9c
 # ╠═2928ba10-b096-4854-a211-6179c479cc93
 # ╟─00000000-0000-0000-0000-000000000001
