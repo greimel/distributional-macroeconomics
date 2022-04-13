@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.0
+# v0.19.0
 
 using Markdown
 using InteractiveUtils
@@ -156,7 +156,7 @@ end
 h_max((; ω_next), (; p, r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
 
 # ╔═╡ 9403d178-674d-4d6e-a0d4-27a217469898
-function reward(state, policy, h_next, prices, params; u)
+function reward_etc(state, policy, h_next, prices, params; u)
 	a_n = a_next(policy, h_next, prices, params) 
 	c = consumption(state, policy, h_next, prices, params)
 	#c2 = consumption2(state, policy, h_next, prices, params; a_next=a_n)
@@ -164,23 +164,20 @@ function reward(state, policy, h_next, prices, params; u)
 	(; reward = u(c, h_next), c, h_next, a_next = a_n, policy...)
 end
 
-# ╔═╡ bec56670-e130-4727-871e-d7a676f67713
-T = typeof((; reward = 1.0, c = 1.0, h_next = 0.0, a_next = 1.0,  ω_next = 1.0, h̄ = 1.0))
-
 # ╔═╡ 76721e80-a0fb-45dd-b88c-75d5447aa7e9
-function fill_R_policies!(R, additional_policies, states, policies, prices, params; u=u)
+function setup_R_etc!(R, etc, states, policies, prices, params; u)
 	for (i_state, state) ∈ enumerate(states)
 		for (i_policy, policy) ∈ enumerate(policies)		
 
 			h̄ = h_max(policy, prices, params)
-			res = maximize(h_next -> reward(state, policy, h_next, prices, params; u).reward, eps(), h̄)
+			res = maximize(h_next -> reward_etc(state, policy, h_next, prices, params; u).reward, eps(), h̄)
 		
 			h_opt = Optim.maximizer(res)
 		
-			out = reward(state, policy, h_opt, prices, params; u)
+			out = reward_etc(state, policy, h_opt, prices, params; u)
 		
 			R[i_state, i_policy] = out.reward
-			additional_policies[i_state, i_policy] = (; out..., h̄)
+			etc[i_state, i_policy] = (; out..., h̄)
 		end
 	end
 end
@@ -223,23 +220,6 @@ md"""
 z_chain = MarkovChain([1-ε ε/2 ε/2;
 	ε/2 1-ε ε/2;
 	ε/2 ε/2 1-ε], [1.25, 1.0, 0.75])
-
-# ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
-function setup_DDP(household, statespace, prices, params)
-	(; β, u) = household
-	(; states, policies, states_indices, policies_indices) = statespace
-
-	## Rewards and policies
-	R = zeros(length(states),length(policies))
-	additional_policies = Array{T}(undef, size(R)...)
-	fill_R_policies!(R, additional_policies, states, policies, prices, params; u)
-
-	## Transition function
-	Q = setup_Q(states_indices, policies_indices, z_chain)
-
-	ddp = DiscreteDP(R, Q, β)
-	(; ddp, R, additional_policies)
-end	
 
 # ╔═╡ e54f5d50-e62a-4b36-83fd-1a14350ad339
 function statespace(;
@@ -289,6 +269,33 @@ make_u(ξ = 0.5, σ = 2.0)(2 - Δ, 0.01 + Δ/1.0)
 # ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
 params = (; δ = 0.02, ϕ = 0.8)
 
+# ╔═╡ f41d4c29-fb65-4e21-9a0d-76ce0681ba8a
+function setup_R_etc(states, policies, prices, parms; u)
+	proto = reward_etc(first(states), first(policies), 0.01, prices, params; u)
+	T = typeof((; proto..., h̄=0.1))
+	etc = Array{T}(undef, (length(states), length(policies)))
+	R = zeros(length(states), length(policies))
+	
+	setup_R_etc!(R, etc, states, policies, prices, params; u)
+
+	(; R, etc) 
+end
+
+# ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
+function setup_DDP(household, statespace, prices, params)
+	(; β, u) = household
+	(; states, policies, states_indices, policies_indices) = statespace
+
+	## Rewards and policies
+	(; R, etc) = setup_R_etc(states, policies, prices, params; u)
+
+	## Transition function
+	Q = setup_Q(states_indices, policies_indices, z_chain)
+
+	ddp = DiscreteDP(R, Q, β)
+	(; ddp, R, etc)
+end	
+
 # ╔═╡ 4c984317-5324-43c1-a26e-c4905c183fb8
 md"""
 # Analyze results
@@ -312,7 +319,7 @@ function solve_details0(ddp, statespace, other_policies; solver = PFI)
 	df.state = states
 	df.policy = policies[results.sigma]
 	df.additional_policies = other_policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
+	df.π = only(stationary_distributions(results.mc))
 
 	(; df, results)
 end
@@ -337,7 +344,7 @@ md"""
 prices = (; p = 2.0, r = 0.05, w = 1.0)
 
 # ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
-reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5, σ = 2))
+reward_etc((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5, σ = 2))
 
 # ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
 ω_grid = range(0.1, 10, length = 200)
@@ -346,10 +353,10 @@ reward((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5,
 ss = statespace(; ω_vals = ω_grid, z_chain)
 
 # ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
-(; R, ddp, additional_policies) = setup_DDP(household, ss, prices, params);
+(; R, ddp, etc) = setup_DDP(household, ss, prices, params);
 
 # ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
-policies_df = mapreduce(vcat, enumerate(eachrow(additional_policies))) do (i, row)
+policies_df = mapreduce(vcat, enumerate(eachrow(etc))) do (i, row)
 	df = DataFrame(row)
 	df.state .= i
 	df
@@ -365,7 +372,7 @@ end
 end
 
 # ╔═╡ defef805-2322-4d3a-a448-83ca3b7367a6
-results_df = solve_details(ddp, ss, additional_policies)
+results_df = solve_details(ddp, ss, etc)
 
 # ╔═╡ 6e2d8ea1-af34-4294-bdec-ae709e88e3f6
 let
@@ -1892,8 +1899,8 @@ version = "3.5.0+0"
 # ╠═845c11bc-e605-47ff-821f-a6b61e9e10c5
 # ╠═0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
 # ╠═9403d178-674d-4d6e-a0d4-27a217469898
-# ╠═bec56670-e130-4727-871e-d7a676f67713
 # ╠═76721e80-a0fb-45dd-b88c-75d5447aa7e9
+# ╠═f41d4c29-fb65-4e21-9a0d-76ce0681ba8a
 # ╠═f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
 # ╟─1a1eb9eb-cd8b-4cfc-a74e-d6502e17624b
 # ╠═92e84b5d-0f8a-47de-ae10-f216ed72fe14
