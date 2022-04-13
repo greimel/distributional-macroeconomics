@@ -40,11 +40,17 @@ using LightGraphs
 # ╔═╡ e9867950-f878-42c3-983c-61fd30cebb9c
 using PlutoUI: TableOfContents
 
-# ╔═╡ 1f28e9fb-9ef1-490a-a925-057111903b17
-# ╠═╡ disabled = true
-#=╠═╡
+# ╔═╡ f5333200-a779-4118-a54b-79250d6ceaf3
+md"""
+!!! danger "Under construction!"
 
-  ╠═╡ =#
+	**This notebook is not ready for public consumption.** Use at your own risk.
+"""
+
+# ╔═╡ ddb1bf24-bba7-4eab-8eac-91a9457dc824
+md"""
+`lifecycle.jl` | **Version 0.1** | *last updated: Apr 13 2022*
+"""
 
 # ╔═╡ 96ab8b9c-7211-4b85-a46e-cba792c6f405
 md"""
@@ -102,32 +108,42 @@ function consumption((; z, a), (; a_next), (; q, w, Δr))
 		q = 1/(1+r)
 	end
 	c = w * z + a - q * a_next
+	(; c, a_next)
 end
 
 # ╔═╡ e0672d2c-d485-40af-918e-ce3d60bd30a0
-function reward(state, policy, prices, u)
-	c = consumption(state, policy, prices)
+function reward_etc(state, policy, prices, u)
+	(; c, a_next) = consumption(state, policy, prices)
     if c > 0
-		u(c)
+		reward = u(c)
 	else
-		-100_000 + 100 * c
+		reward = -100_000 + 100 * c
 	end
+	(; reward, c)
 end
 
 # ╔═╡ b6ca379a-d0c4-4184-a54c-47623d181de6
-function setup_R!(R, states, policies, prices, u)
-    for (a_i, policy) ∈ enumerate(policies)
-        for (s_i, state) ∈ enumerate(states)
-            R[s_i, a_i] = reward(state, policy, prices, u)
+function setup_R_etc!(R, etc, states, policies, prices, u)
+    for (i_policy, policy) ∈ enumerate(policies)
+        for (i_state, state) ∈ enumerate(states)
+			out = reward_etc(state, policy, prices, u)
+            R[i_state, i_policy] = out.reward
+			etc[i_state, i_policy] = (; out...)
         end
     end
-    return R
+    return nothing
 end
 
 # ╔═╡ 557af9a8-0ff5-42de-8c37-3acf3837020e
-function setup_R(states, policies, prices, u)
+function setup_R_etc(states, policies, prices, u)
+	proto = reward_etc(first(states), first(policies), prices, u)
+	T = typeof(proto)
+	etc = Array{T}(undef, length(states), length(policies))
 	R = zeros(length(states), length(policies))
-	setup_R!(R, states, policies, prices, u)
+	
+	setup_R_etc!(R, etc, states, policies, prices, u)
+
+	(; R, etc) 
 end
 
 # ╔═╡ 8144fef5-1b68-4752-82cb-28082333bd3d
@@ -144,30 +160,10 @@ q(r) = 1/(1+r)
 # ╔═╡ cef10fd0-2024-4f1a-800b-65ddf84afe7e
 r_from_q(q) = 1/q - 1
 
-# ╔═╡ 23733473-fe77-45c5-b105-5b3e7196aaa1
-ε = 0.25
-
-# ╔═╡ 5f0f20e8-f256-4ead-9747-4b1ffd4f3d32
-z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
-
-# ╔═╡ b383c608-05f4-4c53-8efd-97fdb5fcef2e
-function setup_DDP(household, statespace, prices)
-	(; β, m, u) = household
-	(; states, policies, states_indices, policies_indices) = statespace
-    
-	R = setup_R(states, policies, prices, u)
-	Q = setup_Q(states_indices, policies_indices, z_chain)
-
-	DiscreteDP(R, Q, β * (1 - m))
-end
-
 # ╔═╡ 810240c9-e613-42c8-8bcc-569d22a75b37
 md"""
 ## Solve Households' problem
 """
-
-# ╔═╡ 25d6d446-1769-4f9f-ae65-3128993c2ae6
-ss = statespace(; a_vals = range(-2, 2.0, length = 200), z_chain)
 
 # ╔═╡ 7ab33280-7ae0-41d5-be30-1248d783b053
 md"""
@@ -179,6 +175,56 @@ md"""
 ## Finite lifetime
 
 """
+
+# ╔═╡ a35fceae-2318-49f9-95a2-adf312362f98
+J = 20
+
+# ╔═╡ 21035a54-3a47-46f2-8b14-dcd690d14d41
+# Create an instance of Household
+hh = Household(m = 1/J)
+
+# ╔═╡ 2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
+r = r_guess(hh, 0.8)
+
+# ╔═╡ 1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
+prices = (q = q(r), w = 1.0, Δr = r/2)
+
+# ╔═╡ 1ab72d61-952b-4522-8ece-7729de9346f8
+md"""
+## Evolution of assets over age
+"""
+
+# ╔═╡ 23733473-fe77-45c5-b105-5b3e7196aaa1
+ε = 0.1
+
+# ╔═╡ 5f0f20e8-f256-4ead-9747-4b1ffd4f3d32
+z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
+
+# ╔═╡ b383c608-05f4-4c53-8efd-97fdb5fcef2e
+function setup_DDP(household, statespace, prices)
+	(; β, m, u) = household
+	(; states, policies, states_indices, policies_indices) = statespace
+
+	## Rewards and policies
+	(; R, etc) = setup_R_etc(states, policies, prices, u)
+
+	## Transition function
+	Q = setup_Q(states_indices, policies_indices, z_chain)
+
+	ddp = DiscreteDP(R, Q, β * (1 - m))
+
+	(; ddp, R, etc)
+end
+
+# ╔═╡ 25d6d446-1769-4f9f-ae65-3128993c2ae6
+ss = statespace(; a_vals = range(-2, 2.0, length = 200), z_chain)
+
+# ╔═╡ 1c615b77-c088-4d26-a6b4-f90c9317e62d
+# Use the instance to build a discrete dynamic program
+(; am_ddp, etc) = let
+	(; ddp, etc) = setup_DDP(hh, ss, prices);
+	(; am_ddp = ddp, etc)
+end;
 
 # ╔═╡ f95b7fd3-d1bf-4fa3-91b8-76546191d114
 v_term = map(ss.states) do (; a, z)
@@ -196,23 +242,6 @@ initial_distribution = let
 	π₀ / sum(π₀)
 end
 
-# ╔═╡ a35fceae-2318-49f9-95a2-adf312362f98
-J = 20
-
-# ╔═╡ 21035a54-3a47-46f2-8b14-dcd690d14d41
-# Create an instance of Household
-hh = Household(m = 1/J)
-
-# ╔═╡ 2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
-r = r_guess(hh, 0.8)
-
-# ╔═╡ 1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
-prices = (q = q(r), w = 1.0, Δr = r/2)
-
-# ╔═╡ 1c615b77-c088-4d26-a6b4-f90c9317e62d
-# Use the instance to build a discrete dynamic program
-am_ddp = setup_DDP(hh, ss, prices);
-
 # ╔═╡ e788a718-6151-4b7f-8ad0-4d1a68f538f6
 df_big = let
 	π₀ = initial_distribution'
@@ -220,6 +249,7 @@ df_big = let
 	ddp = am_ddp
 	J = J
 	v_term = v_term
+	other_policies = etc
 	
 	vs, sigmas = backward_induction(ddp, J, v_term)
 
@@ -234,7 +264,9 @@ df_big = let
 		σ = sigmas[:, j]
 		R_σ, Q_σ = RQ_sigma(ddp, σ)
 
-		df = [DataFrame(states) DataFrame(policies[σ])]
+		op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(σ))
+		
+		df = [DataFrame(states) DataFrame(policies[σ]) op]
 		df.j .= j
 		df.π = vec(π)
 
@@ -246,17 +278,13 @@ df_big = let
 	df_big = vcat(dfs...)
 end
 
-# ╔═╡ 1ab72d61-952b-4522-8ece-7729de9346f8
-md"""
-## Evolution of assets over age
-"""
-
 # ╔═╡ e38d4c15-5f6b-4859-9b6b-243e11d4f89c
 @chain df_big begin
-	@groupby(:j)
-	@combine(:a = mean(:a_next, weights(:π)))
-	data(_) * mapping(:j, :a) * visual(ScatterLines)
-	draw
+	stack([:a, :a_next, :c], [:j, :π])
+	@groupby(:j, :variable)
+	@combine(:value = mean(:value, weights(:π)))
+	data(_) * mapping(:j, :value, layout = :variable) * visual(ScatterLines)
+	draw(facet = (linkyaxes = false, ))
 end
 
 # ╔═╡ 9efdd9b6-da65-417f-a004-c21357e31fe3
@@ -276,8 +304,10 @@ end
 
 # ╔═╡ 33977af2-f470-434b-af98-ec846256cdb2
 @chain df_big begin
-	data(_) * mapping(:j, :a_next, weights = :π) * quantileband()
-	draw
+	stack([:a, :a_next, :c], [:j, :π, :z])
+#	@groupby(:j, :variable)
+	data(_) * mapping(:j, :value, weights = :π, color = :z => nonnumeric, layout = :variable) * quantileband()
+	draw(facet = (linkyaxes = false,))
 end
 
 # ╔═╡ 31dc8ad6-dde4-4f7f-96a8-cec96be181ac
@@ -304,19 +334,6 @@ m = 1/45
 
 # ╔═╡ 489ee98c-02f1-463b-8d0d-826645fd5fbc
 hh_perp_youth = Household(; m)
-
-# ╔═╡ 403d7223-efb3-4ec6-9cc1-a0237a3af253
-function xxxsolve_details0(ddp, states, policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
-
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-	df.state = states
-	df.policy = policies[results.sigma]
-	# only(⋅) makes sure there is a unique stationary distribution
-	df.π = only(stationary_distributions(results.mc)) 
-
-	df
-end
 
 # ╔═╡ 3bc65535-93cc-476e-81ee-6dd0293e629a
 md"""
@@ -417,35 +434,40 @@ function stationary_distribution(Q::AbstractMatrix, ::Eigen)
 end
 
 # ╔═╡ a2ba3828-4c49-45ff-8eb8-84d2ca15ed64
-function solve_details0(ddp, states, policies; m, π₀, solver = PFI)
+function solve_details0(ddp, (; states, policies), other_policies; m, π₀, solver = PFI)
 	results = QuantEcon.solve(ddp, solver)
 
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(results.sigma))
+	
+	df = hcat(
+		DataFrame(states),
+		DataFrame(policies[results.sigma]),
+		op,
+		makeunique = true
+	)
+	df.value = results.v
 	df.state = states
 	df.policy = policies[results.sigma]
+	df.additional_policies = other_policies[results.sigma]
+	df.π = stationary_distribution(results.mc.p, m, π₀, GTH()) 
 
-	σ = results.sigma
-	R_σ, Q_σ = RQ_sigma(ddp, σ)
-	
-	df.π = stationary_distribution(Q_σ, m, π₀, GTH()) 
+	(; df, results)
 
 	df
 end
 
 # ╔═╡ 34cb66d9-c5e3-4535-814d-4bc66862d670
-function solve_details(ddp, states, policies; m, π₀, solver = PFI)
-	df = solve_details0(ddp, states, policies; m, π₀, solver)
+function solve_details(ddp, statespaces, etc; m, π₀, solver = PFI)
+	df = solve_details0(ddp, statespaces, etc; m, π₀, solver)
 
 	@chain df begin
-		@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :a_next - :a)
-		select!(Not([:state, :policy]))
+		select!(Not([:state, :policy, :additional_policies]))
 	end
 end
 
 # ╔═╡ 9bab335d-197b-43c7-a938-c83ac41ce141
 # Solve using policy function iteration
-results_df = solve_details(am_ddp, ss.states, ss.policies; hh.m, π₀=initial_distribution', solver = PFI)
+results_df = solve_details(am_ddp, ss, etc; hh.m, π₀=initial_distribution', solver = PFI)
 
 # ╔═╡ 1263cb1f-8b43-40c1-aee7-ad22b140590b
 @chain results_df begin
@@ -468,7 +490,7 @@ end
 
 # ╔═╡ e961d8d6-6a3f-49e3-a40e-feaa859513d3
 let
-	ddp = setup_DDP(hh_perp_youth, ss, prices)
+	(; ddp) = setup_DDP(hh_perp_youth, ss, prices)
 	@assert ddp.beta == hh_perp_youth.β * (1 - hh_perp_youth.m)
 
 	(; m) = hh_perp_youth
@@ -1967,8 +1989,9 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─f5333200-a779-4118-a54b-79250d6ceaf3
+# ╟─ddb1bf24-bba7-4eab-8eac-91a9457dc824
 # ╠═1d92eaa0-ba41-11ec-346e-7561afaf6a08
-# ╠═1f28e9fb-9ef1-490a-a925-057111903b17
 # ╟─96ab8b9c-7211-4b85-a46e-cba792c6f405
 # ╠═5a11b72d-616a-446f-847c-e81d6f94f16f
 # ╠═9cf045e6-4e0d-4548-b22f-e853c43c55f1
@@ -1986,7 +2009,6 @@ version = "3.5.0+0"
 # ╠═cef10fd0-2024-4f1a-800b-65ddf84afe7e
 # ╠═1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
 # ╠═21035a54-3a47-46f2-8b14-dcd690d14d41
-# ╠═23733473-fe77-45c5-b105-5b3e7196aaa1
 # ╠═5f0f20e8-f256-4ead-9747-4b1ffd4f3d32
 # ╟─810240c9-e613-42c8-8bcc-569d22a75b37
 # ╠═25d6d446-1769-4f9f-ae65-3128993c2ae6
@@ -2015,6 +2037,7 @@ version = "3.5.0+0"
 # ╠═e2193a09-f332-454d-991f-12ae621148d7
 # ╠═8783d2b5-99cc-4bdf-a290-9b3b3b2a05a5
 # ╠═33977af2-f470-434b-af98-ec846256cdb2
+# ╠═23733473-fe77-45c5-b105-5b3e7196aaa1
 # ╠═31dc8ad6-dde4-4f7f-96a8-cec96be181ac
 # ╟─a2f3a52c-54c1-421a-afc1-9aa9bf58381f
 # ╟─8b95d0a0-13d5-455d-acda-68ced0473467
@@ -2022,7 +2045,6 @@ version = "3.5.0+0"
 # ╠═489ee98c-02f1-463b-8d0d-826645fd5fbc
 # ╠═56d57b34-b673-468a-9f7a-e909c8198307
 # ╠═e961d8d6-6a3f-49e3-a40e-feaa859513d3
-# ╠═403d7223-efb3-4ec6-9cc1-a0237a3af253
 # ╟─3bc65535-93cc-476e-81ee-6dd0293e629a
 # ╟─4389a76d-4063-47f5-8626-ac9a2dd6219a
 # ╠═bd1c7729-fa87-4c84-9052-b4a858dab19e
