@@ -177,7 +177,7 @@ md"""
 """
 
 # ╔═╡ a35fceae-2318-49f9-95a2-adf312362f98
-J = 20
+J = 40
 
 # ╔═╡ 21035a54-3a47-46f2-8b14-dcd690d14d41
 # Create an instance of Household
@@ -188,6 +188,68 @@ r = r_guess(hh, 0.8)
 
 # ╔═╡ 1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
 prices = (q = q(r), w = 1.0, Δr = r/2)
+
+# ╔═╡ e788a718-6151-4b7f-8ad0-4d1a68f538f6
+function simulate_J(ddp, J, v_term, (; states, policies), other_policies, π₀)
+	vs, sigmas = backward_induction(ddp, J, v_term)
+
+	# initial distribution
+	π = copy(π₀)
+
+	# initialize DataFrame to store the results
+	dfs = DataFrame[]
+	
+	for j ∈ 1:J
+		σ = sigmas[:, j]
+		R_σ, Q_σ = RQ_sigma(ddp, σ)
+
+		op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(σ))
+		
+		df = [DataFrame(states) DataFrame(policies[σ]) op]
+		df.j .= j
+		df.π = vec(π)
+
+		π = π * Q_σ
+		#Q * initial_distribution
+		push!(dfs, df)
+	end
+
+	vcat(dfs...)
+end
+
+# ╔═╡ 2ab2ee8d-a952-4baf-8e53-c8166c6a9f39
+md"""
+## Perpetual youth
+"""
+
+# ╔═╡ 480a6c9a-5dfa-42c0-ae83-791c674e8146
+function simulate(ddp, J, (; states, policies), other_policies, π₀,	solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	σ = results.sigma
+	R_σ, Q_σ = RQ_sigma(ddp, σ)
+
+	op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(σ))
+	df0 = [DataFrame(states) DataFrame(policies[σ]) op]
+	
+	# initial distribution
+	π = copy(π₀)
+
+	# initialize DataFrame to store the results
+	dfs = DataFrame[]
+	
+	for j ∈ 1:J
+		df = copy(df0)
+		df.j .= j
+		df.π = vec(π)
+
+		π = π * Q_σ
+		#Q * initial_distribution
+		push!(dfs, df)
+	end
+
+	vcat(dfs...)
+end
 
 # ╔═╡ 1ab72d61-952b-4522-8ece-7729de9346f8
 md"""
@@ -242,41 +304,8 @@ initial_distribution = let
 	π₀ / sum(π₀)
 end
 
-# ╔═╡ e788a718-6151-4b7f-8ad0-4d1a68f538f6
-df_big = let
-	π₀ = initial_distribution'
-	(; states, policies) = ss
-	ddp = am_ddp
-	J = J
-	v_term = v_term
-	other_policies = etc
-	
-	vs, sigmas = backward_induction(ddp, J, v_term)
-
-	# initial distribution
-	n = length(states)
-	π = copy(π₀)
-
-	# initialize DataFrame to store the results
-	dfs = DataFrame[]
-	
-	for j ∈ 1:J
-		σ = sigmas[:, j]
-		R_σ, Q_σ = RQ_sigma(ddp, σ)
-
-		op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(σ))
-		
-		df = [DataFrame(states) DataFrame(policies[σ]) op]
-		df.j .= j
-		df.π = vec(π)
-
-		π = π * Q_σ
-		#Q * initial_distribution
-		push!(dfs, df)
-	end
-
-	df_big = vcat(dfs...)
-end
+# ╔═╡ 204ae409-f13d-4649-8cea-7821269a2afb
+df_big = simulate_J(am_ddp, J, v_term, ss, etc, initial_distribution')
 
 # ╔═╡ e38d4c15-5f6b-4859-9b6b-243e11d4f89c
 @chain df_big begin
@@ -310,8 +339,37 @@ end
 	draw(facet = (linkyaxes = false,))
 end
 
+# ╔═╡ 980e9df0-68d1-408e-9b30-6a5759446ff6
+df_big2 = simulate(am_ddp, J, ss, etc, initial_distribution')
+
+# ╔═╡ 594af89c-c83c-42ad-9592-bab21b077421
+@chain df_big2 begin
+	stack([:a, :a_next, :c], [:j, :π])
+	@groupby(:j, :variable)
+	@combine(:value = mean(:value, weights(:π)))
+	data(_) * mapping(:j, :value, layout = :variable) * visual(ScatterLines)
+	draw(facet = (linkyaxes = false, ))
+end
+
+# ╔═╡ 8ff33305-8a48-4eda-a29f-196962ca6d60
+@chain df_big2 begin
+	stack([:a, :a_next, :c], [:j, :π, :z])
+#	@groupby(:j, :variable)
+	data(_) * mapping(:j, :value, weights = :π, color = :z => nonnumeric, layout = :variable) * quantileband()
+	draw(facet = (linkyaxes = false,))
+end
+
 # ╔═╡ 31dc8ad6-dde4-4f7f-96a8-cec96be181ac
 @chain df_big begin
+	@combine(
+		:a = mean(:a, weights(:π)),
+		:a_next = mean(:a_next, weights(:π)),
+	)
+
+end
+
+# ╔═╡ 4f84a5d9-0482-46e3-bccc-497faaeba33c
+@chain df_big2 begin
 	@combine(
 		:a = mean(:a, weights(:π)),
 		:a_next = mean(:a_next, weights(:π)),
@@ -2025,20 +2083,27 @@ version = "3.5.0+0"
 # ╠═10c026ee-ac9a-4087-90ac-cd33724f4310
 # ╠═a35fceae-2318-49f9-95a2-adf312362f98
 # ╠═e788a718-6151-4b7f-8ad0-4d1a68f538f6
+# ╠═204ae409-f13d-4649-8cea-7821269a2afb
+# ╟─2ab2ee8d-a952-4baf-8e53-c8166c6a9f39
+# ╠═480a6c9a-5dfa-42c0-ae83-791c674e8146
+# ╠═980e9df0-68d1-408e-9b30-6a5759446ff6
 # ╠═8e41fd25-f764-44e3-969d-11222c77d133
 # ╠═35036c53-300d-4313-97cc-ab7442462c89
 # ╠═cf76322e-c2f5-4ea9-9839-eca43eb5bc38
 # ╠═b990aeca-b008-4069-8d9a-b04cae2c597c
 # ╟─1ab72d61-952b-4522-8ece-7729de9346f8
 # ╠═e38d4c15-5f6b-4859-9b6b-243e11d4f89c
+# ╠═594af89c-c83c-42ad-9592-bab21b077421
 # ╠═09d2c74a-7359-4505-be0c-efdf0207c1de
 # ╠═f8180d17-5592-438d-a1cf-2e04f1c77aa5
 # ╠═9efdd9b6-da65-417f-a004-c21357e31fe3
 # ╠═e2193a09-f332-454d-991f-12ae621148d7
 # ╠═8783d2b5-99cc-4bdf-a290-9b3b3b2a05a5
 # ╠═33977af2-f470-434b-af98-ec846256cdb2
+# ╠═8ff33305-8a48-4eda-a29f-196962ca6d60
 # ╠═23733473-fe77-45c5-b105-5b3e7196aaa1
 # ╠═31dc8ad6-dde4-4f7f-96a8-cec96be181ac
+# ╠═4f84a5d9-0482-46e3-bccc-497faaeba33c
 # ╟─a2f3a52c-54c1-421a-afc1-9aa9bf58381f
 # ╟─8b95d0a0-13d5-455d-acda-68ced0473467
 # ╠═82f9a75b-8a0a-4505-a879-17bd620f21bc
