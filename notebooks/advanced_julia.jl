@@ -4,6 +4,15 @@
 using Markdown
 using InteractiveUtils
 
+# ╔═╡ be621538-c0dd-4d71-8aa5-1a3c7d6bd5f0
+using DataFrames
+
+# ╔═╡ 3580cde2-f96d-4229-a6ed-fcb046eb9234
+using Chain: @chain
+
+# ╔═╡ 56f2b729-df63-457e-899c-180e4be46bf0
+using DataFrameMacros
+
 # ╔═╡ b9aea038-b0f5-4101-b8d8-840caf80e9b2
 using PlutoUI
 
@@ -104,6 +113,47 @@ md"""
 (In case you use R: The |> operator in Julia is similar to the %>% operator in R.)
 """
 
+# ╔═╡ 7f6fc125-2001-4396-bcb2-8a2e1e0cf036
+md"""
+## The ```@chain``` macro
+"""
+
+# ╔═╡ b4c63d80-7e17-40be-bb0d-678c6a1a6a0a
+md"""
+The ```@chain``` macro works similar to the pipe operator. In the code for this course, the ```@chain``` macro is often applied to data frames together with macros from the ```DataFrameMacros``` package.
+"""
+
+# ╔═╡ 9751ec14-ef27-4d67-89a1-4f1be103a81d
+df = DataFrame(A=[1,2,2,1], B=randn(4))
+
+# ╔═╡ 4682cb1e-77e9-4a23-ae4b-cd18f4c58872
+md"""
+Consider the data frame above. Let's say you would like to
+- add up the values in the B column separately for each value of A
+- take the square-root of the resulting sums of B values.
+
+Using the ```@chain``` macro, we can perform this task with relatively concise code:
+"""
+
+# ╔═╡ cecea5f2-5446-4bf9-b186-11834ac25d37
+@chain df begin
+	@groupby(:A)
+	@combine(:B_sum = sum(:B))
+	@transform(sqrt(:B_sum))
+end
+
+# ╔═╡ 925436fb-e535-4735-888a-b047693c9132
+md"""
+Without the ```@chain``` macro, the code would look like this:
+"""
+
+# ╔═╡ f0d4415c-4f2b-415e-a600-cc5784811ee9
+begin
+	df_groups = groupby(df, :A)
+	df_sum = @combine(df_groups, :B_sum = sum(:B))
+	@transform(df_sum, sqrt(:B_sum))
+end
+
 # ╔═╡ 5cc63149-7edf-45b0-a198-d0f308a52618
 md"""
 ## Unicode characters
@@ -122,7 +172,7 @@ See the [Julia documention](https://docs.julialang.org/en/v1/manual/unicode-inpu
 # ╔═╡ 9e327f16-5320-4ca4-9a5c-f2049afa9fac
 md"""
 ### The $\in$ symbol
-An elegant way of writing loops is to use the $\in$ symbol instead of writing "in". The $\in$ symbol can be created by typing "\in" pressing Tab.
+An elegant way of writing loops is to use the $\in$ symbol instead of writing "in". The $\in$ symbol can be created by typing "\in" and pressing Tab.
 """
 
 # ╔═╡ 1ed23fc8-090b-476b-a6bf-d79f3602133b
@@ -136,15 +186,15 @@ md"""
 
 Press F1 to see shortcuts for Pluto notebooks.
 
+Ctrl + Click on an underlined variable or function to jump to its definition.
+
 Use the Live docs in the bottom right corner to get more information about any Julia function or object.
 
 Check the [Github wiki](https://github.com/fonsp/Pluto.jl/wiki) for more information on Pluto notebooks.
 
-Ctrl + Click on an underlined variable or function to jump to its definition.
-
 ## Automated updating of cells
 
-When changing a function or variable, Pluto automatically updates all affected cells. For example, change the value of $a$ to some other number and see how the following cell updates automatically:
+When changing a function or variable, Pluto automatically updates all affected cells. For example, change the value of $d$ to some other number and see how the following cell updates automatically:
 """
 
 # ╔═╡ 542a9921-e9a2-448f-877b-e27c418eee35
@@ -184,9 +234,15 @@ TableOfContents()
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 
 [compat]
+Chain = "~0.4.10"
+DataFrameMacros = "~0.2.1"
+DataFrames = "~1.3.3"
 PlutoUI = "~0.7.38"
 """
 
@@ -212,19 +268,71 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[deps.Chain]]
+git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
+uuid = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+version = "0.4.10"
+
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
 git-tree-sha1 = "024fe24d83e4a5bf5fc80501a314ce0d1aa35597"
 uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
 version = "0.11.0"
 
+[[deps.Compat]]
+deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
+git-tree-sha1 = "b153278a25dd42c65abbf4e62344f9d22e59191b"
+uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
+version = "3.43.0"
+
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
 
+[[deps.Crayons]]
+git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
+uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
+version = "4.1.1"
+
+[[deps.DataAPI]]
+git-tree-sha1 = "fb5f5316dd3fd4c5e7c30a24d50643b73e37cd40"
+uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
+version = "1.10.0"
+
+[[deps.DataFrameMacros]]
+deps = ["DataFrames"]
+git-tree-sha1 = "cff70817ef73acb9882b6c9b163914e19fad84a9"
+uuid = "75880514-38bc-4a95-a458-c2aea5a3a702"
+version = "0.2.1"
+
+[[deps.DataFrames]]
+deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Reexport", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
+git-tree-sha1 = "6c19003824cbebd804a51211fd3bbd81bf1ecad5"
+uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+version = "1.3.3"
+
+[[deps.DataStructures]]
+deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
+git-tree-sha1 = "3daef5523dd2e769dad2365274f760ff5f282c7d"
+uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+version = "0.18.11"
+
+[[deps.DataValueInterfaces]]
+git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
+uuid = "e2d170a0-9d28-54be-80f0-106bbe20a464"
+version = "1.0.0"
+
 [[deps.Dates]]
 deps = ["Printf"]
 uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
+
+[[deps.DelimitedFiles]]
+deps = ["Mmap"]
+uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+
+[[deps.Distributed]]
+deps = ["Random", "Serialization", "Sockets"]
+uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Downloads]]
 deps = ["ArgTools", "LibCURL", "NetworkOptions"]
@@ -235,6 +343,16 @@ deps = ["Statistics"]
 git-tree-sha1 = "335bfdceacc84c5cdf16aadc768aa5ddfc5383cc"
 uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 version = "0.8.4"
+
+[[deps.Formatting]]
+deps = ["Printf"]
+git-tree-sha1 = "8339d61043228fdd3eb658d86c926cb282ae72a8"
+uuid = "59287772-0a20-5a39-b81b-1366585eb4c0"
+version = "0.4.2"
+
+[[deps.Future]]
+deps = ["Random"]
+uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -256,6 +374,16 @@ version = "0.2.2"
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+
+[[deps.InvertedIndices]]
+git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
+uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
+version = "1.1.0"
+
+[[deps.IteratorInterfaceExtensions]]
+git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
+uuid = "82899510-4779-5014-852e-03e436cf321d"
+version = "1.0.0"
 
 [[deps.JSON]]
 deps = ["Dates", "Mmap", "Parsers", "Unicode"]
@@ -297,6 +425,12 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 
+[[deps.Missings]]
+deps = ["DataAPI"]
+git-tree-sha1 = "bf210ce90b6c9eed32d25dbcae1ebc565df2687f"
+uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
+version = "1.0.2"
+
 [[deps.Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 
@@ -309,6 +443,11 @@ uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
+
+[[deps.OrderedCollections]]
+git-tree-sha1 = "85f8e6578bf1f9ee0d11e7bb1b1456435479d47c"
+uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+version = "1.4.1"
 
 [[deps.Parsers]]
 deps = ["Dates"]
@@ -325,6 +464,18 @@ deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript"
 git-tree-sha1 = "670e559e5c8e191ded66fa9ea89c97f10376bb4c"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 version = "0.7.38"
+
+[[deps.PooledArrays]]
+deps = ["DataAPI", "Future"]
+git-tree-sha1 = "28ef6c7ce353f0b35d0df0d5930e0d072c1f5b9b"
+uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
+version = "1.4.1"
+
+[[deps.PrettyTables]]
+deps = ["Crayons", "Formatting", "Markdown", "Reexport", "Tables"]
+git-tree-sha1 = "dfb54c4e414caa595a1f2ed759b160f5a3ddcba5"
+uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+version = "1.3.1"
 
 [[deps.Printf]]
 deps = ["Unicode"]
@@ -349,8 +500,18 @@ uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
+[[deps.SharedArrays]]
+deps = ["Distributed", "Mmap", "Random", "Serialization"]
+uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
+
+[[deps.SortingAlgorithms]]
+deps = ["DataStructures"]
+git-tree-sha1 = "b3363d7460f7d098ca0912c69b082f75625d7508"
+uuid = "a2af1166-a08f-5f64-846c-94a0d3cef48c"
+version = "1.0.1"
 
 [[deps.SparseArrays]]
 deps = ["LinearAlgebra", "Random"]
@@ -363,6 +524,18 @@ uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 [[deps.TOML]]
 deps = ["Dates"]
 uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[[deps.TableTraits]]
+deps = ["IteratorInterfaceExtensions"]
+git-tree-sha1 = "c06b2f539df1c6efa794486abfb6ed2022561a39"
+uuid = "3783bdb8-4a98-5b6b-af9a-565f29a5fe9c"
+version = "1.0.1"
+
+[[deps.Tables]]
+deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "LinearAlgebra", "OrderedCollections", "TableTraits", "Test"]
+git-tree-sha1 = "5ce79ce186cc678bbb5c5681ca3379d1ddae11a1"
+uuid = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
+version = "1.7.0"
 
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
@@ -417,6 +590,16 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═ae60f715-86b7-45ff-8080-4b961cdfb465
 # ╠═19638c7f-1cef-41af-bdf1-b48e81503904
 # ╟─5d0b2c96-0fea-4e56-be58-0beba790d88a
+# ╟─7f6fc125-2001-4396-bcb2-8a2e1e0cf036
+# ╟─b4c63d80-7e17-40be-bb0d-678c6a1a6a0a
+# ╠═be621538-c0dd-4d71-8aa5-1a3c7d6bd5f0
+# ╠═3580cde2-f96d-4229-a6ed-fcb046eb9234
+# ╠═56f2b729-df63-457e-899c-180e4be46bf0
+# ╠═9751ec14-ef27-4d67-89a1-4f1be103a81d
+# ╟─4682cb1e-77e9-4a23-ae4b-cd18f4c58872
+# ╠═cecea5f2-5446-4bf9-b186-11834ac25d37
+# ╟─925436fb-e535-4735-888a-b047693c9132
+# ╠═f0d4415c-4f2b-415e-a600-cc5784811ee9
 # ╟─5cc63149-7edf-45b0-a198-d0f308a52618
 # ╠═aa02b393-9b84-4b9f-9922-c79d880113e6
 # ╟─bd064547-0ad0-4cf6-91a1-6c7e82e86b24
