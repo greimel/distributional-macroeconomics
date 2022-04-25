@@ -14,20 +14,8 @@ macro bind(def, element)
     end
 end
 
-# ╔═╡ 99cdef3b-691b-4837-97d3-9e867870712d
-using MarkdownLiteral: @markdown
-
-# ╔═╡ 6426f93f-8313-4547-94ef-e894ffa94f24
-using PlutoUI: Slider
-
-# ╔═╡ beb1a4df-fab4-4467-9c36-474cb06a9db2
-using Roots: init_state, init_options, Brent, update_state
-
-# ╔═╡ 119acd7b-8076-4c8e-9992-8fb23dc5e2c9
-using PlutoUI: Button
-
 # ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
-using PlutoUI
+using PlutoUI: Button, Slider, TableOfContents
 
 # ╔═╡ 9df5eb89-7ff6-4749-b3c1-4199e22d1d07
 using AlgebraOfGraphics, CairoMakie
@@ -54,7 +42,7 @@ using Statistics: mean
 using LinearAlgebra
 
 # ╔═╡ dd62503f-431a-43b7-b555-7ab8e7c98cdd
-using Roots: find_zero, Brent
+using Roots: find_zero, init_state, init_options, Brent, update_state
 
 # ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
 using QuantEcon
@@ -126,22 +114,19 @@ md"""
 ## Setup
 """
 
-# ╔═╡ 9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
-function statespace(;
-			a_vals = range(1e-10, 20.0, length = 200),
-			z_chain
-		)
-	states = 
-		[(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec
-	states_indices = 
-		[(; a_i, z_i) for a_i ∈ 1:length(a_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
-    policies = 
-	    [(; a_next) for a_next ∈ a_vals] |> vec
-	policies_indices = 
-	    [(; a_next_i) for a_next_i ∈ 1:length(a_vals)] |> vec
+# ╔═╡ dc6d11cd-7d0a-4a22-9da1-30b92a2fa61b
+md"""
+To find a solution to the households' problem, we will use the Quantecon toolbox. The toolbox requires us to specify 
+- an $n \times m$ array $R$ that contains the value of the reward function for each state and action $R_{ij} = r(s_i, a_j)$
+- an $n \times m \times n$ array $Q$ that gives the probability to end up in state $s'$ in the next period for a given state $s$ and action $a$ in this period $Q_{ijk} = \text{Prob}(s'=s_k|s=s_i, a=a_j)$
+- a discount factor $\beta$.
+For more information on this way of formulating Discrete State Dynamic Programming problems, please have a look at the [QuantEcon lecture notes](https://julia.quantecon.org/dynamic_programming/discrete_dp.html) on this topic.
+"""
 
-	(; states, states_indices, policies, policies_indices, z_chain)
-end
+# ╔═╡ 0c84ac5d-6bfe-4b51-ae91-b2267dfcc6c9
+md"""
+As a first step, we represent household preferences by a named tuple that contains the discount factor $\beta$ and the utility function $u( \cdot )$:
+"""
 
 # ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
 function Household(; σ = 1.0, β = 0.96,	
@@ -149,12 +134,41 @@ function Household(; σ = 1.0, β = 0.96,
 	(; β, u)
 end
 
+# ╔═╡ 8bdedbd6-0001-4e0f-97ae-bf6598cee9be
+md"""
+Moreover, the function below constructs the state space for a given grid of asset values ```k_vals``` and a given Markov process ```z_chain```. The resulting vector of possible states has length $n$ and the vector of possible policies has length $m$.
+"""
+
+# ╔═╡ 9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
+function statespace(;
+			k_vals = range(1e-10, 20.0, length = 200),
+			z_chain
+		)
+	states = 
+		[(; k, z) for k ∈ k_vals, z ∈ z_chain.state_values] |> vec
+	states_indices = 
+		[(; k_i, z_i) for k_i ∈ 1:length(k_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
+    policies = 
+	    [(; k_next) for k_next ∈ k_vals] |> vec
+	policies_indices = 
+	    [(; k_next_i) for k_next_i ∈ 1:length(k_vals)] |> vec
+
+	(; states, states_indices, policies, policies_indices, z_chain)
+end
+
+# ╔═╡ 504d1052-4dd7-4fb0-9969-32252483e913
+md"""
+Now we can compute the array of transition probabilities $Q$:
+- If the chosen amount of assets coincides with the amount of assets in the state next period, the transition probability is equal to the transition probability for the productivity process $\text{Prob}(z'|z)$.
+- In all other cases, the transition probability is zero.
+"""
+
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
 function setup_Q!(Q, states_indices, policies_indices, z_chain)
     for (i_next_state, next) ∈ enumerate(states_indices)
-        for (i_policy, (; a_next_i)) ∈ enumerate(policies_indices)
+        for (i_policy, (; k_next_i)) ∈ enumerate(policies_indices)
             for (i_state, (; z_i)) ∈ enumerate(states_indices)
-                if next.a_i == a_next_i
+                if next.k_i == k_next_i
                     Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
                 end
             end
@@ -170,13 +184,18 @@ function setup_Q(states_indices, policies_indices, z_chain)
 	Q
 end
 
-# ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
-function consumption((; z, a), (; a_next), (; q, w, Δr))
-	if a_next < 0 && Δr > 0
-		r = (1/q - 1) + (a_next < 0) * Δr
+# ╔═╡ 79e568dc-d38c-49ba-9629-970df69a8517
+md"""
+Before we can compute the reward array $R$, we first need a function that can compute consumption for a given state and action. The function below allows for a higher interest rate $r_\text{borrow} = r + \Delta r$ for households with negative assets.
+"""
+
+# ╔═╡ d60367db-cf92-4c0a-aea4-eddb6552e2c8
+function consumption((; z, k), (; k_next), (; q, w, Δr))
+	if k_next < 0 && Δr > 0
+		r = (1/q - 1) + (k_next < 0) * Δr
 		q = 1/(1+r)
 	end
-	c = w * z + a - q * a_next
+	c = w * z + k - q * k_next
 end
 
 # ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
@@ -189,14 +208,11 @@ function reward(state, policy, prices, u)
 	end
 end
 
-# ╔═╡ 4342d4de-65f0-4ecf-bb2f-7546e337e7de
-#reward.(am.s_vals_new, permutedims(am.a_vals_new), Ref(am.prices), am.u)
-
 # ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
 function setup_R!(R, states, policies, prices, u)
-    for (a_i, policy) ∈ enumerate(policies)
+    for (k_i, policy) ∈ enumerate(policies)
         for (s_i, state) ∈ enumerate(states)
-            R[s_i, a_i] = reward(state, policy, prices, u)
+            R[s_i, k_i] = reward(state, policy, prices, u)
         end
     end
     return R
@@ -208,32 +224,45 @@ function setup_R(states, policies, prices, u)
 	setup_R!(R, states, policies, prices, u)
 end
 
+# ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
+md"""
+Finally, we define a function that creates an instance of the ```DiscreteDP``` (i.e. Discrete Dynamic Program) class for given household preferences, a given state space and given prices.
+"""
+
 # ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 md"""
-## State space
+## Model parameters
+"""
+
+# ╔═╡ a0be9564-16ff-4284-aa2b-928321639857
+md"""
+First, let us define the interest rate, the wage, and the interest wedge for borrowers. We also define functions that turn the interest rate into the price of a bond $q$.
 """
 
 # ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.01
+r = 0.02
 
 # ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
 q(r) = 1/(1+r)
 
-# ╔═╡ 9f4a757b-1689-4d03-9195-1cbfc6a0a7e9
-r_from_q(q) = 1/q - 1
-
 # ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
 prices = (q = q(r), w = 1.0, Δr = r/2)
 
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-# Create an instance of Household
-hh = Household()
+# ╔═╡ a1ec9549-33f8-4f5a-ae36-dabf4792daa6
+md"""
+Next, we define choose the parameters that govern household preferences.
+"""
 
-# ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
-ε = 0.25
+# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
+hh = Household(σ = 2.0, β = 0.96)
+
+# ╔═╡ 4c0249e6-b502-465f-b0f8-3913e568d868
+md"""
+We also need to define the Markov chain for the productivity process:
+"""
 
 # ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
-z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
+z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
 
 # ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
 function setup_DDP(household, statespace, prices)
@@ -246,9 +275,30 @@ function setup_DDP(household, statespace, prices)
 	DiscreteDP(R, Q, β)
 end
 
+# ╔═╡ e40b55e0-2d61-4c0e-a270-e85e21f1cb2b
+md"""
+We combine this Markov chain with a grid for assets ```k_vals``` to construct the state space. The smallest asset value on the grid defines the maximum amount that a household can borrow. The largest asset value on the grid needs to be large enough so that it does not distort the model solution.
+"""
+
+# ╔═╡ ff2e7c0b-0a74-4bc4-b4ea-e1d92020b847
+ss = statespace(; k_vals = range(-1., 5., length = 200), z_chain);
+
+# ╔═╡ 611f8c53-4791-4aa6-a854-d3169698e3b7
+md"""
+As the final step, we create an instance of the ```DiscreteDP``` class for the previously defined parameter values.
+"""
+
+# ╔═╡ 0a12f73a-5286-4146-8a20-00ed4aaaec72
+ddp = setup_DDP(hh, ss, prices);
+
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
-## Solve Households' problem
+## Solve households' problem
+"""
+
+# ╔═╡ 977ba36a-9b54-4d4f-a0b8-95c9155f7d43
+md"""
+We solve the households' problem using the policy function iteration (PFI) algorithm from the QuantEcon toolbox. In the data frame below, each row corresponds to point in the state space. $\pi$ denotes the stationary distribution.
 """
 
 # ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
@@ -269,27 +319,75 @@ function solve_details(ddp, states, policies; solver = PFI)
 
 	@chain df begin
 		@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :a_next - :a)
+		@transform(:saving = :k_next - :k)
 		select!(Not([:state, :policy]))
 	end
 end	
 
+# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
+results = solve_details(ddp, ss.states, ss.policies; solver = PFI)
+
 # ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
 md"""
-## Policy functions – How much to invest next period?
+## Policy functions
+
+The figure below show how much a household should consume and how much it should save given its current amount of assets and productivity state.
+"""
+
+# ╔═╡ 1b3d36ab-adae-40be-a14c-7ea6d9381a31
+let
+	fg = @chain results begin
+		stack(Not([:k, :z, :π]))
+		data(_) * mapping(
+			:k => L"current assets $k$",
+			:value => "policy",
+			layout = :variable,
+			color = :z => nonnumeric,
+		) * visual(Lines)
+		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+	end
+
+	ax = content(fg.figure[2,1])
+
+	fg
+end
+
+# ╔═╡ 0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
+k_first = @chain results begin
+	@subset(:k_next < :k)
+	@groupby(:z)
+	@combine(first(:k))
+end
+
+# ╔═╡ 75c18b79-8bf7-4355-a004-0438d738fccf
+md"""
+Below, we compute the lowest asset value at which we observe dissaving by the household. Households in the low productivity state dissave even when they are very close to the borrowing constraint, while households in the high productivity state only start dissaving above an asset level of $(round(k_first[1, "k_first"], digits = 3)).
 """
 
 # ╔═╡ 51615ade-06d2-40dd-9d54-f0dab0fe5e92
 md"""
 ## Stationary distribution
+
+The figures below show the stationary distribution over the state space. The first figure depicts the probability density over assets for both productivity levels separately, while the second figure averages over the two productivity states.
 """
+
+# ╔═╡ 47f3e4bc-affe-4463-b71e-36d9744b6c63
+	@chain results begin
+		data(_) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
+		draw
+	end
 
 # ╔═╡ e816135f-7f19-4a47-9ed1-fbc935506e17
 md"""
 ## Aggregate outcomes
 """
 
-# ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
+# ╔═╡ 16775912-a025-47f3-8e4f-fc6ce6142302
+md"""
+The function below computes aggregate consumption, aggregate assets etc. Since we assume that there is a probability mass 1 of households, computing the aggregate variables means computing the average over the state space weighted by the stationary distribution of households.
+"""
+
+# ╔═╡ 85a49b52-98e2-4d81-9b48-45586183bc83
 function aggregates(results)
 	@chain results begin
 		stack(Not(:π))
@@ -300,87 +398,89 @@ function aggregates(results)
 	end
 end
 
-# ╔═╡ 8af3171b-ba81-4b13-bd81-c2a8a1c311ed
+# ╔═╡ 4d34729d-43e0-4f4b-a700-a6b8c896d7e9
+agg = aggregates(results)
+
+# ╔═╡ 1be4b128-02c9-4e4e-8b1e-64553dbe0995
 md"""
-# Huggett equilibrium
+## Interactive results
 """
 
-# ╔═╡ e8c74b26-21d9-4d5b-af88-17969dd62887
-function solve_ddp(hh, ss, prices)
-	ddp = setup_DDP(hh, ss, prices)
-	results = solve_details(ddp, ss.states, ss.policies, solver = PFI)
-	ζ = aggregates(results)["a_next"]
+# ╔═╡ 08b99c92-6f31-42c7-a6dd-c213498deb8f
+md"""
+Risk aversion coefficient $\sigma$:
+"""
 
-	(; ζ, results)
-end
+# ╔═╡ ffb9ca0b-e5b0-45db-a94d-3fc0ba9c9a86
+@bind σ_slider Slider(1.:0.25:3., show_value = true, default = 2.)
 
-# ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
-ss = statespace(; a_vals = range(-2, 5.0, length = 200), z_chain)
+# ╔═╡ 6b98c99d-0261-4656-9477-9a538ffa6d6e
+md"""
+Discount factor $\beta$
+"""
 
-# ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
-# Use the instance to build a discrete dynamic program
-am_ddp = setup_DDP(hh, ss, prices);
+# ╔═╡ d52aa130-4e03-404a-8b56-b31efa9ca83a
+@bind β_slider Slider(0.95:0.005:0.97, show_value = true, default = 0.96)
 
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-# Solve using policy function iteration
-results = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
+# ╔═╡ d5a516f4-77b6-4cb2-b3e3-d7d5bd999aa0
+begin	
+	hh_slider = Household(σ = σ_slider, β = β_slider);
+	ddp_slider = setup_DDP(hh_slider, ss, prices);
+	results_slider = solve_details(ddp_slider, ss.states, ss.policies; solver = PFI);
+end;
+
+# ╔═╡ 2d1744d3-e8ec-4052-a3bb-e35b90ed60e4
+md"""
+Aggregate savings:
+$(round(mean(results_slider.k, weights(results_slider.π)), digits=3))
+"""
 
 # ╔═╡ 48eced48-2b86-4199-8637-4619c40c55e9
-let
-	fg = @chain results begin
-		stack(Not([:a, :z, :π])) #[:a_next, :consumption, :saving])
+begin
+	fg = @chain results_slider begin
+		stack(Not([:k, :z]))
 		data(_) * mapping(
-			:a => L"current assets $a$",
-			:value => "policy",
+			:k => "current assets k",
+			:value,
 			layout = :variable,
 			color = :z => nonnumeric,
 		) * visual(Lines)
 		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 	end
 
-	ax = content(fg.figure[2,1])
+	ax = content(fg.figure[2,2])
 
 	abline!(ax, 0, 1, color = :gray, linestyle = (:dash, :loose))
 
 	fg
 end
 
-# ╔═╡ 0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
-@chain results begin
-	@subset(:a_next < :a)
-	@groupby(:z)
-	@combine(first(:a))
-end
-
-# ╔═╡ f9ea2cc1-43b7-4953-8183-f0165448265b
-@chain results begin
-	data(_) * mapping(:a, :π, color = :z => nonnumeric) * visual(Lines)
-	draw
-end
-
-# ╔═╡ 0ace3bd5-3c87-431d-85c5-7707b7e2eb77
-@chain results begin
-	@groupby(:a)
-	@combine(:π = sum(:π))
-	data(_) * mapping(:a, :π) * visual(Lines)
-	draw
-end
-
-# ╔═╡ 4d34729d-43e0-4f4b-a700-a6b8c896d7e9
-agg = aggregates(results)
+# ╔═╡ 8af3171b-ba81-4b13-bd81-c2a8a1c311ed
+md"""
+# Huggett equilibrium
+"""
 
 # ╔═╡ 545c2acc-d07e-49d2-9476-690afacc6782
 md"""
 * interest rate: ``r = `` $r 
-* excess saving: ``\zeta = `` $(round(agg["a_next"], digits = 4))
+* excess saving: ``\zeta = `` $(round(agg["k_next"], digits = 4))
 """
+
+# ╔═╡ e8c74b26-21d9-4d5b-af88-17969dd62887
+function solve_ddp(hh, ss, prices)
+	ddp = setup_DDP(hh, ss, prices)
+	results = solve_details(ddp, ss.states, ss.policies, solver = PFI)
+	ζ = aggregates(results)["k_next"]
+
+	(; ζ, results)
+end
 
 # ╔═╡ 7f8ce957-c03f-4941-aec4-9e4cb313bc97
 @bind δ1 Slider(0.01:0.01:1, show_value = true)
 
 # ╔═╡ 490edcd9-8bd5-4f85-9586-196f55390988
 md"""
-### 1. Finding a bracket
+## Finding a bracket
 """
 
 # ╔═╡ c4f2a723-91ac-4e83-8ec8-d3550ea3aff9
@@ -402,7 +502,7 @@ begin
 	go2
 	if length(past_r) == 0
 		push!(past_r, r)
-		push!(past_ζ, agg["a_next"])
+		push!(past_ζ, agg["k_next"])
 	end
 end
 
@@ -432,11 +532,8 @@ end
 
 # ╔═╡ fa9db330-23f9-4e32-b993-6fef1fc6a925
 md"""
-### 2. Finding the equilibrium
+## Finding the equilibrium
 """
-
-# ╔═╡ 9254aeae-32a7-4189-a6d0-0c55cba8ef20
-#using Chain: @chain
 
 # ╔═╡ e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
 function update_r(past_r, past_ζ)
@@ -475,7 +572,7 @@ function update_results!(past_r, past_ζ, hh, ss, (; w, Δr))
 		(; ζ, results) = solve_ddp(hh, ss, (; w, q = q(r_new), Δr))
 
 		π = @chain results begin
-			@groupby(:a)
+			@groupby(:k)
 			@combine(:π = sum(:π))
 			_.π
 		end
@@ -550,120 +647,160 @@ end
 # ╔═╡ 37e26bec-97a2-407b-ba89-442024330220
 md"""
 # Aiyagari equilibrium
-
-Production function: $F(K, N) = A K^\alpha N^{1-\alpha}$ where $K$ is the capital stock and $N$ is labor
 """
+
+# ╔═╡ 027dc259-6c9e-407f-97af-4aaf032965f7
+md"""
+## Setup
+"""
+
+# ╔═╡ 2fddaf62-9767-475f-8089-0feb7fa2bf1c
+md"""
+The function below creates a named tuple with all parameters that describe the technology of the firm.
+"""
+
+# ╔═╡ be1749b7-4b57-4b4c-95bd-91697e5c3c72
+function Firm(A = 1, N = 1, α = 0.33, δ = 0.05)
+	(; A, N, α, δ)
+end
+
+# ╔═╡ 992c1737-a507-4198-9248-5d0687bee5b9
+md"""
+The production function is $F(K, N) = A K^\alpha N^{1-\alpha}$ where $K$ is the capital stock and $N$ is labor.
+"""
+
+# ╔═╡ 4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
+function production(f, K)
+	return f.A * K ^ f.α * f.N ^ (1 - f.α)
+end
+
+# ╔═╡ b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
+function capital_demand(f, r)
+	K = (f.α * f.A / (r + f.δ)) ^ (1 / (1 - f.α)) * f.N
+	return K
+end
+
+# ╔═╡ fbfb389c-b67b-4705-92f8-086742e59303
+function K_to_r(f, K)
+	# Compute the interest rate that is associated with the given demand for capital
+    return f.A * f.α * (f.N / K) ^ (1 - f.α) - f.δ
+end
+
+# ╔═╡ f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
+function r_to_w(f, r)
+	# Compute the wage that is associated with the given interest rate
+    return f.A * (1 - f.α) * (f.A * f.α / (r + f.δ)) ^ (f.α / (1 - f.α))
+end
+
+# ╔═╡ 12b70fb0-2f04-4f23-88e7-7a6feb255237
+md"""
+## Model parameters
+"""
+
+# ╔═╡ 41412b08-becc-42b7-b907-44e29c78fdf3
+firm = Firm()
+
+# ╔═╡ eed004a3-8e64-47e3-b0fb-a695470da43d
+md"""
+For the household problem, we choose other model parameters than in the Huggett model. Moreover, we use less grid points for assets to make sure that the calibration of $\beta$ does not take too much time.
+"""
+
+# ╔═╡ 7a1e858d-266c-45de-9c2e-0925dbd48d48
+hh2 = Household(β = 0.96, u = log)
+
+# ╔═╡ 99f45e48-b659-4d61-a033-6ec4d09072e1
+ss2 = statespace(; 
+	k_vals = range(1e-10, 20.0, length = 100),
+	z_chain = MarkovChain([0.9 0.1; 0.1 0.9], [0.1; 1.0])
+);
 
 # ╔═╡ 3390393a-48a7-47b9-8855-fd11098c107a
 md"""
-## Solving for the equilibrium
+## Finding the equilibrium
 """
 
-# ╔═╡ f9f2c729-b79e-4e55-b7fc-fe73bae0e405
-begin
-	# Firms' parameters
-	const A = 1
-	const N = 1
-	const α = 0.33
-	const β = 0.96
-	const δ = 0.05
-end;
-
-# ╔═╡ 4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
-function production(K)
-	return A * K ^ α * N ^ (1 - α)
-end;
-
-# ╔═╡ f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
-function r_to_w(r)
-	# Compute the wage that is associated with the given interest rate
-    return A * (1 - α) * (A * α / (r + δ)) ^ (α / (1 - α))
-end;
-
-# ╔═╡ fbfb389c-b67b-4705-92f8-086742e59303
-function K_to_r(K)
-	# Compute the interest rate that is associated with the given demand for capital
-    return A * α * (N / K) ^ (1 - α) - δ
-end;
-
-# ╔═╡ b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
-function capital_demand(r)
-	K = (α * A / (r + δ)) ^ (1 / (1 - α)) * N
-	return K
-end;
+# ╔═╡ 83574237-d23c-411f-90a1-ae7d832f65d6
+md"""
+First, we have a look at the capital demand and supply curves:
+"""
 
 # ╔═╡ 4af5f025-fd09-495e-82c7-59aec0f635d4
-function capital_supply(am, statespace, r)
-	# Compute capital supply for a given interest rate
+function capital_supply(hh, f, statespace, r)
 
-    # Set up problem
-    w = r_to_w(r)
+    w = r_to_w(f, r)
 	
-	ddp = setup_DDP(am, statespace, (; w, q=q(r), Δr = 0.0))
+	ddp = setup_DDP(hh, statespace, (; w, q=q(r), Δr = 0.0))
 	
 	results = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
 
-	# Return K
-    return 	K = mean(results.a, weights(results.π))
-end;
-
-# ╔═╡ afff76ff-0215-46c8-be3c-bab66b0c63e0
-function excess_demand(am, statespace, r)
-	supply = capital_supply(am, statespace, r)
-	demand = capital_demand(r)
-	return demand - supply
-end;
-
-# ╔═╡ 7a1e858d-266c-45de-9c2e-0925dbd48d48
-# Create an instance of Household
-am2 = Household(β = 0.96, u = log);
-
-# ╔═╡ 99f45e48-b659-4d61-a033-6ec4d09072e1
-# TODO: ask Fabian why we are using a different matrix with decision probabilities here
-
-ss2 = statespace(; z_chain = MarkovChain([0.9 0.1; 0.1 0.9], [0.1; 1.0]));
+    return 	K = mean(results.k, weights(results.π))
+	
+end
 
 # ╔═╡ 1062e7f6-6a3d-4725-a3c2-479462aa139a
 begin
 
-	# Create a grid of r values at which to compute supply of capital
 	r_vals_supply = range(0.001, 0.04, length = 20);
 
-	# Compute supply of capital for given grid of interest rates
 	k_vals = capital_supply.(
-		Ref(am2),
+		Ref(hh2),
+		Ref(firm),
 		Ref(ss2),
 		r_vals_supply
 	);
 
-	r_vals_demand = K_to_r.(k_vals);
+	r_vals_demand = K_to_r.(Ref(firm), k_vals);
 
 end;
 
 # ╔═╡ 8b8ae8a4-137b-4a7f-a6f4-aca2b1c12508
-# TODO: ask Fabian why no legend appears
-
 let
-	fig, _ = lines(k_vals, r_vals_demand, label = "demand for capital", axis = (xlabel = "capital", ylabel = "interest rate"))
-	lines!(k_vals, r_vals_supply, label = "supply of capital")
-	#scatter!([k_eq], [r_eq], color = "red", label = "equilibrium")
+
+	fig = Figure()
+	
+	ax = fig[1, 1] = Axis(fig, xlabel = "capital", ylabel = "interest rate")
+	
+	lines!(k_vals, r_vals_demand, label = "demand")
+	lines!(k_vals, r_vals_supply, label = "supply")
+
+	axislegend()
 	
 	fig
+	
+end
+
+# ╔═╡ afff76ff-0215-46c8-be3c-bab66b0c63e0
+function excess_demand(hh, f, statespace, r)
+	supply = capital_supply(hh, f, statespace, r)
+	demand = capital_demand(f, r)
+	return demand - supply
 end
 
 # ╔═╡ 696278ad-dd04-4177-be08-82ebdecf1408
 begin
 	initial_bracket = (0.005, 0.055)
-	r_eq = find_zero(r -> excess_demand(am2, ss2, r), initial_bracket, Brent())
-	k_eq = capital_demand(r_eq)
+	r_eq = find_zero(r -> excess_demand(hh2, firm, ss2, r), initial_bracket, Brent())
+	k_eq = capital_demand(firm, r_eq)
 	(r_eq, k_eq)
 end
+
+# ╔═╡ cfdfbaca-0de4-4094-b823-dd9d5e144a49
+md"""
+To determine the exact equilibrium interest rate, we apply a root-finding algorithm to a function that computes excess demand for capital for a given interest rate. 
+
+Since the household's decision problem needs to be solved for a different value of the interest rate at each step of the algorithm, finding the equilibrium can be time-consuming, especially in more complicated models.
+
+The resulting equilibrium interest rate is $(round(r_eq, digits = 4)) and the associated capital stock is $(round(k_eq, digits = 3)).
+"""
+
+# ╔═╡ ba7fc395-7003-45dd-a1a3-21737c9764bc
+wto_target = 3.63
 
 # ╔═╡ 4feee3a9-d290-4d97-aa74-7910a17d27ca
 md"
 ## Calibrating the discount factor $\beta$
 
-Now, let's choose the discount factor $\beta$ such that the wealth-to-output ratio $K/F(K,N)$ matches the US value of 3.63 (Auclert and Rognlie, 'Inequality and Aggregate Demand', Appendix B). We can achieve this by minimizing the objective function 
+Now, let's choose the discount factor $\beta$ such that the wealth-to-output ratio $K/F(K,N)$ matches the US value of $(round(wto_target, digits=3)) (Auclert and Rognlie, 'Inequality and Aggregate Demand', Appendix B). We can achieve this by minimizing the objective function 
 
 $O(\beta) = \left(\frac{K(\beta)}{F(K(\beta),N)} - 3.63\right)^2$
 
@@ -671,28 +808,27 @@ where $K(\beta)$ denotes the equilibrium capital stock in the Aiyagari model tha
 
 "
 
-# ╔═╡ ba7fc395-7003-45dd-a1a3-21737c9764bc
-wto_target = 3.63;
-
 # ╔═╡ e1f7481a-c4a8-4856-9cd2-2e446b85334f
-function wealth_to_output_ratio(β, statespace, initial_bracket)
+function wealth_to_output_ratio(β, hh, firm, statespace, initial_bracket)
 
-	am_β = Household(β = β)
+	hh_β = Household(β = β, u = hh.u)
 	
-	r_eq = find_zero(r -> excess_demand(am_β, statespace, r), initial_bracket, Brent())
-	k_eq = capital_demand(r_eq)
+	r_eq = find_zero(r -> excess_demand(hh_β, firm, statespace, r), initial_bracket, Brent())
+	k_eq = capital_demand(firm, r_eq)
 
-	return k_eq/ production(k_eq)
+	return k_eq/ production(firm, k_eq)
 	
-end;
+end
+
+# ╔═╡ 4de4a9ef-cc86-400b-aa7d-a3be6f7e58f9
+wealth_to_output_ratio(0.96, hh2, firm, ss2, initial_bracket)
 
 # ╔═╡ 7d5c40d5-0a3e-465a-8619-2786126d2be0
 begin
 	
-	# Create a grid of beta values
-	β_vals = [0.945, 0.95, 0.955, 0.96, 0.965]
+	β_vals = 0.945:0.005:0.965
 
-	wto_vals = [wealth_to_output_ratio(β, ss2, initial_bracket) for β in β_vals]
+	wto_vals = [wealth_to_output_ratio(β, hh2, firm, ss2, initial_bracket) for β in β_vals]
 
 	obj_vals = (wto_vals .- wto_target) .^ 2
 	
@@ -703,7 +839,7 @@ lines(β_vals, obj_vals, axis = (xlabel = "discount factor β", ylabel = "value 
 
 # ╔═╡ 669719e4-0b05-4364-8aed-33e1b7adc400
 β_cal = find_zero(
-	β -> wealth_to_output_ratio(β, ss2, initial_bracket) - 3.63, 
+	β -> wealth_to_output_ratio(β, hh2, firm, ss2, initial_bracket) - wto_target, 
 	(0.945, 0.965), 
 	Brent()
 )
@@ -725,7 +861,6 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-MarkdownLiteral = "736d6165-7244-6769-4267-6b50796e6954"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
@@ -797,9 +932,9 @@ version = "0.1.0"
 
 [[deps.ArrayInterface]]
 deps = ["Compat", "IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
-git-tree-sha1 = "8d4a07999261b4461daae67b2d1e12ae1a097741"
+git-tree-sha1 = "c933ce606f6535a7c7b98e1d86d5d1014f730596"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "5.0.6"
+version = "5.0.7"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -853,12 +988,6 @@ deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
-
-[[deps.Calculus]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
-uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
-version = "0.5.1"
 
 [[deps.Chain]]
 git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
@@ -1007,9 +1136,9 @@ version = "0.4.0"
 
 [[deps.Dictionaries]]
 deps = ["Indexing", "Random"]
-git-tree-sha1 = "7e73a524c6c282e341de2b046e481abedbabd073"
+git-tree-sha1 = "0340cee29e3456a7de968736ceeb705d591875a2"
 uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
-version = "0.3.19"
+version = "0.3.20"
 
 [[deps.DiffResults]]
 deps = ["StaticArrays"]
@@ -1048,12 +1177,6 @@ version = "0.8.6"
 [[deps.Downloads]]
 deps = ["ArgTools", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
-
-[[deps.DualNumbers]]
-deps = ["Calculus", "NaNMath", "SpecialFunctions"]
-git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
-uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
-version = "0.6.8"
 
 [[deps.EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1152,10 +1275,10 @@ uuid = "d7e528f0-a631-5988-bf34-fe36492bcfd7"
 version = "2.10.4+0"
 
 [[deps.FreeTypeAbstraction]]
-deps = ["ColorVectorSpace", "Colors", "FreeType", "GeometryBasics", "StaticArrays"]
-git-tree-sha1 = "8e76bcd47f98ee25c8f8be4b9a1c60f48efa4f9e"
+deps = ["ColorVectorSpace", "Colors", "FreeType", "GeometryBasics"]
+git-tree-sha1 = "b5c7fe9cea653443736d264b85466bad8c574f4a"
 uuid = "663a7486-cb36-511b-a19d-713bb74d65c9"
-version = "0.9.7"
+version = "0.9.9"
 
 [[deps.FriBidi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1225,12 +1348,6 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
-
-[[deps.HypergeometricFunctions]]
-deps = ["DualNumbers", "LinearAlgebra", "SpecialFunctions", "Test"]
-git-tree-sha1 = "65e4589030ef3c44d3b90bdc5aac462b4bb05567"
-uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
-version = "0.3.8"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -1476,9 +1593,9 @@ version = "0.5.4"
 
 [[deps.LogExpFunctions]]
 deps = ["ChainRulesCore", "ChangesOfVariables", "DocStringExtensions", "InverseFunctions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "58f25e56b706f95125dcb796f39e1fb01d913a71"
+git-tree-sha1 = "a7e100b068a6cbead98b9f4e5c8b488934b7aea0"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "0.3.10"
+version = "0.3.11"
 
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -1515,12 +1632,6 @@ version = "0.4.1"
 [[deps.Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
-
-[[deps.MarkdownLiteral]]
-deps = ["CommonMark", "HypertextLiteral"]
-git-tree-sha1 = "0d3fa2dd374934b62ee16a4721fe68c418b92899"
-uuid = "736d6165-7244-6769-4267-6b50796e6954"
-version = "0.1.1"
 
 [[deps.Match]]
 git-tree-sha1 = "1d9bc5c1a6e7ee24effb93f175c9342f9154d97f"
@@ -1870,9 +1981,9 @@ version = "0.3.0+0"
 
 [[deps.Roots]]
 deps = ["CommonSolve", "Printf", "Setfield"]
-git-tree-sha1 = "6085b8ac184add45b586ed8d74468310948dcfe8"
+git-tree-sha1 = "838b60ee62bebc794864c880a47e331e00c47505"
 uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "1.4.0"
+version = "1.4.1"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -1990,10 +2101,10 @@ uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.16"
 
 [[deps.StatsFuns]]
-deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "72e6abd6fc9ef0fa62a159713c83b7637a14b2b8"
+deps = ["ChainRulesCore", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "5950925ff997ed6fb3e985dcce8eb1ba42a0bbe7"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "0.9.17"
+version = "0.9.18"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
@@ -2052,11 +2163,6 @@ deps = ["Random", "Test"]
 git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.6"
-
-[[deps.URIs]]
-git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
-uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
-version = "1.3.0"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -2212,50 +2318,66 @@ version = "3.5.0+0"
 # ╟─f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╟─a274b461-a5df-446a-8374-f04267f5db69
-# ╠═30e30208-17ed-4ba5-a8db-12a16e9326c6
+# ╟─30e30208-17ed-4ba5-a8db-12a16e9326c6
 # ╟─d462c281-4b71-4763-9a78-99cc6e8fd55d
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
-# ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
+# ╟─dc6d11cd-7d0a-4a22-9da1-30b92a2fa61b
+# ╟─0c84ac5d-6bfe-4b51-ae91-b2267dfcc6c9
 # ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
-# ╠═df975df6-90db-408b-a908-52fb4b0637f6
-# ╠═ce25751c-949a-4ad3-a572-679f403ccb98
+# ╟─8bdedbd6-0001-4e0f-97ae-bf6598cee9be
+# ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
+# ╟─504d1052-4dd7-4fb0-9969-32252483e913
 # ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
-# ╠═7a15adab-ae5e-4bf1-ac61-ae90d4393552
+# ╠═ce25751c-949a-4ad3-a572-679f403ccb98
+# ╟─79e568dc-d38c-49ba-9629-970df69a8517
+# ╠═d60367db-cf92-4c0a-aea4-eddb6552e2c8
 # ╠═e3930baf-0560-4994-a637-7cb1923ce33c
-# ╠═4342d4de-65f0-4ecf-bb2f-7546e337e7de
-# ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
+# ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
+# ╟─7a15adab-ae5e-4bf1-ac61-ae90d4393552
+# ╠═df975df6-90db-408b-a908-52fb4b0637f6
 # ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
+# ╟─a0be9564-16ff-4284-aa2b-928321639857
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
 # ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
-# ╠═9f4a757b-1689-4d03-9195-1cbfc6a0a7e9
 # ╠═59d7c6f7-4704-4866-9280-22d37b328499
+# ╟─a1ec9549-33f8-4f5a-ae36-dabf4792daa6
 # ╠═9be81a15-7117-4911-8254-4848df50c059
-# ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
+# ╟─4c0249e6-b502-465f-b0f8-3913e568d868
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
+# ╟─e40b55e0-2d61-4c0e-a270-e85e21f1cb2b
+# ╠═ff2e7c0b-0a74-4bc4-b4ea-e1d92020b847
+# ╟─611f8c53-4791-4aa6-a854-d3169698e3b7
+# ╠═0a12f73a-5286-4146-8a20-00ed4aaaec72
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
-# ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
+# ╟─977ba36a-9b54-4d4f-a0b8-95c9155f7d43
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 # ╠═4fa93659-4a83-4874-8595-ca59c16faa0e
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
-# ╠═48eced48-2b86-4199-8637-4619c40c55e9
+# ╠═1b3d36ab-adae-40be-a14c-7ea6d9381a31
+# ╟─75c18b79-8bf7-4355-a004-0438d738fccf
 # ╠═0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
-# ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
-# ╠═0ace3bd5-3c87-431d-85c5-7707b7e2eb77
+# ╠═47f3e4bc-affe-4463-b71e-36d9744b6c63
 # ╟─e816135f-7f19-4a47-9ed1-fbc935506e17
-# ╠═c9771579-bf40-4f39-b272-4bd5b3be9730
+# ╟─16775912-a025-47f3-8e4f-fc6ce6142302
 # ╠═4d34729d-43e0-4f4b-a700-a6b8c896d7e9
+# ╠═85a49b52-98e2-4d81-9b48-45586183bc83
+# ╟─1be4b128-02c9-4e4e-8b1e-64553dbe0995
+# ╟─08b99c92-6f31-42c7-a6dd-c213498deb8f
+# ╟─ffb9ca0b-e5b0-45db-a94d-3fc0ba9c9a86
+# ╟─6b98c99d-0261-4656-9477-9a538ffa6d6e
+# ╟─d52aa130-4e03-404a-8b56-b31efa9ca83a
+# ╟─d5a516f4-77b6-4cb2-b3e3-d7d5bd999aa0
+# ╟─2d1744d3-e8ec-4052-a3bb-e35b90ed60e4
+# ╟─48eced48-2b86-4199-8637-4619c40c55e9
 # ╟─8af3171b-ba81-4b13-bd81-c2a8a1c311ed
-# ╠═99cdef3b-691b-4837-97d3-9e867870712d
 # ╟─545c2acc-d07e-49d2-9476-690afacc6782
 # ╠═179ce1c1-7bbc-4423-b184-3043b6c0da82
 # ╠═46b74033-3882-4b14-89ad-8db468d85f07
 # ╠═e8c74b26-21d9-4d5b-af88-17969dd62887
 # ╠═06079505-cf27-4965-aa6d-90e0f63e093a
-# ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
-# ╠═6426f93f-8313-4547-94ef-e894ffa94f24
 # ╠═7f8ce957-c03f-4941-aec4-9e4cb313bc97
 # ╟─490edcd9-8bd5-4f85-9586-196f55390988
 # ╟─c4f2a723-91ac-4e83-8ec8-d3550ea3aff9
@@ -2263,32 +2385,38 @@ version = "3.5.0+0"
 # ╟─9ba9e707-27db-4134-bf4f-a8eb768e9a95
 # ╟─72021aa4-e376-4f7a-b3af-dd113b535ac9
 # ╠═d9529db6-fe87-4b2a-8017-759762119ff3
-# ╠═beb1a4df-fab4-4467-9c36-474cb06a9db2
 # ╠═dc5c4cf1-2bca-4361-b4f5-2e15bc79ab9d
 # ╟─fa9db330-23f9-4e32-b993-6fef1fc6a925
-# ╠═9254aeae-32a7-4189-a6d0-0c55cba8ef20
 # ╟─7ea1c5c1-6852-4975-b181-67120e3fde51
 # ╠═6a03e5cf-2f26-4ff5-8137-f5ab5b3401e2
 # ╠═9c6211bb-04e1-4030-ae17-a417fe76d7e4
-# ╠═119acd7b-8076-4c8e-9992-8fb23dc5e2c9
 # ╠═e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
 # ╟─37e26bec-97a2-407b-ba89-442024330220
-# ╟─3390393a-48a7-47b9-8855-fd11098c107a
-# ╠═f9f2c729-b79e-4e55-b7fc-fe73bae0e405
+# ╟─027dc259-6c9e-407f-97af-4aaf032965f7
+# ╟─2fddaf62-9767-475f-8089-0feb7fa2bf1c
+# ╠═be1749b7-4b57-4b4c-95bd-91697e5c3c72
+# ╟─992c1737-a507-4198-9248-5d0687bee5b9
 # ╠═4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
-# ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
-# ╠═fbfb389c-b67b-4705-92f8-086742e59303
 # ╠═b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
-# ╠═4af5f025-fd09-495e-82c7-59aec0f635d4
-# ╠═afff76ff-0215-46c8-be3c-bab66b0c63e0
+# ╠═fbfb389c-b67b-4705-92f8-086742e59303
+# ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
+# ╟─12b70fb0-2f04-4f23-88e7-7a6feb255237
+# ╠═41412b08-becc-42b7-b907-44e29c78fdf3
+# ╟─eed004a3-8e64-47e3-b0fb-a695470da43d
 # ╠═7a1e858d-266c-45de-9c2e-0925dbd48d48
 # ╠═99f45e48-b659-4d61-a033-6ec4d09072e1
+# ╟─3390393a-48a7-47b9-8855-fd11098c107a
+# ╟─83574237-d23c-411f-90a1-ae7d832f65d6
+# ╠═4af5f025-fd09-495e-82c7-59aec0f635d4
 # ╠═1062e7f6-6a3d-4725-a3c2-479462aa139a
 # ╠═8b8ae8a4-137b-4a7f-a6f4-aca2b1c12508
+# ╟─cfdfbaca-0de4-4094-b823-dd9d5e144a49
 # ╠═696278ad-dd04-4177-be08-82ebdecf1408
+# ╠═afff76ff-0215-46c8-be3c-bab66b0c63e0
 # ╟─4feee3a9-d290-4d97-aa74-7910a17d27ca
 # ╠═ba7fc395-7003-45dd-a1a3-21737c9764bc
 # ╠═e1f7481a-c4a8-4856-9cd2-2e446b85334f
+# ╠═4de4a9ef-cc86-400b-aa7d-a3be6f7e58f9
 # ╠═7d5c40d5-0a3e-465a-8619-2786126d2be0
 # ╠═4b98d280-4ea1-4a32-be4f-ecdcc3d937ee
 # ╠═669719e4-0b05-4364-8aed-33e1b7adc400
