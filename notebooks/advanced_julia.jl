@@ -130,7 +130,7 @@ df = DataFrame(A=[1,2,2,1], B=randn(4))
 md"""
 Consider the data frame above. Let's say you would like to
 - add up the values in the B column separately for each value of A
-- take the square-root of the resulting sums of B values.
+- take the absolute value of the resulting sums of B values.
 
 Using the ```@chain``` macro, we can perform this task with relatively concise code:
 """
@@ -139,7 +139,7 @@ Using the ```@chain``` macro, we can perform this task with relatively concise c
 @chain df begin
 	@groupby(:A)
 	@combine(:B_sum = sum(:B))
-	@transform(sqrt(:B_sum))
+	@transform(abs(:B_sum))
 end
 
 # ╔═╡ 925436fb-e535-4735-888a-b047693c9132
@@ -151,7 +151,7 @@ Without the ```@chain``` macro, the code would look like this:
 begin
 	df_groups = groupby(df, :A)
 	df_sum = @combine(df_groups, :B_sum = sum(:B))
-	@transform(df_sum, sqrt(:B_sum))
+	@transform(df_sum, abs(:B_sum))
 end
 
 # ╔═╡ 5cc63149-7edf-45b0-a198-d0f308a52618
