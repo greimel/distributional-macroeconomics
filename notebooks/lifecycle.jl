@@ -4,195 +4,95 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
-using Optim
-
-# ╔═╡ 7533daf6-3391-4010-b748-113cc8d6f2e7
+# ╔═╡ 1d92eaa0-ba41-11ec-346e-7561afaf6a08
 using QuantEcon
 
-# ╔═╡ 4c27c529-5be1-4795-85b6-29b8cad31d83
-using DataFrames, Chain, DataFrameMacros
+# ╔═╡ 6ccea34a-398f-4b09-a869-1d3a5c127921
+using Chain, DataFrameMacros, DataFrames
 
-# ╔═╡ e366730a-8538-48d0-8160-29fb0918bcb3
-using CairoMakie, AlgebraOfGraphics
+# ╔═╡ 8e41fd25-f764-44e3-969d-11222c77d133
+using CairoMakie
 
-# ╔═╡ b642e1d7-91bb-4fb5-9b6c-13efe409d791
+# ╔═╡ 35036c53-300d-4313-97cc-ab7442462c89
 using AlgebraOfGraphics: draw
 
-# ╔═╡ f142563e-3857-4d24-bbc0-6d4f34d0487f
+# ╔═╡ cf76322e-c2f5-4ea9-9839-eca43eb5bc38
+using StatsBase
+
+# ╔═╡ b990aeca-b008-4069-8d9a-b04cae2c597c
 using StatsBase: weights
 
-# ╔═╡ 58cc5669-e4d3-4a43-b162-ec40258022a3
-using PlutoUI
+# ╔═╡ 09d2c74a-7359-4505-be0c-efdf0207c1de
+using AlgebraOfGraphics
 
-# ╔═╡ e69d0b3c-58b8-45e5-8d38-954aac2007c3
+# ╔═╡ f8180d17-5592-438d-a1cf-2e04f1c77aa5
+using AlgebraOfGraphics: density
+
+# ╔═╡ e2193a09-f332-454d-991f-12ae621148d7
+using AoGExtensions
+
+# ╔═╡ 56d57b34-b673-468a-9f7a-e909c8198307
+using LinearAlgebra
+
+# ╔═╡ 06eb6851-032d-4c24-83f5-43340dd61905
+using LightGraphs
+
+# ╔═╡ e9867950-f878-42c3-983c-61fd30cebb9c
+using PlutoUI: TableOfContents
+
+# ╔═╡ f5333200-a779-4118-a54b-79250d6ceaf3
 md"""
 !!! danger "Under construction!"
 
 	**This notebook is not ready for public consumption.** Use at your own risk.
 """
 
-# ╔═╡ ffd3bd56-ae65-11ec-28c2-03ac858b9050
+# ╔═╡ ddb1bf24-bba7-4eab-8eac-91a9457dc824
 md"""
-`housing.jl` | **Version 0.1** | *last updated: Mar 28 2022*
+`lifecycle.jl` | **Version 0.1** | *last updated: Apr 13 2022*
 """
 
-# ╔═╡ aa7682ea-30e1-4f9a-a553-0a7bc66c1553
+# ╔═╡ 8b2f077d-1ef0-4a51-9e2e-2b57e4464d25
 md"""
-```math
-\begin{align}
-&\max \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t, h_t) \Bigr) \\
-&\begin{aligned}
-	\text{subject to } 
-		&u(c, h) = h^\xi c^{1-\xi} \\
-		&c_t + p h_t + a_t = p h_{t-1} (1-\delta) + a_{t-1}(1 + r) + y_t \cdot w \\
-		&\log(y_t) \sim \text{some Markov Chain} \\
-		&y_0, k_{-1}, h_{-1} \text{ given}
-\end{aligned}
-\end{align}
-```
+# Lifecycle models
 
-What needs to be specified:
-* parameter ``\delta``, ``\xi``
-* prices ``r``, ``w``
-* idiosynchratic productivity process
-* initial state ``(y_0, k_{-1})``
+The setup should be basically identical to the one in `aiyagari.jl`, except that demographic structure is changed. We'll cover the case of finite lifetime and perpetual youth.
 """
 
-# ╔═╡ 075ea631-db48-43de-9c07-9bda9f7d66ad
+# ╔═╡ 96ab8b9c-7211-4b85-a46e-cba792c6f405
 md"""
-## Setting up the recursive problem
-
-### Naive way: two endogenous states
-
-```math
-\begin{align}
-\tilde s_t &= (a_{t-1}, h_{t-1}, y_t) \\
-\tilde a_t &= (a_{t}, h_{t}) \\
-c(\tilde s, \tilde a) &= y_t \cdot w + \underbrace{a_{t-1}(1+r) + p h_{t-1} (1-\delta)}_{=: \omega_t} - p h_t - a_t \\
-r(\tilde s, (a, h)) &= u(c(\tilde s, \tilde a), h) \\
-q(\underbrace{(\cdot, \cdot, y_t)}_{\tilde s_t}, \underbrace{(\hat a_t, \hat h_t)}_{\tilde a_t}, \underbrace{(a_t, h_t, y_{t+1})}_{\tilde s_{t+1}}) &= \begin{cases}
-\Pr(y_t | y_{t-1}) &\text{if }\hat a_t = a_t \text{ and } \hat h_t = h_t\\
-0 & \text{otherwise}
-\end{cases}
-\end{align}
-```
+## Setup
 """
 
-# ╔═╡ 50ab36c4-5274-4498-8478-dcb28d20677a
-md"""
-### Sophisticated way: one endogenous state, two actions
+# ╔═╡ 5a11b72d-616a-446f-847c-e81d6f94f16f
+function statespace(;
+			a_vals = range(1e-10, 20.0, length = 200),
+			z_chain
+		)
+	states = 
+		[(; a, z) for a ∈ a_vals, z ∈ z_chain.state_values] |> vec
+	states_indices = 
+		[(; a_i, z_i) for a_i ∈ 1:length(a_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
+    policies = 
+	    [(; a_next) for a_next ∈ a_vals] |> vec
+	policies_indices = 
+	    [(; a_next_i) for a_next_i ∈ 1:length(a_vals)] |> vec
 
-Only possible if housing perfectly liquid (i.e. no adjustment frictions)
-
-```math
-\begin{align}
-\tilde s_t &= (\omega_t, y_t) \\
-\tilde a_t &= (a_{t}, h_{t}) \\
-c(\tilde s, \tilde a) &= y_t \cdot w + \omega_t - a_t - p h_t) \\
-r(\tilde s, (a, h)) &= u(c(\tilde s, \tilde a), h) \\
-q(\underbrace{(\cdot, y_t)}_{\tilde s_t}, \underbrace{(a_t, h_t)}_{\tilde a_t}, \underbrace{(\omega_{t+1}, y_{t+1})}_{\tilde s_{t+1}}) &= \begin{cases}
-\Pr(y_t | y_{t-1}) &\text{if } \omega_{t+1} = a_t (1+r) + (1-\delta)ph_t\\
-0 & \text{otherwise}
-\end{cases}
-\end{align}
-```
-"""
-
-# ╔═╡ b2dff4ba-aee7-44fa-86d6-c00c1e1fd81d
-md"""
-### Sophisticated way: one endogenous state, one action
-
-Only possible if
-* housing perfectly liquid (i.e. no adjustment frictions)
-* preferences are simple enough
-
-```math
-\begin{align}
-\tilde s_t &= (\omega_t, y_t) \\
-\tilde a_t &= (\omega_{t+1}) \\
-c(\tilde s, \tilde a) &= y_t \cdot w + \omega_t - a_t - p h_t) \\
-r(\tilde s, (\omega_{t+1})) &= u(c(\tilde s, \tilde a), h(\tilde s, \tilde a)) \\
-q(\underbrace{(\cdot, y_t)}_{\tilde s_t}, \underbrace{(a_t, h_t)}_{\tilde a_t}, \underbrace{(\omega_{t+1}, y_{t+1})}_{\tilde s_{t+1}}) &= \begin{cases}
-\Pr(y_t | y_{t-1}) &\text{if } \omega_{t+1} = a_t (1+r) + (1-\delta)ph_t\\
-0 & \text{otherwise}
-\end{cases}
-\end{align}
-```
-"""
-
-# ╔═╡ 5ccd7567-0004-4d0e-9427-f60a44673b87
-ξ = 0.3
-
-# ╔═╡ 5d4b4f3a-42ca-4a8a-8188-ec6d963a5ef3
-md"""
-# Setting up the `DDP`
-"""
-
-# ╔═╡ 62a7cadf-b47a-4ac1-be5b-98c9413b4808
-md"""
-## Reward `R`
-"""
-
-# ╔═╡ e8cccfb3-a12a-4050-b5c3-2d7a0990d6a9
-function consumption((; ω, z), (; ω_next), h_next, (; r, w, p), (; δ)) 
-	ω - ω_next/(1+r) + z * w - p * h_next * (1 - (1-δ)/(1+r))
+	(; states, states_indices, policies, policies_indices, z_chain)
 end
 
-# ╔═╡ 845c11bc-e605-47ff-821f-a6b61e9e10c5
-a_next((; ω_next), h_next, (; p, r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
-
-# ╔═╡ cfe30e78-73cd-4b84-bd16-f58fb43d9e5a
-function consumption2(
-		(; ω, z), policy, h_next, prices, params;
-		a_next = a_next(policy, h_next, prices, params)
-	)
-	(; w, p) = prices
-	
-	z * w + ω - a_next - p*h_next
+# ╔═╡ 9cf045e6-4e0d-4548-b22f-e853c43c55f1
+function Household(; σ = 1.0, β = 0.96, m = 0.0,	
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
+	(; β, u, m)
 end
 
-# ╔═╡ 0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
-h_max((; ω_next), (; p, r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
-
-# ╔═╡ 9403d178-674d-4d6e-a0d4-27a217469898
-function reward_etc(state, policy, h_next, prices, params; u)
-	a_n = a_next(policy, h_next, prices, params) 
-	c = consumption(state, policy, h_next, prices, params)
-	#c2 = consumption2(state, policy, h_next, prices, params; a_next=a_n)
-	#@assert c ≈ c2
-	(; reward = u(c, h_next), c, h_next, a_next = a_n, policy...)
-end
-
-# ╔═╡ 76721e80-a0fb-45dd-b88c-75d5447aa7e9
-function setup_R_etc!(R, etc, states, policies, prices, params; u)
-	for (i_state, state) ∈ enumerate(states)
-		for (i_policy, policy) ∈ enumerate(policies)		
-
-			h̄ = h_max(policy, prices, params)
-			res = maximize(h_next -> reward_etc(state, policy, h_next, prices, params; u).reward, eps(), h̄)
-		
-			h_opt = Optim.maximizer(res)
-		
-			out = reward_etc(state, policy, h_opt, prices, params; u)
-		
-			R[i_state, i_policy] = out.reward
-			etc[i_state, i_policy] = (; out..., h̄)
-		end
-	end
-end
-
-# ╔═╡ 1a1eb9eb-cd8b-4cfc-a74e-d6502e17624b
-md"""
-## Transitions `Q`
-"""
-
-# ╔═╡ 92e84b5d-0f8a-47de-ae10-f216ed72fe14
+# ╔═╡ f64126ce-0e61-43ee-8a5d-56c16f5e6025
 function setup_Q!(Q, states_indices, policies_indices, z_chain)
     for (i_next_state, next) ∈ enumerate(states_indices)
-        for (i_policy, (; ω_next_i)) ∈ enumerate(policies_indices)
+        for (i_policy, (; a_next_i)) ∈ enumerate(policies_indices)
             for (i_state, (; z_i)) ∈ enumerate(states_indices)
-                if next.ω_i == ω_next_i
+                if next.a_i == a_next_i
                     Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
                 end
             end
@@ -201,262 +101,513 @@ function setup_Q!(Q, states_indices, policies_indices, z_chain)
     return Q
 end
 
-# ╔═╡ 9c588d0f-c41c-4369-88c6-4ecb8378c9f0
+# ╔═╡ 077437bf-bfb1-4b49-861d-4378f90b8d6b
 function setup_Q(states_indices, policies_indices, z_chain)
 	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
 	setup_Q!(Q, states_indices, policies_indices, z_chain)
 	Q
 end
 
-# ╔═╡ ab1cd091-3876-412a-8123-aea9cf06bf43
-md"""
-# Solve `DDP`
-"""
-
-# ╔═╡ cbe321fb-4ebc-4057-b4dc-c278fb3132a7
-ε = 0.25
-
-# ╔═╡ 105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
-z_chain = MarkovChain([1-ε ε/2 ε/2;
-	ε/2 1-ε ε/2;
-	ε/2 ε/2 1-ε], [1.25, 1.0, 0.75])
-
-# ╔═╡ e54f5d50-e62a-4b36-83fd-1a14350ad339
-function statespace(;
-			ω_vals = range(1e-10, 20.0, length = 200),
-			z_chain
-		)
-	states = 
-		[(; ω, z) for ω ∈ ω_vals, z ∈ z_chain.state_values] |> vec
-	states_indices = 
-		[(; ω_i, z_i) for ω_i ∈ 1:length(ω_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
-    policies = 
-	    [(; ω_next) for ω_next ∈ ω_vals] |> vec
-	policies_indices = 
-	    [(; ω_next_i) for ω_next_i ∈ 1:length(ω_vals)] |> vec
-
-	(; states, states_indices, policies, policies_indices, z_chain)
-end
-
-# ╔═╡ 3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
-function make_u(; ξ, σ)
-	function u(c, h)
-		if c > 0 && h > 0
-			C = c^(1-ξ) * h^ξ
-			σ == 1 ? log(C) : C^(1-σ) / (1-σ)
-		else #h > 0
-			-Inf
-		#	h^ξ + 100 * c - 100
-		end
+# ╔═╡ ce7a8b0d-7045-411b-b04d-dcf5ee88d54f
+function consumption((; z, a), (; a_next), (; q, w, Δr))
+	if a_next < 0 && Δr > 0
+		r = (1/q - 1) + (a_next < 0) * Δr
+		q = 1/(1+r)
 	end
+	c = w * z + a - q * a_next
+	(; c, a_next)
 end
 
-# ╔═╡ a384b136-ba71-48b6-8568-d8b9d9f2411e
-function Household(; σ = 2.0, ξ = 0.3, β = 0.96,	
-                    u = make_u(; ξ, σ))
-	(; β, u)
+# ╔═╡ e0672d2c-d485-40af-918e-ce3d60bd30a0
+function reward_etc(state, policy, prices, u)
+	(; c, a_next) = consumption(state, policy, prices)
+    if c > 0
+		reward = u(c)
+	else
+		reward = -100_000 + 100 * c
+	end
+	(; reward, c)
 end
 
-# ╔═╡ 212f8242-4e7b-43b0-a690-32a40f4c768f
-household = Household()
+# ╔═╡ b6ca379a-d0c4-4184-a54c-47623d181de6
+function setup_R_etc!(R, etc, states, policies, prices, u)
+    for (i_policy, policy) ∈ enumerate(policies)
+        for (i_state, state) ∈ enumerate(states)
+			out = reward_etc(state, policy, prices, u)
+            R[i_state, i_policy] = out.reward
+			etc[i_state, i_policy] = (; out...)
+        end
+    end
+    return nothing
+end
 
-# ╔═╡ 5aa1d752-cba3-417a-a350-ba6e7b406354
-Δ = 0.01
-
-# ╔═╡ bfa69b95-8f5d-4987-861f-1df3c75b4e3b
-make_u(ξ = 0.5, σ = 2.0)(2 - Δ, 0.01 + Δ/1.0)
-
-# ╔═╡ bddb801d-0506-4b58-925b-3e44d3f52f3c
-params = (; δ = 0.02, ϕ = 0.8)
-
-# ╔═╡ f41d4c29-fb65-4e21-9a0d-76ce0681ba8a
-function setup_R_etc(states, policies, prices, parms; u)
-	proto = reward_etc(first(states), first(policies), 0.01, prices, params; u)
-	T = typeof((; proto..., h̄=0.1))
-	etc = Array{T}(undef, (length(states), length(policies)))
+# ╔═╡ 557af9a8-0ff5-42de-8c37-3acf3837020e
+function setup_R_etc(states, policies, prices, u)
+	proto = reward_etc(first(states), first(policies), prices, u)
+	T = typeof(proto)
+	etc = Array{T}(undef, length(states), length(policies))
 	R = zeros(length(states), length(policies))
 	
-	setup_R_etc!(R, etc, states, policies, prices, params; u)
+	setup_R_etc!(R, etc, states, policies, prices, u)
 
 	(; R, etc) 
 end
 
-# ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
-function setup_DDP(household, statespace, prices, params)
-	(; β, u) = household
+# ╔═╡ 8144fef5-1b68-4752-82cb-28082333bd3d
+md"""
+## State space
+"""
+
+# ╔═╡ f4919974-710c-4b77-b43a-3f5bd40b5017
+r_guess(hh, scale=0.9) = (1/hh.β  - 1 + hh.m) * scale
+
+# ╔═╡ 9a58dc90-3d58-4974-914d-5e1c8fa61483
+q(r) = 1/(1+r)
+
+# ╔═╡ cef10fd0-2024-4f1a-800b-65ddf84afe7e
+r_from_q(q) = 1/q - 1
+
+# ╔═╡ 810240c9-e613-42c8-8bcc-569d22a75b37
+md"""
+## Solve Households' problem
+"""
+
+# ╔═╡ 7ab33280-7ae0-41d5-be30-1248d783b053
+md"""
+# Infinite lifetime vs finite lifetime vs perpetual youth
+"""
+
+# ╔═╡ f6ad252e-7ee8-4084-a354-1bca4074792c
+md"""
+## Finite lifetime
+
+"""
+
+# ╔═╡ a35fceae-2318-49f9-95a2-adf312362f98
+J = 40
+
+# ╔═╡ 21035a54-3a47-46f2-8b14-dcd690d14d41
+# Create an instance of Household
+hh = Household(m = 1/J)
+
+# ╔═╡ 2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
+r = r_guess(hh, 0.8)
+
+# ╔═╡ 1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
+prices = (q = q(r), w = 1.0, Δr = r/2)
+
+# ╔═╡ e788a718-6151-4b7f-8ad0-4d1a68f538f6
+function simulate_J(ddp, J, v_term, (; states, policies), other_policies, π₀)
+	vs, sigmas = backward_induction(ddp, J, v_term)
+
+	# initial distribution
+	π = copy(π₀)
+
+	# initialize DataFrame to store the results
+	dfs = DataFrame[]
+	
+	for j ∈ 1:J
+		σ = sigmas[:, j]
+		R_σ, Q_σ = RQ_sigma(ddp, σ)
+
+		op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(σ))
+		
+		df = [DataFrame(states) DataFrame(policies[σ]) op]
+		df.j .= j
+		df.π = vec(π)
+
+		π = π * Q_σ
+		#Q * initial_distribution
+		push!(dfs, df)
+	end
+
+	vcat(dfs...)
+end
+
+# ╔═╡ 2ab2ee8d-a952-4baf-8e53-c8166c6a9f39
+md"""
+## Perpetual youth
+"""
+
+# ╔═╡ 480a6c9a-5dfa-42c0-ae83-791c674e8146
+function simulate(ddp, J, (; states, policies), other_policies, π₀,	solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	σ = results.sigma
+	R_σ, Q_σ = RQ_sigma(ddp, σ)
+
+	op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(σ))
+	df0 = [DataFrame(states) DataFrame(policies[σ]) op]
+	
+	# initial distribution
+	π = copy(π₀)
+
+	# initialize DataFrame to store the results
+	dfs = DataFrame[]
+	
+	for j ∈ 1:J
+		df = copy(df0)
+		df.j .= j
+		df.π = vec(π)
+
+		π = π * Q_σ
+		#Q * initial_distribution
+		push!(dfs, df)
+	end
+
+	vcat(dfs...)
+end
+
+# ╔═╡ 1ab72d61-952b-4522-8ece-7729de9346f8
+md"""
+## Evolution of assets over age
+"""
+
+# ╔═╡ 23733473-fe77-45c5-b105-5b3e7196aaa1
+ε = 0.1
+
+# ╔═╡ 5f0f20e8-f256-4ead-9747-4b1ffd4f3d32
+z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
+
+# ╔═╡ b383c608-05f4-4c53-8efd-97fdb5fcef2e
+function setup_DDP(household, statespace, prices)
+	(; β, m, u) = household
 	(; states, policies, states_indices, policies_indices) = statespace
 
 	## Rewards and policies
-	(; R, etc) = setup_R_etc(states, policies, prices, params; u)
+	(; R, etc) = setup_R_etc(states, policies, prices, u)
 
 	## Transition function
 	Q = setup_Q(states_indices, policies_indices, z_chain)
 
-	ddp = DiscreteDP(R, Q, β)
-	(; ddp, R, etc)
-end	
+	ddp = DiscreteDP(R, Q, β * (1 - m))
 
-# ╔═╡ 4c984317-5324-43c1-a26e-c4905c183fb8
+	(; ddp, R, etc)
+end
+
+# ╔═╡ 25d6d446-1769-4f9f-ae65-3128993c2ae6
+ss = statespace(; a_vals = range(-2, 2.0, length = 200), z_chain)
+
+# ╔═╡ 1c615b77-c088-4d26-a6b4-f90c9317e62d
+# Use the instance to build a discrete dynamic program
+(; am_ddp, etc) = let
+	(; ddp, etc) = setup_DDP(hh, ss, prices);
+	(; am_ddp = ddp, etc)
+end;
+
+# ╔═╡ f95b7fd3-d1bf-4fa3-91b8-76546191d114
+v_term = map(ss.states) do (; a, z)
+	a ≥ 0 ? 0 : -100_000 + a
+end
+
+# ╔═╡ 10c026ee-ac9a-4087-90ac-cd33724f4310
+initial_distribution = let
+	i_0 = findfirst(DataFrame(ss.states).a .> 0)
+
+	π₀ = map(ss.states_indices) do (; a_i)
+		a_i == i_0 ? 1.0 : 0.0
+	end
+
+	π₀ / sum(π₀)
+end
+
+# ╔═╡ 204ae409-f13d-4649-8cea-7821269a2afb
+df_big = simulate_J(am_ddp, J, v_term, ss, etc, initial_distribution')
+
+# ╔═╡ e38d4c15-5f6b-4859-9b6b-243e11d4f89c
+@chain df_big begin
+	stack([:a, :a_next, :c], [:j, :π])
+	@groupby(:j, :variable)
+	@combine(:value = mean(:value, weights(:π)))
+	data(_) * mapping(:j, :value, layout = :variable) * visual(ScatterLines)
+	draw(facet = (linkyaxes = false, ))
+end
+
+# ╔═╡ 9efdd9b6-da65-417f-a004-c21357e31fe3
+@chain df_big begin
+	data(_) * mapping(:a, weights = :π) * density() #histogram()
+	draw
+end
+
+# ╔═╡ 8783d2b5-99cc-4bdf-a290-9b3b3b2a05a5
+# ╠═╡ disabled = true
+#=╠═╡
+@chain df_big begin
+	data(_) * mapping(:j, :a, weights = :π) * visual(Violin)
+	draw
+end
+  ╠═╡ =#
+
+# ╔═╡ 33977af2-f470-434b-af98-ec846256cdb2
+@chain df_big begin
+	stack([:a, :a_next, :c], [:j, :π, :z])
+#	@groupby(:j, :variable)
+	data(_) * mapping(:j, :value, weights = :π, color = :z => nonnumeric, layout = :variable) * quantileband()
+	draw(facet = (linkyaxes = false,))
+end
+
+# ╔═╡ 980e9df0-68d1-408e-9b30-6a5759446ff6
+df_big2 = simulate(am_ddp, J, ss, etc, initial_distribution')
+
+# ╔═╡ 594af89c-c83c-42ad-9592-bab21b077421
+@chain df_big2 begin
+	stack([:a, :a_next, :c], [:j, :π])
+	@groupby(:j, :variable)
+	@combine(:value = mean(:value, weights(:π)))
+	data(_) * mapping(:j, :value, layout = :variable) * visual(ScatterLines)
+	draw(facet = (linkyaxes = false, ))
+end
+
+# ╔═╡ 8ff33305-8a48-4eda-a29f-196962ca6d60
+@chain df_big2 begin
+	stack([:a, :a_next, :c], [:j, :π, :z])
+#	@groupby(:j, :variable)
+	data(_) * mapping(:j, :value, weights = :π, color = :z => nonnumeric, layout = :variable) * quantileband()
+	draw(facet = (linkyaxes = false,))
+end
+
+# ╔═╡ 31dc8ad6-dde4-4f7f-96a8-cec96be181ac
+@chain df_big begin
+	@combine(
+		:a = mean(:a, weights(:π)),
+		:a_next = mean(:a_next, weights(:π)),
+	)
+
+end
+
+# ╔═╡ 4f84a5d9-0482-46e3-bccc-497faaeba33c
+@chain df_big2 begin
+	@combine(
+		:a = mean(:a, weights(:π)),
+		:a_next = mean(:a_next, weights(:π)),
+	)
+
+end
+
+# ╔═╡ a2f3a52c-54c1-421a-afc1-9aa9bf58381f
 md"""
-# Analyze results
+##  Perpetual youth
 """
 
-# ╔═╡ 3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
-function solve_details0(ddp, statespace, other_policies; solver = PFI)
+# ╔═╡ 8b95d0a0-13d5-455d-acda-68ced0473467
+md"""
+constant death probability ``m``
+"""
+
+# ╔═╡ 82f9a75b-8a0a-4505-a879-17bd620f21bc
+m = 1/45
+
+# ╔═╡ 489ee98c-02f1-463b-8d0d-826645fd5fbc
+hh_perp_youth = Household(; m)
+
+# ╔═╡ 3bc65535-93cc-476e-81ee-6dd0293e629a
+md"""
+# Appendix
+"""
+
+# ╔═╡ 4389a76d-4063-47f5-8626-ac9a2dd6219a
+md"""
+## Stationary distribution
+"""
+
+# ╔═╡ bd1c7729-fa87-4c84-9052-b4a858dab19e
+begin
+	abstract type StatDistSolver end
+	struct Eigen <: StatDistSolver end
+	struct GTH <: StatDistSolver end
+	struct Iterate <: StatDistSolver end
+end
+
+# ╔═╡ e7d2074b-93bc-4b97-afb2-a2e6880586b0
+function stationary_distribution(mc::MarkovChain, solver::StatDistSolver=GTH(); kwargs...)
+	stationary_distribution(mc.p, solver; kwargs...)
+end
+
+# ╔═╡ eb2dc2aa-a6ee-4b64-a910-7b78c4226f25
+function stationary_distribution(Q::AbstractMatrix, m, solver; kwargs...)
+	Q̃ = (1-m) * Q + m * I
+	stationary_distribution(Q̃, solver; kwargs...)
+end
+
+# ╔═╡ 5dd0b103-051d-426f-b832-dedaab04496e
+function stationary_distribution(Q::AbstractMatrix, m, π₀, _)
+	π = m * (π₀ / (I - (1-m) * Q))
+	π'
+end
+
+# ╔═╡ e419ffae-faaf-4845-bb17-0a6891d93d2f
+function stationary_distribution(Q::AbstractMatrix, m, π₀, ::Iterate; maxit = 400, π_guess = π₀, rtol = √eps())
+	π = copy(π_guess)
+	for i in 1:maxit
+		π_new = (1-m) * π * Q + m * π₀
+		if isapprox(π_new, π; rtol)
+			@info "Converged after $i iterations"
+			return π_new'
+		end
+		if i == maxit
+			@warn "Didn't converge after $i iterations"
+			return π_new'
+		end
+		π .= π_new
+	end
+	nothing
+end
+
+# ╔═╡ 6a41a2a2-ee26-4292-ac4b-1348d117ef43
+function stationary_distribution(Q::AbstractMatrix, ::GTH)
+	# this essentially copies the implementation of QuantEcon.jl
+	n = size(Q, 1)
+	π = zeros(n)
+	ids = only(attracting_components(DiGraph(Q)))
+	π[ids] .= gth_solve(Q[ids,ids])
+	π
+end	
+
+# ╔═╡ cd5f86f3-dc39-40ac-a6b1-4d258c097e85
+function stationary_distribution(Q::AbstractMatrix, ::Iterate; rtol = √eps(), maxit = 400)
+	Qn = copy(Q)
+	for i in 1:maxit
+		Qn_new = Qn * Q
+		if isapprox(Qn_new, Qn; rtol)
+			@info "Converged after $i iterations"
+			break
+		end
+		if i == maxit
+			@warn "Didn't converge after $i iterations"
+		end
+		Qn .= Qn_new
+	end
+	Qn[1,:]
+end	
+
+# ╔═╡ d5886ad1-c4ba-4aa4-b223-0588e4ede6df
+function real_if_real(x)
+	@assert isreal(x)
+	real(x)
+end
+
+# ╔═╡ c9b89eea-2c9b-4c23-811d-3a964af6b594
+function stationary_distribution(Q::AbstractMatrix, ::Eigen)
+	(; values, vectors) = eigen(Q')
+	# find unit-eigenvalue
+	i = only(findall(values .≈ 1.0))
+	# get corresponding eigenvector
+	π = vectors[:, i]
+	# make sure it isn't complex, normalize sum to 1
+	π = real_if_real(π)
+	π .= π / sum(π)
+end
+
+# ╔═╡ a2ba3828-4c49-45ff-8eb8-84d2ca15ed64
+function solve_details0(ddp, (; states, policies), other_policies; m, π₀, solver = PFI)
 	results = QuantEcon.solve(ddp, solver)
 
-	(; states, policies) = statespace
-
-	opp = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(results.sigma))
+	op = DataFrame(other_policies[i, s] for (i, s) ∈ enumerate(results.sigma))
 	
 	df = hcat(
 		DataFrame(states),
 		DataFrame(policies[results.sigma]),
-		opp,
+		op,
 		makeunique = true
 	)
 	df.value = results.v
 	df.state = states
 	df.policy = policies[results.sigma]
 	df.additional_policies = other_policies[results.sigma]
-	df.π = only(stationary_distributions(results.mc))
+	df.π = stationary_distribution(results.mc.p, m, π₀, GTH()) 
 
 	(; df, results)
+
+	df
 end
 
-# ╔═╡ 0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
-function solve_details(ddp, statespace, additional_policies; solver = PFI)
-	(; df) = solve_details0(ddp, statespace, additional_policies; solver)
+# ╔═╡ 34cb66d9-c5e3-4535-814d-4bc66862d670
+function solve_details(ddp, statespaces, etc; m, π₀, solver = PFI)
+	df = solve_details0(ddp, statespaces, etc; m, π₀, solver)
 
 	@chain df begin
-		#@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :ω_next - :ω)
 		select!(Not([:state, :policy, :additional_policies]))
 	end
 end
 
-# ╔═╡ be93671d-acc2-4056-adef-d2e565914796
-md"""
-# Equilibrium
-"""
+# ╔═╡ 9bab335d-197b-43c7-a938-c83ac41ce141
+# Solve using policy function iteration
+results_df = solve_details(am_ddp, ss, etc; hh.m, π₀=initial_distribution', solver = PFI)
 
-# ╔═╡ 8770963c-06b6-4559-a65c-b75623ca1599
-prices = (; p = 2.0, r = 0.05, w = 1.0)
-
-# ╔═╡ 429dc22c-91ac-4835-a67c-97666b5a0353
-reward_etc((; ω=2, z=1), (; ω_next=2.8), 1.0, prices, params; u=make_u(; ξ = 0.5, σ = 2))
-
-# ╔═╡ 5fa457ed-4ade-4a36-a01e-e4e1635a2383
-ω_grid = range(0.1, 10, length = 200)
-
-# ╔═╡ adf51e7a-f8ff-41b9-b643-3b790162fd7a
-ss = statespace(; ω_vals = ω_grid, z_chain)
-
-# ╔═╡ e097086d-0835-4145-8369-273fd024d6ce
-(; R, ddp, etc) = setup_DDP(household, ss, prices, params);
-
-# ╔═╡ a38666f0-f96a-46e8-bc02-d3fddeffd0a9
-policies_df = mapreduce(vcat, enumerate(eachrow(etc))) do (i, row)
-	df = DataFrame(row)
-	df.state .= i
-	df
-end
-
-# ╔═╡ 3090315b-7959-4458-a4f6-f3c61e62a987
-@chain policies_df begin
-	@subset(:state % 10 == 0)
-	@subset(:reward > -Inf)
-	stack([:c, :h_next, :a_next, :reward])
-	data(_) * mapping(:ω_next, :value, layout = :variable, color = :state => nonnumeric) * visual(Lines)
-	draw(facet = (linkyaxes = false,))
-end
-
-# ╔═╡ defef805-2322-4d3a-a448-83ca3b7367a6
-results_df = solve_details(ddp, ss, etc)
-
-# ╔═╡ 6e2d8ea1-af34-4294-bdec-ae709e88e3f6
-let
-	fg = @chain results_df begin
-		stack(Not([:ω, :z, :π])) #[:a_next, :consumption, :saving])
-		data(_) * mapping(
-			:ω => L"current assets $\omega$",
-			:value => "policy",
-			layout = :variable,
-			color = :z => nonnumeric,
-		) * visual(Lines)
-		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
-	end
-
-	ax = content(fg.figure[2,1])
-
-	abline!(ax, 0, 1, color = :gray, linestyle = (:dash, :loose))
-
-	fg
-end
-
-# ╔═╡ cab4e602-8e7c-4f0b-b090-3c37961882de
+# ╔═╡ 1263cb1f-8b43-40c1-aee7-ad22b140590b
 @chain results_df begin
-	data(_) * mapping(:ω, :π, color = :z => nonnumeric) * visual(Lines)
+	@combine(
+		:a = mean(:a, weights(:π)),
+		:a_next = mean(:a_next, weights(:π)),
+	)
+
+end
+
+# ╔═╡ 3461fad3-6f89-409c-963c-aac43e7c7b37
+@chain results_df begin
+	groupby(:a)
+	@combine(
+		:π = sum(:π)
+	)
+	data(_) * mapping(:a, :π) * visual(Lines)
 	draw
 end
 
-# ╔═╡ 37f20108-46e9-484e-9503-3b3900aa103a
-@chain results_df begin
-	stack([:a_next, :h_next, :ω_next], :π)
-	data(_) * mapping(:value, weights = :π, layout = :variable
-		) * AlgebraOfGraphics.density()
-	draw(facet = (linkyaxes = false, linkxaxes = false))
+# ╔═╡ e961d8d6-6a3f-49e3-a40e-feaa859513d3
+let
+	(; ddp) = setup_DDP(hh_perp_youth, ss, prices)
+	@assert ddp.beta == hh_perp_youth.β * (1 - hh_perp_youth.m)
+
+	(; m) = hh_perp_youth
+	results = QuantEcon.solve(ddp, PFI)
+
+	σ = results.sigma
+	R_σ, Q_σ = RQ_sigma(ddp, σ)
+
+	Q̃ = (1-m) * Q_σ + m * I
+	mc_aux = MarkovChain(copy(Q̃))
+
+	π = only(stationary_distributions(mc_aux))
+	@assert π ≈ stationary_distribution(Q̃, Eigen())
+	@assert π ≈ stationary_distribution(Q̃, GTH())
+	@assert π ≈ stationary_distribution(Q̃, Iterate(), rtol = eps()^(3/4))
+	@assert π ≈ stationary_distribution(Q_σ, m, Eigen())
+	@assert	π ≈ stationary_distribution(Q_σ, m, π', GTH())
+	@assert π ≈	stationary_distribution(Q_σ, m, π', Iterate(); π_guess = fill(1/400, 1, 400), rtol = eps()^(3/4))
 end
 
-# ╔═╡ 44e9f5ff-81d7-42a6-85b3-103807318428
-H = 1
-
-# ╔═╡ f8d09a14-000a-4d94-ad7b-fe5918a5d2ff
-function aggregates(results)
-	@chain results begin
-		stack(Not(:π))
-		@groupby(:variable)
-		@combine(:aggregate = sum(:value, weights(:π)))
-		zip(_.variable, _.aggregate)
-		Dict
-	end
-end
-
-# ╔═╡ d88d177f-5bc7-4cdf-aebb-6cbbe0cab935
-agg = aggregates(results_df)
-
-# ╔═╡ da8b9700-b47b-418c-a2c9-dad963aef35f
-(h = agg["h_next"], a = agg["a_next"])
-
-# ╔═╡ 69bdedb0-937b-43d6-b5bc-37484fd14eb2
+# ╔═╡ 5bbe227f-f88e-492b-b5ba-af477feede3d
 md"""
-# Appendix
+## Misc
 """
 
-# ╔═╡ 685ad2f8-b86f-404d-93b2-e734ffbf0ab7
+# ╔═╡ 2928ba10-b096-4854-a211-6179c479cc93
 TableOfContents()
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+AoGExtensions = "7df18d33-496e-4cfd-8564-72cba2c0b329"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 AlgebraOfGraphics = "~0.6.5"
+AoGExtensions = "~0.1.9"
 CairoMakie = "~0.7.5"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.2"
-Optim = "~1.6.2"
-PlutoUI = "~0.7.37"
+LightGraphs = "~1.3.5"
+PlutoUI = "~0.7.38"
 QuantEcon = "~0.16.3"
 StatsBase = "~0.33.16"
 """
@@ -503,6 +654,12 @@ git-tree-sha1 = "e81c509d2c8e49592413bfb0bb3b08150056c79d"
 uuid = "27a7e980-b3e6-11e9-2bcd-0b925532e340"
 version = "0.4.1"
 
+[[deps.AoGExtensions]]
+deps = ["AlgebraOfGraphics", "CategoricalArrays", "Chain", "DataFrameMacros", "DataFrames", "InteractiveUtils", "Makie", "Markdown", "NamedDims", "PlutoTest", "PlutoUI", "Statistics", "StatsBase", "UnPack"]
+git-tree-sha1 = "b2bcacd764e6f3e05650139499eb0caa2fbdb856"
+uuid = "7df18d33-496e-4cfd-8564-72cba2c0b329"
+version = "0.1.9"
+
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 
@@ -514,9 +671,9 @@ version = "0.1.0"
 
 [[deps.ArrayInterface]]
 deps = ["Compat", "IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
-git-tree-sha1 = "6e8fada11bb015ecf9263f64b156f98b546918c7"
+git-tree-sha1 = "c933ce606f6535a7c7b98e1d86d5d1014f730596"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "5.0.5"
+version = "5.0.7"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -571,11 +728,11 @@ git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
 
-[[deps.Calculus]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
-uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
-version = "0.5.1"
+[[deps.CategoricalArrays]]
+deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
+git-tree-sha1 = "109664d3a6f2202b1225478335ea8fea3cd8706b"
+uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+version = "0.10.5"
 
 [[deps.Chain]]
 git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
@@ -644,9 +801,9 @@ version = "0.3.0"
 
 [[deps.Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "96b0bc6c52df76506efc8a441c6cf1adcb1babc4"
+git-tree-sha1 = "b153278a25dd42c65abbf4e62344f9d22e59191b"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "3.42.0"
+version = "3.43.0"
 
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -657,6 +814,12 @@ deps = ["StaticArrays"]
 git-tree-sha1 = "9f02045d934dc030edad45944ea80dbd1f0ebea7"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.5.7"
+
+[[deps.CovarianceEstimation]]
+deps = ["LinearAlgebra", "Statistics", "StatsBase"]
+git-tree-sha1 = "a3e070133acab996660d31dcf479ea42849e368f"
+uuid = "587fd27a-f159-11e8-2dae-1979310e6154"
+version = "0.2.7"
 
 [[deps.Crayons]]
 git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
@@ -713,9 +876,9 @@ version = "0.4.0"
 
 [[deps.Dictionaries]]
 deps = ["Indexing", "Random"]
-git-tree-sha1 = "7e73a524c6c282e341de2b046e481abedbabd073"
+git-tree-sha1 = "0340cee29e3456a7de968736ceeb705d591875a2"
 uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
-version = "0.3.19"
+version = "0.3.20"
 
 [[deps.DiffResults]]
 deps = ["StaticArrays"]
@@ -741,9 +904,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "c43e992f186abaf9965cc45e372f4693b7754b22"
+git-tree-sha1 = "5a4168170ede913a2cd679e53c2123cb4b889795"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.52"
+version = "0.25.53"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -755,12 +918,6 @@ version = "0.8.6"
 deps = ["ArgTools", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
-[[deps.DualNumbers]]
-deps = ["Calculus", "NaNMath", "SpecialFunctions"]
-git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
-uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
-version = "0.6.8"
-
 [[deps.EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "3f3a2501fa7236e9b911e0f7a588c657e822bb6d"
@@ -768,15 +925,16 @@ uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
 version = "2.2.3+0"
 
 [[deps.EllipsisNotation]]
-git-tree-sha1 = "18ee049accec8763be17a933737c1dd0fdf8673a"
+deps = ["ArrayInterface"]
+git-tree-sha1 = "d064b0340db45d48893e7604ec95e7a2dc9da904"
 uuid = "da5c29d0-fa7d-589e-88eb-ea29b0a81949"
-version = "1.0.0"
+version = "1.5.0"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "ae13fcbc7ab8f16b0856729b050ef0c446aa3492"
+git-tree-sha1 = "bad72f730e9e91c08d9427d5e8db95478a3c323d"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.4.4+0"
+version = "2.4.8+0"
 
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -857,10 +1015,10 @@ uuid = "d7e528f0-a631-5988-bf34-fe36492bcfd7"
 version = "2.10.4+0"
 
 [[deps.FreeTypeAbstraction]]
-deps = ["ColorVectorSpace", "Colors", "FreeType", "GeometryBasics", "StaticArrays"]
-git-tree-sha1 = "8e76bcd47f98ee25c8f8be4b9a1c60f48efa4f9e"
+deps = ["ColorVectorSpace", "Colors", "FreeType", "GeometryBasics"]
+git-tree-sha1 = "b5c7fe9cea653443736d264b85466bad8c574f4a"
 uuid = "663a7486-cb36-511b-a19d-713bb74d65c9"
-version = "0.9.7"
+version = "0.9.9"
 
 [[deps.FriBidi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -874,9 +1032,9 @@ uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
 [[deps.GLM]]
 deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "StatsModels"]
-git-tree-sha1 = "fb764dacfa30f948d52a6a4269ae293a479bbc62"
+git-tree-sha1 = "92b8d38886445d6d06e5f13201e57d018c4ff880"
 uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
-version = "1.6.1"
+version = "1.7.0"
 
 [[deps.GeoInterface]]
 deps = ["RecipesBase"]
@@ -930,12 +1088,6 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
-
-[[deps.HypergeometricFunctions]]
-deps = ["DualNumbers", "LinearAlgebra", "SpecialFunctions", "Test"]
-git-tree-sha1 = "65e4589030ef3c44d3b90bdc5aac462b4bb05567"
-uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
-version = "0.3.8"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -991,6 +1143,11 @@ version = "1.0.0"
 git-tree-sha1 = "f5fc07d4e706b84f72d54eedcc1c13d92fb0871c"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
 version = "0.1.2"
+
+[[deps.IntegerMathUtils]]
+git-tree-sha1 = "f366daebdfb079fd1fe4e3d560f99a0c892e15bc"
+uuid = "18e54dd8-cb9d-406c-a71d-865a43cbb235"
+version = "0.1.0"
 
 [[deps.IntelOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1176,9 +1333,9 @@ version = "0.5.4"
 
 [[deps.LogExpFunctions]]
 deps = ["ChainRulesCore", "ChangesOfVariables", "DocStringExtensions", "InverseFunctions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "58f25e56b706f95125dcb796f39e1fb01d913a71"
+git-tree-sha1 = "a7e100b068a6cbead98b9f4e5c8b488934b7aea0"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "0.3.10"
+version = "0.3.11"
 
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -1223,9 +1380,9 @@ version = "1.2.0"
 
 [[deps.MathOptInterface]]
 deps = ["BenchmarkTools", "CodecBzip2", "CodecZlib", "JSON", "LinearAlgebra", "MutableArithmetics", "OrderedCollections", "Printf", "SparseArrays", "Test", "Unicode"]
-git-tree-sha1 = "09be99195f42c601f55317bd89f3c6bbaec227dc"
+git-tree-sha1 = "779ad2ee78c4a24383887fdba177e9e5034ce207"
 uuid = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
-version = "1.1.1"
+version = "1.1.2"
 
 [[deps.MathProgBase]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1289,6 +1446,12 @@ version = "2.7.1+0"
 git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.7"
+
+[[deps.NamedDims]]
+deps = ["AbstractFFTs", "ChainRulesCore", "CovarianceEstimation", "LinearAlgebra", "Pkg", "Requires", "Statistics"]
+git-tree-sha1 = "0856b62716585eb90cc1dada226ac9eab5f69aa5"
+uuid = "356022a1-0364-5f58-8944-0da4b18d706f"
+version = "0.2.47"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
@@ -1409,9 +1572,9 @@ version = "0.12.3"
 
 [[deps.Parsers]]
 deps = ["Dates"]
-git-tree-sha1 = "85b5da0fa43588c75bb1ff986493443f821c70b7"
+git-tree-sha1 = "621f4f3b4977325b9128d5fae7a8b4829a0c2222"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.2.3"
+version = "2.2.4"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1435,11 +1598,17 @@ git-tree-sha1 = "bb16469fd5224100e422f0b027d26c5a25de1200"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.2.0"
 
+[[deps.PlutoTest]]
+deps = ["HypertextLiteral", "InteractiveUtils", "Markdown", "Test"]
+git-tree-sha1 = "17aa9b81106e661cffa1c4c36c17ee1c50a86eda"
+uuid = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
+version = "0.2.2"
+
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
-git-tree-sha1 = "bf0a1121af131d9974241ba53f601211e9303a9e"
+git-tree-sha1 = "670e559e5c8e191ded66fa9ea89c97f10376bb4c"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.7.37"
+version = "0.7.38"
 
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
@@ -1477,9 +1646,10 @@ uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 version = "1.3.1"
 
 [[deps.Primes]]
-git-tree-sha1 = "984a3ee07d47d401e0b823b7d30546792439070a"
+deps = ["IntegerMathUtils"]
+git-tree-sha1 = "747f4261ebe38a2bc6abf0850ea8c6d9027ccd07"
 uuid = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
-version = "0.5.1"
+version = "0.5.2"
 
 [[deps.Printf]]
 deps = ["Unicode"]
@@ -1491,9 +1661,9 @@ uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
 [[deps.ProgressMeter]]
 deps = ["Distributed", "Printf"]
-git-tree-sha1 = "afadeba63d90ff223a6a48d2009434ecee2ec9e8"
+git-tree-sha1 = "d7a7aef8f8f2d537104f170139553b14dfe39fe9"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
-version = "1.7.1"
+version = "1.7.2"
 
 [[deps.QOI]]
 deps = ["ColorTypes", "FileIO", "FixedPointNumbers"]
@@ -1650,9 +1820,9 @@ version = "0.6.0"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "6976fab022fea2ffea3d945159317556e5dad87c"
+git-tree-sha1 = "4f6ec5d99a28e1a749559ef7dd518663c5eca3d5"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.4.2"
+version = "1.4.3"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1660,9 +1830,9 @@ uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[deps.StatsAPI]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "c3d8ba7f3fa0625b062b82853a7d5229cb728b6b"
+git-tree-sha1 = "8d7530a38dbd2c397be7ddd01a424e4f411dcc41"
 uuid = "82ae8749-77ed-4fe6-ae5f-f523153014b0"
-version = "1.2.1"
+version = "1.2.2"
 
 [[deps.StatsBase]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "LogExpFunctions", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
@@ -1671,10 +1841,10 @@ uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.16"
 
 [[deps.StatsFuns]]
-deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "25405d7016a47cf2bd6cd91e66f4de437fd54a07"
+deps = ["ChainRulesCore", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "5950925ff997ed6fb3e985dcce8eb1ba42a0bbe7"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "0.9.16"
+version = "0.9.18"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
@@ -1884,63 +2054,84 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─e69d0b3c-58b8-45e5-8d38-954aac2007c3
-# ╟─ffd3bd56-ae65-11ec-28c2-03ac858b9050
-# ╟─aa7682ea-30e1-4f9a-a553-0a7bc66c1553
-# ╟─075ea631-db48-43de-9c07-9bda9f7d66ad
-# ╟─50ab36c4-5274-4498-8478-dcb28d20677a
-# ╟─b2dff4ba-aee7-44fa-86d6-c00c1e1fd81d
-# ╠═5ccd7567-0004-4d0e-9427-f60a44673b87
-# ╟─5d4b4f3a-42ca-4a8a-8188-ec6d963a5ef3
-# ╠═995eed7b-13d6-4d52-9606-414684a742ab
-# ╟─62a7cadf-b47a-4ac1-be5b-98c9413b4808
-# ╠═e8cccfb3-a12a-4050-b5c3-2d7a0990d6a9
-# ╠═cfe30e78-73cd-4b84-bd16-f58fb43d9e5a
-# ╠═845c11bc-e605-47ff-821f-a6b61e9e10c5
-# ╠═0e03c9df-7533-49d7-bd6a-c6a7f3d2d5a7
-# ╠═9403d178-674d-4d6e-a0d4-27a217469898
-# ╠═76721e80-a0fb-45dd-b88c-75d5447aa7e9
-# ╠═f41d4c29-fb65-4e21-9a0d-76ce0681ba8a
-# ╠═f48c9b01-3522-4a1d-a63d-dcb535bcd5bd
-# ╟─1a1eb9eb-cd8b-4cfc-a74e-d6502e17624b
-# ╠═92e84b5d-0f8a-47de-ae10-f216ed72fe14
-# ╠═9c588d0f-c41c-4369-88c6-4ecb8378c9f0
-# ╟─ab1cd091-3876-412a-8123-aea9cf06bf43
-# ╠═7533daf6-3391-4010-b748-113cc8d6f2e7
-# ╠═cbe321fb-4ebc-4057-b4dc-c278fb3132a7
-# ╠═105b1b47-bfbc-42d3-9ddd-6a6f53ca2e14
-# ╠═e54f5d50-e62a-4b36-83fd-1a14350ad339
-# ╠═212f8242-4e7b-43b0-a690-32a40f4c768f
-# ╠═3d6b5665-d18c-464e-b4df-bb8c07e6c9c7
-# ╠═a384b136-ba71-48b6-8568-d8b9d9f2411e
-# ╠═5aa1d752-cba3-417a-a350-ba6e7b406354
-# ╠═bfa69b95-8f5d-4987-861f-1df3c75b4e3b
-# ╠═bddb801d-0506-4b58-925b-3e44d3f52f3c
-# ╠═adf51e7a-f8ff-41b9-b643-3b790162fd7a
-# ╠═e097086d-0835-4145-8369-273fd024d6ce
-# ╠═a38666f0-f96a-46e8-bc02-d3fddeffd0a9
-# ╠═3090315b-7959-4458-a4f6-f3c61e62a987
-# ╟─4c984317-5324-43c1-a26e-c4905c183fb8
-# ╠═defef805-2322-4d3a-a448-83ca3b7367a6
-# ╠═6e2d8ea1-af34-4294-bdec-ae709e88e3f6
-# ╠═3fda2cce-4276-4d1b-b7e8-3c2bb69bb9f4
-# ╠═0a967b31-be0b-4a5b-a182-cbcaf9a9b2f4
-# ╠═4c27c529-5be1-4795-85b6-29b8cad31d83
-# ╠═e366730a-8538-48d0-8160-29fb0918bcb3
-# ╠═b642e1d7-91bb-4fb5-9b6c-13efe409d791
-# ╠═429dc22c-91ac-4835-a67c-97666b5a0353
-# ╠═cab4e602-8e7c-4f0b-b090-3c37961882de
-# ╟─be93671d-acc2-4056-adef-d2e565914796
-# ╠═8770963c-06b6-4559-a65c-b75623ca1599
-# ╠═5fa457ed-4ade-4a36-a01e-e4e1635a2383
-# ╠═da8b9700-b47b-418c-a2c9-dad963aef35f
-# ╟─37f20108-46e9-484e-9503-3b3900aa103a
-# ╠═d88d177f-5bc7-4cdf-aebb-6cbbe0cab935
-# ╠═44e9f5ff-81d7-42a6-85b3-103807318428
-# ╠═f8d09a14-000a-4d94-ad7b-fe5918a5d2ff
-# ╟─69bdedb0-937b-43d6-b5bc-37484fd14eb2
-# ╠═f142563e-3857-4d24-bbc0-6d4f34d0487f
-# ╠═58cc5669-e4d3-4a43-b162-ec40258022a3
-# ╠═685ad2f8-b86f-404d-93b2-e734ffbf0ab7
+# ╟─f5333200-a779-4118-a54b-79250d6ceaf3
+# ╟─ddb1bf24-bba7-4eab-8eac-91a9457dc824
+# ╟─8b2f077d-1ef0-4a51-9e2e-2b57e4464d25
+# ╠═1d92eaa0-ba41-11ec-346e-7561afaf6a08
+# ╟─96ab8b9c-7211-4b85-a46e-cba792c6f405
+# ╠═5a11b72d-616a-446f-847c-e81d6f94f16f
+# ╠═9cf045e6-4e0d-4548-b22f-e853c43c55f1
+# ╠═b383c608-05f4-4c53-8efd-97fdb5fcef2e
+# ╠═f64126ce-0e61-43ee-8a5d-56c16f5e6025
+# ╠═077437bf-bfb1-4b49-861d-4378f90b8d6b
+# ╠═ce7a8b0d-7045-411b-b04d-dcf5ee88d54f
+# ╠═e0672d2c-d485-40af-918e-ce3d60bd30a0
+# ╠═b6ca379a-d0c4-4184-a54c-47623d181de6
+# ╠═557af9a8-0ff5-42de-8c37-3acf3837020e
+# ╟─8144fef5-1b68-4752-82cb-28082333bd3d
+# ╠═2afe49ec-aaa8-4651-aa1c-0d1c18eaa730
+# ╠═f4919974-710c-4b77-b43a-3f5bd40b5017
+# ╠═9a58dc90-3d58-4974-914d-5e1c8fa61483
+# ╠═cef10fd0-2024-4f1a-800b-65ddf84afe7e
+# ╠═1fd06ad3-2cfc-4c2e-8f4e-109ef84c05b7
+# ╠═21035a54-3a47-46f2-8b14-dcd690d14d41
+# ╠═5f0f20e8-f256-4ead-9747-4b1ffd4f3d32
+# ╟─810240c9-e613-42c8-8bcc-569d22a75b37
+# ╠═25d6d446-1769-4f9f-ae65-3128993c2ae6
+# ╠═1c615b77-c088-4d26-a6b4-f90c9317e62d
+# ╠═9bab335d-197b-43c7-a938-c83ac41ce141
+# ╠═a2ba3828-4c49-45ff-8eb8-84d2ca15ed64
+# ╠═34cb66d9-c5e3-4535-814d-4bc66862d670
+# ╠═6ccea34a-398f-4b09-a869-1d3a5c127921
+# ╠═1263cb1f-8b43-40c1-aee7-ad22b140590b
+# ╠═3461fad3-6f89-409c-963c-aac43e7c7b37
+# ╟─7ab33280-7ae0-41d5-be30-1248d783b053
+# ╟─f6ad252e-7ee8-4084-a354-1bca4074792c
+# ╠═f95b7fd3-d1bf-4fa3-91b8-76546191d114
+# ╠═10c026ee-ac9a-4087-90ac-cd33724f4310
+# ╠═a35fceae-2318-49f9-95a2-adf312362f98
+# ╠═e788a718-6151-4b7f-8ad0-4d1a68f538f6
+# ╠═204ae409-f13d-4649-8cea-7821269a2afb
+# ╟─2ab2ee8d-a952-4baf-8e53-c8166c6a9f39
+# ╠═480a6c9a-5dfa-42c0-ae83-791c674e8146
+# ╠═980e9df0-68d1-408e-9b30-6a5759446ff6
+# ╠═8e41fd25-f764-44e3-969d-11222c77d133
+# ╠═35036c53-300d-4313-97cc-ab7442462c89
+# ╠═cf76322e-c2f5-4ea9-9839-eca43eb5bc38
+# ╠═b990aeca-b008-4069-8d9a-b04cae2c597c
+# ╟─1ab72d61-952b-4522-8ece-7729de9346f8
+# ╠═e38d4c15-5f6b-4859-9b6b-243e11d4f89c
+# ╠═594af89c-c83c-42ad-9592-bab21b077421
+# ╠═09d2c74a-7359-4505-be0c-efdf0207c1de
+# ╠═f8180d17-5592-438d-a1cf-2e04f1c77aa5
+# ╠═9efdd9b6-da65-417f-a004-c21357e31fe3
+# ╠═e2193a09-f332-454d-991f-12ae621148d7
+# ╠═8783d2b5-99cc-4bdf-a290-9b3b3b2a05a5
+# ╠═33977af2-f470-434b-af98-ec846256cdb2
+# ╠═8ff33305-8a48-4eda-a29f-196962ca6d60
+# ╠═23733473-fe77-45c5-b105-5b3e7196aaa1
+# ╠═31dc8ad6-dde4-4f7f-96a8-cec96be181ac
+# ╠═4f84a5d9-0482-46e3-bccc-497faaeba33c
+# ╟─a2f3a52c-54c1-421a-afc1-9aa9bf58381f
+# ╟─8b95d0a0-13d5-455d-acda-68ced0473467
+# ╠═82f9a75b-8a0a-4505-a879-17bd620f21bc
+# ╠═489ee98c-02f1-463b-8d0d-826645fd5fbc
+# ╠═56d57b34-b673-468a-9f7a-e909c8198307
+# ╠═e961d8d6-6a3f-49e3-a40e-feaa859513d3
+# ╟─3bc65535-93cc-476e-81ee-6dd0293e629a
+# ╟─4389a76d-4063-47f5-8626-ac9a2dd6219a
+# ╠═bd1c7729-fa87-4c84-9052-b4a858dab19e
+# ╠═e7d2074b-93bc-4b97-afb2-a2e6880586b0
+# ╠═eb2dc2aa-a6ee-4b64-a910-7b78c4226f25
+# ╠═5dd0b103-051d-426f-b832-dedaab04496e
+# ╠═e419ffae-faaf-4845-bb17-0a6891d93d2f
+# ╠═c9b89eea-2c9b-4c23-811d-3a964af6b594
+# ╠═6a41a2a2-ee26-4292-ac4b-1348d117ef43
+# ╠═cd5f86f3-dc39-40ac-a6b1-4d258c097e85
+# ╠═d5886ad1-c4ba-4aa4-b223-0588e4ede6df
+# ╠═06eb6851-032d-4c24-83f5-43340dd61905
+# ╟─5bbe227f-f88e-492b-b5ba-af477feede3d
+# ╠═e9867950-f878-42c3-983c-61fd30cebb9c
+# ╠═2928ba10-b096-4854-a211-6179c479cc93
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

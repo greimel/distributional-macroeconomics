@@ -19,6 +19,12 @@
                 "notebook_path": "notebooks/aiyagari.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Lifecycle models",
+                "notebook_path": "notebooks/lifecycle.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     },
