@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.4
+# v0.19.0
 
 using Markdown
 using InteractiveUtils
@@ -36,7 +36,7 @@ Like many other programming languages, Julia allows you to create tuples. The el
 """
 
 # ╔═╡ 39f1cb09-3c61-464b-8258-2de5d446217b
-standard_tuple = (1, 2);
+standard_tuple = (1, 2)
 
 # ╔═╡ 29f29203-054d-4353-9431-59e0e5bb575a
 standard_tuple[1]
@@ -47,7 +47,7 @@ Julia also has named tuples. Just like standard tuples, named tuples allow you t
 """
 
 # ╔═╡ 85088a9a-18d0-431a-b56f-31a8e3863fd8
-named_tuple = (a = 1, b = 2);
+named_tuple = (a = 1, b = 2)
 
 # ╔═╡ b9912c59-59db-4b06-9603-68b14b2e0efd
 named_tuple.a
@@ -60,11 +60,9 @@ Below you can see an alternative way of creating named tuples that is frequently
 """
 
 # ╔═╡ 63e5adb0-529f-4396-866d-85c14828e56a
-begin 
+let 
 	a = 1
-	b = 2
-	
-	named_tuple2 = (; a, b)
+	named_tuple2 = (; a, b=2) # (; a) is equivalent to (; a=a)
 end
 
 # ╔═╡ 3f80dd01-7203-4404-b38c-32757b2f4223
@@ -82,6 +80,12 @@ end
 # ╔═╡ 746beef7-2a9d-43c1-9570-82f2fdf79f0c
 some_function(; a = 3, b = 5)
 
+# ╔═╡ 654400a3-598b-41d1-823e-3824f04a6542
+let
+	a = 3
+	some_function(; a, b = 5) # (; a) is equivalent to (; a=a)
+end
+
 # ╔═╡ d705a9d5-97aa-4e7f-adcc-24ad53d9079b
 md"""
 ## Vectorization with dot syntax
@@ -90,10 +94,35 @@ You can apply a function to all elements of a vector by using the dot syntax:
 """
 
 # ╔═╡ 8e6f94b0-d7ce-4461-b40b-8f8f45de6c80
-[1,2,3].^2
+[1,2,3] .^ 2
 
 # ╔═╡ 77244481-f942-4d09-a859-e3db7185895a
 log.([1,2,3])
+
+# ╔═╡ 76d105ee-7d73-43a3-946d-5c4b7181a2a3
+md"""
+Note how Julia usually does things in a way that's mathematically consistent. Look at the following code.
+"""
+
+# ╔═╡ 594f37a2-654b-4eb4-8ee9-2b8609eda73f
+A = ones(3, 3)
+
+# ╔═╡ 56402ce6-964c-4ca0-b3a9-917987c976ea
+exp(A)
+
+# ╔═╡ 9172b664-e56b-4c26-a950-dc901fa68482
+exp.(A)
+
+# ╔═╡ a2039109-41ab-4358-8b28-3e1be577d8ec
+A^2
+
+# ╔═╡ d4cca863-6b61-4abc-93df-8d9553760cf6
+A .^ 2
+
+# ╔═╡ 88b83d9e-7f2a-4539-a133-577f98d32889
+md"""
+What would Python, R or Matlab do?
+"""
 
 # ╔═╡ 4c983a8b-abe9-4cc5-a7ab-102a0d05eedd
 md"""
@@ -138,8 +167,11 @@ Using the ```@chain``` macro, we can perform this task with relatively concise c
 # ╔═╡ cecea5f2-5446-4bf9-b186-11834ac25d37
 @chain df begin
 	@groupby(:A)
-	@combine(:B_sum = sum(:B))
-	@transform(abs(:B_sum))
+	@combine(
+		sum(:B), # automatically named
+		:C = sum(:B) # specify name
+	)
+	@transform(abs(:C))
 end
 
 # ╔═╡ 925436fb-e535-4735-888a-b047693c9132
@@ -150,8 +182,8 @@ Without the ```@chain``` macro, the code would look like this:
 # ╔═╡ f0d4415c-4f2b-415e-a600-cc5784811ee9
 begin
 	df_groups = groupby(df, :A)
-	df_sum = @combine(df_groups, :B_sum = sum(:B))
-	@transform(df_sum, abs(:B_sum))
+	df_sum = @combine(df_groups, sum(:B), :C = sum(:B))
+	@transform(df_sum, abs(:C))
 end
 
 # ╔═╡ 5cc63149-7edf-45b0-a198-d0f308a52618
@@ -184,13 +216,13 @@ md"""
 
 ## General advice
 
-Press F1 to see shortcuts for Pluto notebooks.
+* Press F1 to see shortcuts for Pluto notebooks.
 
-Ctrl + Click on an underlined variable or function to jump to its definition.
+* Ctrl + Click on an underlined variable or function to jump to its definition.
 
-Use the Live docs in the bottom right corner to get more information about any Julia function or object.
+* Use the Live docs in the bottom right corner to get more information about any Julia function or object.
 
-Check the [Github wiki](https://github.com/fonsp/Pluto.jl/wiki) for more information on Pluto notebooks.
+* Check the [Github wiki](https://github.com/fonsp/Pluto.jl/wiki) for more information on Pluto notebooks.
 
 ## Automated updating of cells
 
@@ -223,6 +255,35 @@ begin
 	f = e + 5
 end
 
+# ╔═╡ da466543-2824-4af3-81ce-98e55259802a
+md"""
+## Cannot reuse variable names
+"""
+
+# ╔═╡ 45468076-5bcc-442b-8f84-5c152a679129
+md"""
+Use `let` blocks to specify variable names locally.
+"""
+
+# ╔═╡ 553beaca-357b-4ef3-9d66-6b8146eb9a2e
+let
+	g = 3
+end
+
+# ╔═╡ 4e6ffc08-02ee-41e9-ba47-59e465138b2c
+g
+
+# ╔═╡ 9f32f1e8-a0b3-4a57-9147-30a9c610a4ee
+md"""
+## Deactivate cells
+"""
+
+# ╔═╡ e2e7d66b-18fc-4b29-919e-bb81b1e30b4d
+# ╠═╡ disabled = true
+#=╠═╡
+sleep(5)
+  ╠═╡ =#
+
 # ╔═╡ f0fe4fcd-bbd9-40ad-987c-62a3eb299f21
 md"""
 # Imported Packages
@@ -230,6 +291,12 @@ md"""
 
 # ╔═╡ 07374ec1-2f35-431a-9001-4f9e47cf40c5
 TableOfContents()
+
+# ╔═╡ 54416ff1-ef91-4ff3-968f-22acae580f4f
+g = 1
+
+# ╔═╡ 7b78d185-12c6-4baa-8ffc-b5a806cda32f
+g = 2
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -583,9 +650,17 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╟─3f80dd01-7203-4404-b38c-32757b2f4223
 # ╠═aef759a7-a0ed-41e5-b91b-f276853bd30b
 # ╠═746beef7-2a9d-43c1-9570-82f2fdf79f0c
+# ╠═654400a3-598b-41d1-823e-3824f04a6542
 # ╟─d705a9d5-97aa-4e7f-adcc-24ad53d9079b
 # ╠═8e6f94b0-d7ce-4461-b40b-8f8f45de6c80
 # ╠═77244481-f942-4d09-a859-e3db7185895a
+# ╟─76d105ee-7d73-43a3-946d-5c4b7181a2a3
+# ╠═594f37a2-654b-4eb4-8ee9-2b8609eda73f
+# ╠═56402ce6-964c-4ca0-b3a9-917987c976ea
+# ╠═9172b664-e56b-4c26-a950-dc901fa68482
+# ╠═a2039109-41ab-4358-8b28-3e1be577d8ec
+# ╠═d4cca863-6b61-4abc-93df-8d9553760cf6
+# ╟─88b83d9e-7f2a-4539-a133-577f98d32889
 # ╟─4c983a8b-abe9-4cc5-a7ab-102a0d05eedd
 # ╠═ae60f715-86b7-45ff-8080-4b961cdfb465
 # ╠═19638c7f-1cef-41af-bdf1-b48e81503904
@@ -611,6 +686,14 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╟─de8f50c0-544c-4430-8548-76bff0b622cb
 # ╟─70046f23-5792-47ba-bfdd-52549fb6e68a
 # ╠═43760b9f-d48c-44e3-be34-2f728b770260
+# ╟─da466543-2824-4af3-81ce-98e55259802a
+# ╠═54416ff1-ef91-4ff3-968f-22acae580f4f
+# ╠═7b78d185-12c6-4baa-8ffc-b5a806cda32f
+# ╟─45468076-5bcc-442b-8f84-5c152a679129
+# ╠═553beaca-357b-4ef3-9d66-6b8146eb9a2e
+# ╠═4e6ffc08-02ee-41e9-ba47-59e465138b2c
+# ╟─9f32f1e8-a0b3-4a57-9147-30a9c610a4ee
+# ╠═e2e7d66b-18fc-4b29-919e-bb81b1e30b4d
 # ╟─f0fe4fcd-bbd9-40ad-987c-62a3eb299f21
 # ╠═b9aea038-b0f5-4101-b8d8-840caf80e9b2
 # ╠═07374ec1-2f35-431a-9001-4f9e47cf40c5
