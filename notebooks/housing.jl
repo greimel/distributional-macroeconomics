@@ -284,7 +284,7 @@ end
 # ╔═╡ 995eed7b-13d6-4d52-9606-414684a742ab
 function setup_DDP(household, statespace, prices, params)
 	(; β, u) = household
-	(; states, policies, states_indices, policies_indices) = statespace
+	(; states, policies, states_indices, policies_indices, z_chain) = statespace
 
 	## Rewards and policies
 	(; R, etc) = setup_R_etc(states, policies, prices, params; u)
