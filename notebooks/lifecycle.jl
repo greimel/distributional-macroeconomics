@@ -52,6 +52,13 @@ md"""
 `lifecycle.jl` | **Version 0.1** | *last updated: Apr 13 2022*
 """
 
+# ╔═╡ 8b2f077d-1ef0-4a51-9e2e-2b57e4464d25
+md"""
+# Lifecycle models
+
+The setup should be basically identical to the one in `aiyagari.jl`, except that demographic structure is changed. We'll cover the case of finite lifetime and perpetual youth.
+"""
+
 # ╔═╡ 96ab8b9c-7211-4b85-a46e-cba792c6f405
 md"""
 ## Setup
@@ -2049,6 +2056,7 @@ version = "3.5.0+0"
 # ╔═╡ Cell order:
 # ╟─f5333200-a779-4118-a54b-79250d6ceaf3
 # ╟─ddb1bf24-bba7-4eab-8eac-91a9457dc824
+# ╟─8b2f077d-1ef0-4a51-9e2e-2b57e4464d25
 # ╠═1d92eaa0-ba41-11ec-346e-7561afaf6a08
 # ╟─96ab8b9c-7211-4b85-a46e-cba792c6f405
 # ╠═5a11b72d-616a-446f-847c-e81d6f94f16f
