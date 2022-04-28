@@ -51,30 +51,33 @@ md"""
 ## Reward `R`
 """
 
+# ╔═╡ 5dbdf1f8-3730-4b8b-9eae-639fd3c75de8
+policy = (h_next = 1.0, a_next = 1.0)
+
 # ╔═╡ 4ac14c82-def2-4289-a031-37ebee8ac229
-function consumption((; ω, z), (; ω_next), h_next, (; r, w, p), (; δ)) 
+function consumption((; ω, z, p), (; ω_next), h_next, (; r, w), (; δ)) 
 	ω - ω_next/(1+r) + z * w - p * h_next * (1 - (1-δ)/(1+r))
 end
 
 # ╔═╡ bd8cc69a-343d-4400-9e4f-02c4152ecce2
-a_next((; ω_next), h_next, (; p, r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
+a_next((; p), (; ω_next), h_next, (; r), (; δ)) = (ω_next - p * (1-δ) * h_next) / (1 + r)
 
 # ╔═╡ 5d495d6a-3692-420a-9f63-88cc3837cd11
 function consumption2(
-		(; ω, z), policy, h_next, prices, params;
+		(; ω, p, z), policy, h_next, prices, params;
 		a_next = a_next(policy, h_next, prices, params)
 	)
-	(; w, p) = prices
-	
+	(; w) = prices
+
 	z * w + ω - a_next - p*h_next
 end
 
 # ╔═╡ 164da4f8-cebc-4eb0-99ae-b1d8f44605fd
-h_max((; ω_next), (; p, r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
+h_max((; ω_next), (; r), (; ϕ, δ)) = max(ω_next / (1-δ - (1+r)*ϕ), eps())
 
 # ╔═╡ fa8bcd80-69c5-4975-b607-dc7f976cd8da
 function reward_etc(state, policy, h_next, prices, params; u)
-	a_n = a_next(policy, h_next, prices, params) 
+	a_n = a_next(state, policy, h_next, prices, params) 
 	c = consumption(state, policy, h_next, prices, params)
 	#c2 = consumption2(state, policy, h_next, prices, params; a_next=a_n)
 	#@assert c ≈ c2
@@ -257,7 +260,13 @@ function solve_details0(ddp, statespace, other_policies; solver = PFI)
 	df.state = states
 	df.policy = policies[results.sigma]
 	df.additional_policies = other_policies[results.sigma]
-	df.π = only(stationary_distributions(results.mc))
+	πs = stationary_distributions(results.mc)
+
+	if length(πs) == 1
+		df.π = only(πs)
+	else
+		@info length(πs)
+	end
 
 	(; df, results)
 end
@@ -1029,6 +1038,7 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╟─c4990e42-005d-45c4-bd70-065120c81686
 # ╠═22394dc4-af4b-401f-848c-363d09ef7e57
 # ╟─ccfc4eda-0888-4357-a661-6da485cbe8b4
+# ╠═5dbdf1f8-3730-4b8b-9eae-639fd3c75de8
 # ╠═4ac14c82-def2-4289-a031-37ebee8ac229
 # ╠═5d495d6a-3692-420a-9f63-88cc3837cd11
 # ╠═bd8cc69a-343d-4400-9e4f-02c4152ecce2
