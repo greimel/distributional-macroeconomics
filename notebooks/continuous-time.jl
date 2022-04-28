@@ -43,6 +43,14 @@ md"""
 `continuous-time.jl` | **Version 0.1** | *last updated: Apr 26 2022*
 """
 
+# ╔═╡ 36a22f3b-9f7d-4075-95d3-5787e40dbad7
+md"""
+# Heterogenous Agents in Continuous Time
+
+*The model setup is adapted from [an example in `EconPDEs.jl`.](https://github.com/matthieugomez/EconPDEs.jl/blob/ecdefd0b1e52b2ec3bcebb9498d39057c26afd74/examples/ConsumptionProblem/AchdouHanLasryLionsMoll_TwoAssets.jl)*
+
+"""
+
 # ╔═╡ bdbf11b8-e6c1-4f9c-8ab4-cb714655fed0
 function μa_from_va(va, (; y, a), (; r, γ))
  	c = va^(-1 / γ)
@@ -1787,6 +1795,7 @@ version = "3.5.0+0"
 # ╔═╡ Cell order:
 # ╟─5d9a1abe-a51d-41c6-b86d-a1360140c05a
 # ╟─9e4ec644-4566-4066-a958-ba7255fbe2f5
+# ╟─36a22f3b-9f7d-4075-95d3-5787e40dbad7
 # ╠═d7b87ed2-c551-11ec-2bb5-218065bbaeaf
 # ╠═4193fbb2-5a05-4e63-9647-69c5269d80ad
 # ╠═8a3e8d6a-23f4-41ba-93bb-235d10bdd534

@@ -66,6 +66,16 @@
                 "preview_image_url": ""
             }
         ]
+    },
+        {
+        "title": "Heterogeneity and Economic Shocks",
+        "contents": [
+            {
+                "name": "Continuous time",
+                "notebook_path": "notebooks/continuous-time.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+        ]
     }
-
 ]
