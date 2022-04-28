@@ -97,14 +97,30 @@ begin
 	hs = range(quantile(distribution, 0.001), quantile(distribution, 0.999), length = 50)
 	as = range(m.amin, m.amax, length = 100)
 	stategrid = OrderedDict(:y => ys, :a => as)
-	yend = OrderedDict(:v => [log(y + a) for y in stategrid[:y], a in stategrid[:a]
-	#, h in stategrid[:h]
-	])
+	yend = OrderedDict(:v => [log(y + a) 
+		for y in stategrid[:y], a in stategrid[:a]])
 	(; optional, zero, residual_norm) = pdesolve(m, stategrid, yend)
 end
 
 # ╔═╡ 4fe456b2-32e4-401b-9263-f98a56b821e3
 optional
+
+# ╔═╡ 81fd3173-e83e-4d10-a03f-73ba999ba5ff
+md"""
+# Experimenting
+"""
+
+# ╔═╡ 90c8558a-5299-4024-9f3a-181e009708e4
+
+
+# ╔═╡ db199a5b-606d-4d77-8c84-d3357b758aaa
+Tsolution = Type{tuple(keys(yend)...)}
+
+# ╔═╡ be53da9e-dd3a-4e8a-80f8-032b48244404
+Tsolution.parameters[1][1]
+
+# ╔═╡ be79940f-0615-4f4e-b250-ff8bdc22453c
+
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -633,5 +649,10 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═24542306-35f1-4ef2-bc66-1496299ffbec
 # ╠═1c61d689-e7da-4faf-b412-52235f786537
 # ╠═4fe456b2-32e4-401b-9263-f98a56b821e3
+# ╟─81fd3173-e83e-4d10-a03f-73ba999ba5ff
+# ╠═90c8558a-5299-4024-9f3a-181e009708e4
+# ╠═db199a5b-606d-4d77-8c84-d3357b758aaa
+# ╠═be53da9e-dd3a-4e8a-80f8-032b48244404
+# ╠═be79940f-0615-4f4e-b250-ff8bdc22453c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
