@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.0
+# v0.18.4
 
 using Markdown
 using InteractiveUtils
@@ -22,6 +22,9 @@ using HypertextLiteral
 
 # ╔═╡ 6a3614fb-81bd-474d-85cf-06725846a6c0
 using PlutoUI
+
+# ╔═╡ 85ec914e-4128-480e-bb8b-15571b0e8fc8
+using Colors
 
 # ╔═╡ b14f33ae-89a7-473b-ac9b-1db0208faca7
 using PlutoSliderServer, Logging
@@ -63,8 +66,31 @@ SUBTITLE = "PhD-level Elective Course"
 # ╔═╡ 4be56e57-fea0-4fbe-9659-44bed594b1b2
 INSTITUTION = "Tinbergen Institute"
 
+# ╔═╡ c9f17f9f-766a-4137-92c5-f8173561a7bc
+INSTITUTION_URL = "https://www.tinbergen.nl"
+
 # ╔═╡ ab7186a4-2287-41da-a939-70f142bfeacd
 TERM = "Spring 2022"
+
+# ╔═╡ a31d893d-2cde-4228-a506-6af013fe1f3e
+LOGO_FILE = "tinbergen-institute-logo-white.svg"
+
+# ╔═╡ dbb5e02a-2485-4ada-98d1-cc24fd6fc418
+md"""
+Colors need to be adjusted in the css file.
+"""
+
+# ╔═╡ c2f2f339-0857-473a-9f8e-7959a5291802
+tinbergen_blue = RGB(([46,61,126]./256)...)
+
+# ╔═╡ e1cdd38a-ef8a-472e-939e-8028ef2140c2
+tinbergen_gold = RGB(([217,172,104]./256)...)
+
+# ╔═╡ 997374f8-62ba-49c1-b199-75a3dcf6295e
+hex(tinbergen_blue)
+
+# ╔═╡ cabfe9a8-f24b-4d6f-a9ff-261d083d1865
+hex(tinbergen_gold)
 
 # ╔═╡ 83130e69-9b67-44b5-ad32-500162abc0d2
 md"""
@@ -106,7 +132,7 @@ pages = [
 SLASH_PREPATH = !isempty(PREPATH) ? "/" * PREPATH : ""
 
 # ╔═╡ 02e00e09-76a5-4f38-8557-4d9caf280b4c
-homepage = (page = "/index.html", href = "$SLASH_PREPATH/", title = "Welcome")
+homepage = (page = "/index.html", path = "$SLASH_PREPATH/", title = "Welcome")
 
 # ╔═╡ d83ee9b9-d255-4217-a776-3b0f4f168c8f
 @bind regenerate Button("Regenerate!")
@@ -198,34 +224,41 @@ md"""
 # Sidebar
 """
 
-# ╔═╡ fd5f6637-3223-4f0b-94a6-ace86f5a5926
-function instructors(INSTRUCTORS)
-	tmp = map(INSTRUCTORS) do (; name, href)
-		"""
-		<a href="$href">$name</a>
-		"""
-	end
-	join(tmp, ", ", "&amp " ) |> HTML
-end
-
-# ╔═╡ 3e93e57c-3660-416f-9874-d43abf99e60e
-INSTRUCTORS = [
-	(name = "Fabian Greimel", href = "https://www.greimel.eu/"),
-	(name = "Stefanie J. Huber", href = "https://sites.google.com/site/stefaniehuber/"),
-	(name = "Enrico Perotti", href = "https://www.enricoperotti.eu/"),
-] |> instructors
-
 # ╔═╡ feaed8af-05d0-4b80-9f69-8f827f9343a8
 bold(text) = @htl("<b>$(text)</b>")
 
 # ╔═╡ 4a7a342d-4bf2-455d-9cf9-52a827e180d4
 emph(text) = @htl("<em>$(text)</em>")
 
+# ╔═╡ b5b07aac-1681-46ac-a234-198ba8261882
+href(path, text) = @htl("<a href=$(path)>$(text)</a>")
+
+# ╔═╡ fd5f6637-3223-4f0b-94a6-ace86f5a5926
+function instructors(INSTRUCTORS)
+	tmp = map(INSTRUCTORS) do (; name, url)
+		href(url, name)
+	end
+	join(tmp, ", ", "&amp " ) |> HTML
+end
+
+# ╔═╡ 3e93e57c-3660-416f-9874-d43abf99e60e
+INSTRUCTORS = [
+	(name = "Fabian Greimel", url = "https://www.greimel.eu/"),
+	(name = "Stefanie J. Huber", url = "https://sites.google.com/site/stefaniehuber/"),
+	(name = "Enrico Perotti", url = "https://www.enricoperotti.eu/"),
+] |> instructors
+
+# ╔═╡ d78c58e5-3ecb-45ee-972e-20fc90ece3cc
+path_to_asset(file) = joinpath(SLASH_PREPATH, "assets", file)
+
+# ╔═╡ f4d1018b-8f25-4478-91b8-ea55e66fe542
+joinpath(@__DIR__(), path_to_asset(LOGO_FILE)) |> isfile
+
 # ╔═╡ 98fb1e6a-c57c-4d66-972f-3471c6c15dd7
-function sidebar_page(; page, title, href="$(SLASH_PREPATH)$(page)", isbold = false)
+function sidebar_page(; page, title, path="$(SLASH_PREPATH)$(page)", isbold = false)
 	title = isbold ? bold(title) : title
 	@htl("""
-	<a class="sidebar-nav-item {{ispage $(page)}}active{{end}}" href="$(href)">$(title)</a>
+	<a class="sidebar-nav-item {{ispage $(page)}}active{{end}}" href="$(path)">$(title)</a>
 	""")
 end
 
@@ -254,9 +287,14 @@ function sidebar_code(book_model)
     <div class="container sidebar-sticky">
     <div class="sidebar-about">
     <br>
-    <img src="$(SLASH_PREPATH)/assets/tinbergen-institute-logo.svg" style="margin-left:1em; width: 80px; height: auto; display: inline">
-    <div style="font-weight: bold; margin-bottom: 0.5em"><a href="$(SLASH_PREPATH)/semesters/">$(TERM)</a> <span style="opacity: 0.6;">| $(INSTITUTION)</span></div>
-    <h1><a href="$(SLASH_PREPATH)/">$(TITLE)</a></h1>
+    <img src="$(path_to_asset(LOGO_FILE))" style="margin-left:1em; width: 80px; height: auto; display: inline">
+    <div style="font-weight: bold; margin-bottom: 0.5em">
+	$(href("$(SLASH_PREPATH)/semesters/", TERM))
+	<span style="opacity: 0.6;">|
+	$(href(INSTITUTION_URL,INSTITUTION))
+	</span>
+	</div>
+    <h1>$(href("$(SLASH_PREPATH)/",TITLE))</h1>
     <h2>$(SUBTITLE)</h2>
     <div style="line-height:18px; font-size: 15px; opacity: 0.85">by $(INSTRUCTORS)</div>
     </div>
@@ -779,6 +817,7 @@ TableOfContents()
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
 Deno_jll = "04572ae6-984a-583e-9378-9577a1c2574d"
 Franklin = "713c75ef-9fc9-4b05-94a9-213340da978e"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
@@ -796,6 +835,7 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
 Chain = "~0.4.10"
+Colors = "~0.12.8"
 Deno_jll = "~1.16.3"
 Franklin = "~0.10.72"
 HypertextLiteral = "~0.9.3"
@@ -858,6 +898,12 @@ deps = ["FixedPointNumbers", "Random"]
 git-tree-sha1 = "024fe24d83e4a5bf5fc80501a314ce0d1aa35597"
 uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
 version = "0.11.0"
+
+[[deps.Colors]]
+deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
+git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
+uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
+version = "0.12.8"
 
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1353,7 +1399,16 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═a0057e4c-0bcf-4970-8a2b-0412ad5af510
 # ╠═3e93e57c-3660-416f-9874-d43abf99e60e
 # ╠═4be56e57-fea0-4fbe-9659-44bed594b1b2
+# ╠═c9f17f9f-766a-4137-92c5-f8173561a7bc
 # ╠═ab7186a4-2287-41da-a939-70f142bfeacd
+# ╠═a31d893d-2cde-4228-a506-6af013fe1f3e
+# ╠═f4d1018b-8f25-4478-91b8-ea55e66fe542
+# ╟─dbb5e02a-2485-4ada-98d1-cc24fd6fc418
+# ╠═85ec914e-4128-480e-bb8b-15571b0e8fc8
+# ╠═c2f2f339-0857-473a-9f8e-7959a5291802
+# ╠═e1cdd38a-ef8a-472e-939e-8028ef2140c2
+# ╠═997374f8-62ba-49c1-b199-75a3dcf6295e
+# ╠═cabfe9a8-f24b-4d6f-a9ff-261d083d1865
 # ╟─83130e69-9b67-44b5-ad32-500162abc0d2
 # ╟─5b7892c6-ca5c-4c3a-b5d8-0a6323ee2fa9
 # ╠═88e1e91d-0d48-42e0-b4ab-4866624fd745
@@ -1393,6 +1448,8 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═fd5f6637-3223-4f0b-94a6-ace86f5a5926
 # ╠═feaed8af-05d0-4b80-9f69-8f827f9343a8
 # ╠═4a7a342d-4bf2-455d-9cf9-52a827e180d4
+# ╠═b5b07aac-1681-46ac-a234-198ba8261882
+# ╠═d78c58e5-3ecb-45ee-972e-20fc90ece3cc
 # ╠═98fb1e6a-c57c-4d66-972f-3471c6c15dd7
 # ╠═6775885d-0340-462e-bdeb-1e9076d94925
 # ╠═444502c9-33b5-4bb2-9a8d-a8d8e1adb632
