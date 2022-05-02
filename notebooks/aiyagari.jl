@@ -15,7 +15,7 @@ macro bind(def, element)
 end
 
 # ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
-using PlutoUI: Button, Slider, TableOfContents
+using PlutoUI: Button, Slider, TableOfContents, NumberField
 
 # ╔═╡ 9df5eb89-7ff6-4749-b3c1-4199e22d1d07
 using AlgebraOfGraphics, CairoMakie
@@ -42,21 +42,14 @@ using Statistics: mean
 using LinearAlgebra
 
 # ╔═╡ dd62503f-431a-43b7-b555-7ab8e7c98cdd
-using Roots: find_zero, init_state, init_options, Brent, update_state
+using Roots: find_zero, Brent
 
 # ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
 using QuantEcon
 
-# ╔═╡ bd569ec0-644e-4f94-ae43-aac97d583f50
-md"""
-!!! danger "Under construction!"
-
-	**This notebook is not ready for public consumption.** Use at your own risk.
-"""
-
 # ╔═╡ f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 md"""
-`aiyagari.jl` | **Version 0.1** | *last updated: Mar 24 2022*
+`aiyagari.jl` | **Version 0.1** | *last updated: May 2, 2022*
 """
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
@@ -460,188 +453,125 @@ md"""
 # Huggett equilibrium
 """
 
-# ╔═╡ 545c2acc-d07e-49d2-9476-690afacc6782
+# ╔═╡ 078bc9d1-9197-4b98-8a53-49171ab42e57
 md"""
-* interest rate: ``r = `` $r 
-* excess saving: ``\zeta = `` $(round(agg["k_next"], digits = 4))
+## Setup
+
+To compute the Huggett equilibrium, we need a function that computes the amount of excess savings in the economy for a given interest rate $r$.
 """
 
-# ╔═╡ e8c74b26-21d9-4d5b-af88-17969dd62887
-function solve_ddp(hh, ss, prices)
-	ddp = setup_DDP(hh, ss, prices)
-	results = solve_details(ddp, ss.states, ss.policies, solver = PFI)
-	ζ = aggregates(results)["k_next"]
+# ╔═╡ 52d33904-3942-4c1a-b021-a45a3597931f
+function excess_savings(hh, statespace, r; w, Δr)
+	
+	ddp = setup_DDP(hh, statespace, (; w, q=q(r), Δr = Δr))
+	
+	results = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
 
-	(; ζ, results)
+    return ζ = mean(results.k, weights(results.π))
+	
 end
 
-# ╔═╡ 7f8ce957-c03f-4941-aec4-9e4cb313bc97
-@bind δ1 Slider(0.01:0.01:1, show_value = true)
+# ╔═╡ 26381c79-5bed-4f80-a65c-69752c5ad063
+ζ = r -> excess_savings(hh, ss, r, w = prices.w, Δr = prices.Δr)
 
-# ╔═╡ 490edcd9-8bd5-4f85-9586-196f55390988
-md"""
-## Finding a bracket
-"""
-
-# ╔═╡ c4f2a723-91ac-4e83-8ec8-d3550ea3aff9
-md"""
-* $(@bind go Button("Start new!"))
-* $(@bind update Button("Update!"))
-* $(@bind go_back Button("Go back!"))
-"""
-
-# ╔═╡ 179ce1c1-7bbc-4423-b184-3043b6c0da82
-begin
-	go2 = go
-	past_r = Float64[]
-	past_ζ = Float64[]
-end
-
-# ╔═╡ 46b74033-3882-4b14-89ad-8db468d85f07
-begin
-	go2
-	if length(past_r) == 0
-		push!(past_r, r)
-		push!(past_ζ, agg["k_next"])
-	end
-end
-
-# ╔═╡ d9529db6-fe87-4b2a-8017-759762119ff3
-begin
-	go_back
-	popped = 1
-	if length(past_r) > 1 && length(past_ζ) > 1
-		pop!(past_r)
-		pop!(past_ζ)
-	end
-end
-
-# ╔═╡ dc5c4cf1-2bca-4361-b4f5-2e15bc79ab9d
-FF(r) = begin
-	(; results, ζ) = solve_ddp(hh, ss, (; prices.w, prices.Δr, q = q(r)))
-
-	π = @chain results begin
-		@groupby(:a)
-		@combine(:π = sum(:π))
-		_.π
-	end
-
-	@info lines(π)
-	ζ
-end
-
-# ╔═╡ fa9db330-23f9-4e32-b993-6fef1fc6a925
+# ╔═╡ d284cc00-d438-4a4b-9de4-028131e195f4
 md"""
 ## Finding the equilibrium
+
+In the Huggett equilribium, the equilibrium interest rate is the interest rate at which the excess savings $\zeta(r)$ are zero. To find this interest rate, we use the so-called bisection algorithm.
 """
 
-# ╔═╡ e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
-function update_r(past_r, past_ζ)
-	prev_r = past_r[end]
-	prev_ζ = past_ζ[end]
-	# Compute step size
-  	if length(past_r) == 1 && length(past_ζ) == 1
-    	Δ = - sign(prev_ζ) * min(abs(prev_ζ) / 100, 0.01) * prev_r
-	else
-		pprev_r = past_r[end-1]
-		pprev_ζ = past_ζ[end-1]
+# ╔═╡ 9f68bb34-7251-4445-8c18-83821b2b7882
+md"""
+**Initial interval for interest rate**
+
+As a first step, we need to find an interval so that excess savings are positive at one endpoint and negative at the other endpoint.
+
+Left endpoint $r_l =$ 	$(@bind left NumberField(0.00:0.01:0.04, 0.02))
+
+Right endpoint $r_r =$ 	$(@bind right NumberField(0.01:0.01:0.04, 0.02))
+"""
+
+# ╔═╡ 68596b0a-4ce5-4371-ac1e-e180092e4e48
+md"""
+Excess savings at
+*  left endpoint: ``\zeta(r_l) = `` $(round(excess_savings(hh, ss, left; prices.w, prices.Δr), digits = 4))
+* right endpoint: ``\zeta(r_r) = `` $(round(excess_savings(hh, ss, right; prices.w, prices.Δr), digits = 4))
+"""
+
+# ╔═╡ f01710f2-f4bd-4e30-a6c6-d21a4aaeb9d9
+md"""
+If you have found such an interval, you can be sure that the excess savings function $\zeta(r)$ crosses zero at least once in this interval. This means that we can start the bisection algorithm now.
+
+**Bisection algorithm**
+
+One step of the bisection algorithm works as follows:
+
+- compute the midpoint $r_m = 1/2 (r_l + r_d)$
+- if the sign of $\zeta(r_m)$ is different from the sign of $\zeta(r_l)$: use the midpoint $r_m$ as the right endpoint of the new interval and leave the left endpoint unchanged
+- if the sign of $\zeta(r_m)$ is different from the sign of $\zeta(r_r)$: use the midpoint $r_m$ as the left endpoint of the new interval and leave the right endpoint unchanged
+
+$(@bind start Button("Restart bisection"))
+$(@bind go Button("Bisect the interval"))
+"""
+
+# ╔═╡ 748f3ace-1b1e-44a4-9da0-b091cce48623
+begin
+	start
+	left_vec = [left]
+	right_vec = [right]
+	ζ_left_vec = [ζ(left)]
+	ζ_right_vec = [ζ(right)]
+
+	if ζ_left_vec[end] * ζ_right_vec[end] > 0.
+		throw(DomainError([left, right], "Function has the same sign at the left endpoint and at the right endpoint"))
+	end
+	
+end
+
+# ╔═╡ 7b807bc0-be48-4850-a33b-295325e95591
+begin
+	
+	go
+	
+	mid = (left_vec[end] + right_vec[end]) / 2
+	ζ_mid = ζ(mid)
+	
+	if ζ_left_vec[end] * ζ_mid < 0.
+		push!(left_vec,    left_vec[end])
+		push!(ζ_left_vec,  ζ_left_vec[end])
+		push!(right_vec,   mid)
+		push!(ζ_right_vec, ζ_mid)
 		
-    	slp = (prev_ζ - pprev_ζ) / (prev_r - pprev_r)
-    	factor = abs(prev_ζ) < 0.8 ? 0.5 : 1.0 # go slower closer to the root TODO needs to check relative error
-    	Δr = - prev_ζ / slp * factor
-    	if sign(prev_ζ) == sign(Δr)
-      		Δr = - Δr
-       		@warn("demand went in wrong direction")
-    	end
-    	Δ = Δr
-  	end
-	Δ
-end
+	elseif ζ_right_vec[end] * ζ_mid < 0.
+		push!(left_vec,    mid)
+		push!(ζ_left_vec,  ζ_mid)
+		push!(right_vec,   right_vec[end])
+		push!(ζ_right_vec, ζ_right_vec[end])
 
-# ╔═╡ 06079505-cf27-4965-aa6d-90e0f63e093a
-function update_results!(past_r, past_ζ, hh, ss, (; w, Δr))
-	r_old = past_r[end]
-	r_update =  update_r(past_r, past_ζ)
-
-	N_try = 10
-	ϕ = 1.0
-	
-	for i_try ∈ 1:N_try
-	
-		r_new = r_old + ϕ * r_update
-		(; ζ, results) = solve_ddp(hh, ss, (; w, q = q(r_new), Δr))
-
-		π = @chain results begin
-			@groupby(:k)
-			@combine(:π = sum(:π))
-			_.π
-		end
-
-		@info lines(π, axis = (title = "ϕ = $ϕ", ))
-
-		if !(π[1] ≈ 1.0) && !(π[end] ≈ 1.0)
-			push!(past_r, r_new)
-			push!(past_ζ, ζ)
-			@info (; r_old, ϕ, i_try, r_new)
-			break
-		end
-
-		if i_try == N_try
-			@info (; i_try)
-		end
-		ϕ = ϕ / 2 
-	end
-	
-	past_r[end:-1:end-1], past_ζ[end:-1:end-1]
-end
-
-# ╔═╡ 9ba9e707-27db-4134-bf4f-a8eb768e9a95
-update; pushed = 1; go2; update_results!(past_r, past_ζ, hh, ss, prices)
-
-# ╔═╡ 269f64c7-523e-402c-ad72-f4a2a3316090
-popped, pushed; @info length(past_r), length(past_ζ)
-
-# ╔═╡ 72021aa4-e376-4f7a-b3af-dd113b535ac9
-begin
-	popped, pushed
-	if any(>(0), past_ζ) && any(<(0), past_ζ)
-		@info md" # Bracket found!"
-		bracket_found = true
 	else
-		@info "Bracket not found"
-		bracket_found = false
+		throw(DomainError([left, right], "Function has the same sign at the left endpoint and at the right endpoint"))
+		
 	end
-end
+		
+	@info left_vec[end], right_vec[end]
 
-# ╔═╡ 7ea1c5c1-6852-4975-b181-67120e3fde51
-if bracket_found
-	df = @chain DataFrame(; past_r, past_ζ) begin
-		sort(:past_ζ)
-	end
-
-	i_pos = findfirst(>(0), df.past_ζ)
-	i_neg = findlast(<(0), df.past_ζ)
-
-	df_brackets = df[[i_neg, i_pos],:]	
-	#@info df_brackets
-
-	xs = df_brackets.past_r
-	fxs = df_brackets.past_ζ
+	f = Figure()
+	ax1 = Axis(f[1, 1], xlabel = "interest rate r", ylabel = "excess savings ζ")
 	
-	brent_init_state = init_state(Brent(), FF, xs..., fxs...)
-	brent_options    = init_options(Brent(), brent_init_state)
+	scatter!(ax1, left_vec, ζ_left_vec)
+	scatter!(ax1, right_vec, ζ_right_vec)
+	vspan!(ax1, [left_vec[end]], [right_vec[end]], ymin=-1., y_max=1., color = (:grey, 0.2))
 
-	brent_init_state
-end
+	r_vec = vcat(left_vec, reverse(right_vec))
+	ζ_vec = vcat(ζ_left_vec, reverse(ζ_right_vec))
+	
+	lines!(ax1, r_vec, ζ_vec, color="black")
+	#xlabel!(ax1, "excess savings ζ")
+	#ylabel!(ax1, "interest rate r")
 
-# ╔═╡ 6a03e5cf-2f26-4ff5-8137-f5ab5b3401e2
-state = [brent_init_state]
+	current_figure()
 
-# ╔═╡ 9c6211bb-04e1-4030-ae17-a417fe76d7e4
-begin
-	state[1], converged = update_state(Brent(), FF, state[1], brent_options)
-	(; fxn1, fxn0, fc) = state[1]
-	(; fxn1, fxn0, fc)
 end
 
 # ╔═╡ 37e26bec-97a2-407b-ba89-442024330220
@@ -680,9 +610,6 @@ From the first-order conditions we can derive three functions that will be usefu
 - the capital demand function and its inverse (```K_to_r```)
 - a function that computes the wage that is associated with the given interest rate
 """
-
-# ╔═╡ aebdf0c3-1831-4445-b9dd-a19585ff226b
-
 
 # ╔═╡ b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
 function capital_demand(f, r)
@@ -798,6 +725,8 @@ end
 md"""
 To determine the exact equilibrium interest rate, we apply a root-finding algorithm to a function that computes excess demand for capital for a given interest rate. 
 
+We could of course use the bisection algorithm that we have used to compute the Huggett equilibrium above. But to make sure that the code is fast enough, we take the [Brent algorithm](https://en.wikipedia.org/wiki/Brent%27s_method) which is implemented in the ```Roots.jl``` package.
+
 Since the household's decision problem needs to be solved for a different value of the interest rate at each step of the algorithm, finding the equilibrium can be time-consuming, especially in more complicated models.
 
 The resulting equilibrium interest rate is $(round(r_eq, digits = 4)) and the associated capital stock is $(round(k_eq, digits = 3)).
@@ -819,9 +748,9 @@ where $K(\beta)$ denotes the equilibrium capital stock in the Aiyagari model tha
 "
 
 # ╔═╡ e1f7481a-c4a8-4856-9cd2-2e446b85334f
-function wealth_to_output_ratio(β, hh, firm, statespace, initial_bracket)
+function wealth_to_output_ratio(β, u, firm, statespace, initial_bracket)
 
-	hh_β = Household(β = β, u = hh.u)
+	hh_β = Household(β = β, u = u)
 	
 	r_eq = find_zero(
 		r -> excess_demand(hh_β, firm, statespace, r), 
@@ -836,14 +765,14 @@ function wealth_to_output_ratio(β, hh, firm, statespace, initial_bracket)
 end
 
 # ╔═╡ 4de4a9ef-cc86-400b-aa7d-a3be6f7e58f9
-wealth_to_output_ratio(0.96, hh2, firm, ss2, initial_bracket)
+wealth_to_output_ratio(0.96, hh2.u, firm, ss2, initial_bracket)
 
 # ╔═╡ 7d5c40d5-0a3e-465a-8619-2786126d2be0
 begin
 	
 	β_vals = 0.945:0.005:0.965
 
-	wto_vals = [wealth_to_output_ratio(β, hh2, firm, ss2, initial_bracket) for β in β_vals]
+	wto_vals = [wealth_to_output_ratio(β, hh2.u, firm, ss2, initial_bracket) for β in β_vals]
 
 	obj_vals = (wto_vals .- wto_target) .^ 2
 	
@@ -854,7 +783,7 @@ lines(β_vals, obj_vals, axis = (xlabel = "discount factor β", ylabel = "value 
 
 # ╔═╡ 669719e4-0b05-4364-8aed-33e1b7adc400
 β_cal = find_zero(
-	β -> wealth_to_output_ratio(β, hh2, firm, ss2, initial_bracket) - wto_target, 
+	β -> wealth_to_output_ratio(β, hh2.u, firm, ss2, initial_bracket) - wto_target, 
 	(0.945, 0.965), 
 	Brent(), 
 	atol=1e-5, rtol=1e-5, xatol=1e-5, xrtol=1e-5
@@ -2331,7 +2260,6 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─bd569ec0-644e-4f94-ae43-aac97d583f50
 # ╟─f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 # ╟─a274b461-a5df-446a-8374-f04267f5db69
@@ -2390,32 +2318,22 @@ version = "3.5.0+0"
 # ╟─2d1744d3-e8ec-4052-a3bb-e35b90ed60e4
 # ╟─48eced48-2b86-4199-8637-4619c40c55e9
 # ╟─8af3171b-ba81-4b13-bd81-c2a8a1c311ed
-# ╟─545c2acc-d07e-49d2-9476-690afacc6782
-# ╠═179ce1c1-7bbc-4423-b184-3043b6c0da82
-# ╠═46b74033-3882-4b14-89ad-8db468d85f07
-# ╠═e8c74b26-21d9-4d5b-af88-17969dd62887
-# ╠═06079505-cf27-4965-aa6d-90e0f63e093a
-# ╠═7f8ce957-c03f-4941-aec4-9e4cb313bc97
-# ╟─490edcd9-8bd5-4f85-9586-196f55390988
-# ╟─c4f2a723-91ac-4e83-8ec8-d3550ea3aff9
-# ╠═269f64c7-523e-402c-ad72-f4a2a3316090
-# ╟─9ba9e707-27db-4134-bf4f-a8eb768e9a95
-# ╟─72021aa4-e376-4f7a-b3af-dd113b535ac9
-# ╠═d9529db6-fe87-4b2a-8017-759762119ff3
-# ╠═dc5c4cf1-2bca-4361-b4f5-2e15bc79ab9d
-# ╟─fa9db330-23f9-4e32-b993-6fef1fc6a925
-# ╟─7ea1c5c1-6852-4975-b181-67120e3fde51
-# ╠═6a03e5cf-2f26-4ff5-8137-f5ab5b3401e2
-# ╠═9c6211bb-04e1-4030-ae17-a417fe76d7e4
-# ╠═e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
+# ╟─078bc9d1-9197-4b98-8a53-49171ab42e57
+# ╠═52d33904-3942-4c1a-b021-a45a3597931f
+# ╠═26381c79-5bed-4f80-a65c-69752c5ad063
+# ╟─d284cc00-d438-4a4b-9de4-028131e195f4
+# ╟─9f68bb34-7251-4445-8c18-83821b2b7882
+# ╟─68596b0a-4ce5-4371-ac1e-e180092e4e48
+# ╟─f01710f2-f4bd-4e30-a6c6-d21a4aaeb9d9
+# ╟─748f3ace-1b1e-44a4-9da0-b091cce48623
+# ╟─7b807bc0-be48-4850-a33b-295325e95591
 # ╟─37e26bec-97a2-407b-ba89-442024330220
 # ╟─027dc259-6c9e-407f-97af-4aaf032965f7
-# ╠═ca6ac45c-f334-493d-8e3e-db32da333b32
+# ╟─ca6ac45c-f334-493d-8e3e-db32da333b32
 # ╠═5564f1c0-aed9-4373-9c6a-bbb4f5bc8a8e
 # ╟─2fddaf62-9767-475f-8089-0feb7fa2bf1c
 # ╠═be1749b7-4b57-4b4c-95bd-91697e5c3c72
 # ╟─4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
-# ╠═aebdf0c3-1831-4445-b9dd-a19585ff226b
 # ╠═b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
 # ╠═fbfb389c-b67b-4705-92f8-086742e59303
 # ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
