@@ -368,7 +368,7 @@ Below, we compute the lowest asset value at which we observe dissaving by the ho
 md"""
 ## Stationary distribution
 
-The figures below show the stationary distribution over the state space. The first figure depicts the probability density over assets for both productivity levels separately, while the second figure averages over the two productivity states.
+The figure below depicts the probability density over assets for separately for the two productivity levels.
 """
 
 # ╔═╡ 47f3e4bc-affe-4463-b71e-36d9744b6c63
@@ -654,6 +654,16 @@ md"""
 ## Setup
 """
 
+# ╔═╡ ca6ac45c-f334-493d-8e3e-db32da333b32
+md"""
+The production function is $F(K, N) = A K^\alpha N^{1-\alpha}$ where $K$ is the capital stock and $N$ is labor.
+"""
+
+# ╔═╡ 5564f1c0-aed9-4373-9c6a-bbb4f5bc8a8e
+function production(f, K)
+	return f.A * K ^ f.α * f.N ^ (1 - f.α)
+end
+
 # ╔═╡ 2fddaf62-9767-475f-8089-0feb7fa2bf1c
 md"""
 The function below creates a named tuple with all parameters that describe the technology of the firm.
@@ -664,15 +674,15 @@ function Firm(A = 1, N = 1, α = 0.33, δ = 0.05)
 	(; A, N, α, δ)
 end
 
-# ╔═╡ 992c1737-a507-4198-9248-5d0687bee5b9
+# ╔═╡ 4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
 md"""
-The production function is $F(K, N) = A K^\alpha N^{1-\alpha}$ where $K$ is the capital stock and $N$ is labor.
+From the first-order conditions we can derive three functions that will be useful later on:
+- the capital demand function and its inverse (```K_to_r```)
+- a function that computes the wage that is associated with the given interest rate
 """
 
-# ╔═╡ 4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
-function production(f, K)
-	return f.A * K ^ f.α * f.N ^ (1 - f.α)
-end
+# ╔═╡ aebdf0c3-1831-4445-b9dd-a19585ff226b
+
 
 # ╔═╡ b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
 function capital_demand(f, r)
@@ -813,7 +823,12 @@ function wealth_to_output_ratio(β, hh, firm, statespace, initial_bracket)
 
 	hh_β = Household(β = β, u = hh.u)
 	
-	r_eq = find_zero(r -> excess_demand(hh_β, firm, statespace, r), initial_bracket, Brent())
+	r_eq = find_zero(
+		r -> excess_demand(hh_β, firm, statespace, r), 
+		initial_bracket, 
+		Brent(), 
+		atol=1e-5, rtol=1e-5, xatol=1e-5, xrtol=1e-5
+	)
 	k_eq = capital_demand(firm, r_eq)
 
 	return k_eq/ production(firm, k_eq)
@@ -841,8 +856,10 @@ lines(β_vals, obj_vals, axis = (xlabel = "discount factor β", ylabel = "value 
 β_cal = find_zero(
 	β -> wealth_to_output_ratio(β, hh2, firm, ss2, initial_bracket) - wto_target, 
 	(0.945, 0.965), 
-	Brent()
+	Brent(), 
+	atol=1e-5, rtol=1e-5, xatol=1e-5, xrtol=1e-5
 )
+
 
 # ╔═╡ fd97aa43-5e80-4be9-92d1-44d9fc371b84
 md"""
@@ -2393,10 +2410,12 @@ version = "3.5.0+0"
 # ╠═e6bb89e3-48db-4b0f-a3fe-30bb69b7cec3
 # ╟─37e26bec-97a2-407b-ba89-442024330220
 # ╟─027dc259-6c9e-407f-97af-4aaf032965f7
+# ╠═ca6ac45c-f334-493d-8e3e-db32da333b32
+# ╠═5564f1c0-aed9-4373-9c6a-bbb4f5bc8a8e
 # ╟─2fddaf62-9767-475f-8089-0feb7fa2bf1c
 # ╠═be1749b7-4b57-4b4c-95bd-91697e5c3c72
-# ╟─992c1737-a507-4198-9248-5d0687bee5b9
-# ╠═4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
+# ╟─4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
+# ╠═aebdf0c3-1831-4445-b9dd-a19585ff226b
 # ╠═b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
 # ╠═fbfb389c-b67b-4705-92f8-086742e59303
 # ╠═f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
