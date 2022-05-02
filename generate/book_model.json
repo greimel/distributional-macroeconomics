@@ -19,6 +19,12 @@
                 "notebook_path": "notebooks/aiyagari.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Lifecycle models",
+                "notebook_path": "notebooks/lifecycle.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     },
@@ -66,6 +72,16 @@
                 "preview_image_url": ""
             }
         ]
+    },
+        {
+        "title": "Heterogeneity and Economic Shocks",
+        "contents": [
+            {
+                "name": "Continuous time",
+                "notebook_path": "notebooks/continuous-time.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
     }
-
 ]
