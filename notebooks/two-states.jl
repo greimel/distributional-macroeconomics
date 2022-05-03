@@ -7,6 +7,15 @@ using InteractiveUtils
 # ╔═╡ 870837d2-ca44-11ec-091b-1f93f0cf9d2e
 using QuantEcon
 
+# ╔═╡ 803cadbf-5a46-49b8-93da-068b32815494
+using StatsBase: weights
+
+# ╔═╡ bcad77f2-649d-4fa2-a5ad-1ad9c61c5564
+using Statistics: mean
+
+# ╔═╡ 780d7063-0109-4d19-9484-f24f39d3982a
+using AoGExtensions
+
 # ╔═╡ d721c87a-368b-4af0-951a-269aca12d4d7
 using DataFrames
 
@@ -76,13 +85,13 @@ function Household(; σ = 2.0, ξ = 0.3, β = 0.96,
 end
 
 # ╔═╡ c9ee0034-735f-434c-8c44-320566c5cb15
-household = Household()
+household = Household(; ξ = 0.6)
 
 # ╔═╡ 61ffb43c-3717-40ae-91f3-a3da2f624ddf
-params = (θ=0.5, δ=0.02, γ=2.0)
+params = (θ=0.01, δ=0.02, γ=2.0)
 
 # ╔═╡ 0c47b605-a6c3-4bae-bb85-fce8a173eaf0
-prices = (; r=0.045, w=1.0)
+prices = (; r=0.035, w=1.0)
 
 # ╔═╡ 686c7013-329a-447f-8cc7-a201be551b4f
 md"""
@@ -93,16 +102,21 @@ md"""
 ε = 0.25
 
 # ╔═╡ 76b12108-c137-4661-bd4f-6208f1d763cf
-p_chain = MarkovChain(
-	[1-ε ε;
-	 ε 1-ε],
-	5 .* [0.75, 1.0])
+p_chain = let ε = 0.01
+
+	MarkovChain(
+		[1-ε ε;
+		 ε 1-ε],
+		4.5 .* [0.75, 1.0])
+end
 
 # ╔═╡ ec4b273c-74b1-4bc7-8058-de32e5f497ea
-z_chain = MarkovChain(
-	[1-ε ε;
-	 ε 1-ε],
-	[0.7, 1.3])
+z_chain = let ε = 0.3
+	MarkovChain(
+		[1-ε ε;
+		 ε 1-ε],
+		[0.7, 1.3])
+end
 
 # ╔═╡ 868a2f9f-edcd-4503-b356-2bdabc9c1c4c
 function statespace(; 
@@ -138,26 +152,34 @@ md"""
 ## Rewards and policies
 """
 
-# ╔═╡ 9c2505a8-462f-4c95-81ee-4dce4cfe7c43
-function consumption((; a, h, p, z), (; a_next, h_next), (; r, w), (; θ, δ, γ))
-	y = z * w
-	c = y + p * h * (1-δ) + a * (1+r) - p * h_next - a_next
-end
-
 # ╔═╡ 198d8f45-20e6-4209-9a4a-1eefbd98428b
 function voluntary_equity((; p), (; a_next, h_next), (; r), (; θ, δ, γ))
 	a_next + (1-θ) * (1-δ)/(1+r) * p * h_next
 end
 
+# ╔═╡ 96a334af-eae6-4a2f-abc8-2e64a0c150df
+function equity((; p, a, h), (; r), (; θ, δ, γ))
+	(1+r)*a + p*h*(1-δ)
+end
+
+# ╔═╡ 9c2505a8-462f-4c95-81ee-4dce4cfe7c43
+function consumption(state, (; a_next, h_next), prices, params)
+	(; w) = prices
+	(; p, z) = state
+	ω = z * w + equity(state, prices, params) # wealth
+	c = ω - p * h_next - a_next
+end
+
 # ╔═╡ 97e4f447-8cf5-4e51-988a-79975bd357b4
 function reward_etc(state, policy, prices, params; u)
 
-	c = consumption(state, policy, prices, params)
-	q = voluntary_equity(state, policy, prices, params)
+	c  = consumption(state, policy, prices, params)
+	eq = equity(state, prices, params)
+	q  = voluntary_equity(state, policy, prices, params)
 
 	reward = u(c, policy.h_next)
 	
-	(; reward, c, q, policy...)
+	(; reward, eq, c, q, policy...)
 end
 
 # ╔═╡ 2308ee1b-a990-4a0a-93d0-82b69bb16dc8
@@ -169,7 +191,7 @@ end
 begin
 	n = 30
 	p_grid = p_chain.state_values
-	h_grid = range(2.0, 8.0, n)
+	h_grid = range(1.5, 5.0, n)
 	aₘᵢₙ = a_min((; p = minimum(p_grid)), (; h_next = maximum(h_grid)), prices, params)
 	a_grid = range(aₘᵢₙ, 17.0, n)
 	#statespace(; p_chain, z_chain, h_grid, a_grid)
@@ -323,7 +345,7 @@ function solve_details0(ddp, statespace, etc; solver = PFI)
 	
 	df = @chain df begin
 		leftjoin!(_, DataFrame(etc), on=[:s_ind, :a_ind])
-		select(Not([:s_ind, :a_ind, :sa_ind]))
+		select(Not([:a_ind, :sa_ind]))
 	end	
 
 	(; df, results)
@@ -334,6 +356,74 @@ results_sa = let
 	(; ddp, etc) = ddp_etc
 	solve_details0(ddp, ss, etc)
 end
+
+# ╔═╡ 8c7df0e1-ba26-42cd-b580-eda759515d9a
+outtt = let
+	(;df, results) = results_sa
+
+	(; s_ind, π) = @chain df begin
+		@subset(:p_i == 2)
+		@select(:s_ind, :π = @c :π ./ sum(:π))
+	end
+
+	#states_subdf = select(DataFrame(ss.states), Not([:p_i, :p]))[s_ind, :]
+	
+	s_ind_pre = copy(s_ind)
+
+	(; s_ind) = @chain df begin
+		@subset(:p_i == 1)
+	end
+
+	s_ind_post = copy(s_ind)
+
+	Q_pre   = results.mc.p[s_ind_pre,  s_ind_pre]
+	Q_trans = results.mc.p[s_ind_pre,  s_ind_post]
+	Q_post  = results.mc.p[s_ind_post, s_ind_post]
+
+	
+	πs = Vector{Float64}[]
+	#πs[1] = copy(π)
+
+	for t ∈ 1:100
+		π = Q_pre' * π
+		π_long = zeros(length(ss.states))
+		π_long[s_ind_pre] .= π
+		push!(πs, π_long)
+	end
+	π = Q_trans' * π
+	π_long = zeros(length(ss.states))
+	π_long[s_ind_post] .= π
+	push!(πs, π_long)
+
+	for t ∈ 1:50
+		π = Q_post' * π
+		π_long = zeros(length(ss.states))
+		π_long[s_ind_post] .= π
+		push!(πs, π_long)
+	end
+	(; πs, df, s_ind_pre, s_ind_post)
+end
+
+# ╔═╡ d5a7d15d-1ff6-4a90-bc1b-74151368edeb
+let
+	df = DataFrame(outtt.πs, "t" .* string.(1:length(outtt.πs)))
+	df = [select(outtt.df, Not(:π)) df]
+	df = @chain df begin
+		stack(r"^t", value_name = :π)
+		@transform(:t = parse(Int, :variable[2:end]))
+		@subset(:t > 50)
+		stack([:c, :a, :h, :eq, :h_next, :a_next, :q, :p], [:π, :t, :z_i])
+#		@groupby(:t, :variable)
+#		@combine(:value = mean(:value, weights(:π)))
+		data(_) * mapping(:t, :value, weights = :π, layout = :variable, color = :z_i => nonnumeric) * quantileband()
+		AlgebraOfGraphics.draw(facet = (linkyaxes = false, ))
+	end	
+end
+	
+
+# ╔═╡ 53917502-551e-45e6-8e7f-e092150e03f3
+select(DataFrame(ss.states), :a_i, :h_i, :z_i)[outtt.s_ind_pre, :] ==
+select(DataFrame(ss.states), :a_i, :h_i, :z_i)[outtt.s_ind_post, :]
 
 # ╔═╡ d2149f28-54d3-41f9-b8ae-8e74d4919835
 md"""
@@ -407,6 +497,7 @@ md"""
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+AoGExtensions = "7df18d33-496e-4cfd-8564-72cba2c0b329"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
@@ -414,16 +505,20 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 AlgebraOfGraphics = "~0.6.6"
+AoGExtensions = "~0.1.9"
 CairoMakie = "~0.7.5"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.3"
 PlutoUI = "~0.7.38"
 QuantEcon = "~0.16.3"
+StatsBase = "~0.33.16"
 StructArrays = "~0.6.6"
 """
 
@@ -468,6 +563,12 @@ deps = ["Colors"]
 git-tree-sha1 = "e81c509d2c8e49592413bfb0bb3b08150056c79d"
 uuid = "27a7e980-b3e6-11e9-2bcd-0b925532e340"
 version = "0.4.1"
+
+[[deps.AoGExtensions]]
+deps = ["AlgebraOfGraphics", "CategoricalArrays", "Chain", "DataFrameMacros", "DataFrames", "InteractiveUtils", "Makie", "Markdown", "NamedDims", "PlutoTest", "PlutoUI", "Statistics", "StatsBase", "UnPack"]
+git-tree-sha1 = "b2bcacd764e6f3e05650139499eb0caa2fbdb856"
+uuid = "7df18d33-496e-4cfd-8564-72cba2c0b329"
+version = "0.1.9"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -536,6 +637,12 @@ deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
+
+[[deps.CategoricalArrays]]
+deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
+git-tree-sha1 = "109664d3a6f2202b1225478335ea8fea3cd8706b"
+uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+version = "0.10.5"
 
 [[deps.Chain]]
 git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
@@ -617,6 +724,12 @@ deps = ["StaticArrays"]
 git-tree-sha1 = "9f02045d934dc030edad45944ea80dbd1f0ebea7"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.5.7"
+
+[[deps.CovarianceEstimation]]
+deps = ["LinearAlgebra", "Statistics", "StatsBase"]
+git-tree-sha1 = "a3e070133acab996660d31dcf479ea42849e368f"
+uuid = "587fd27a-f159-11e8-2dae-1979310e6154"
+version = "0.2.7"
 
 [[deps.Crayons]]
 git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
@@ -1244,6 +1357,12 @@ git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.7"
 
+[[deps.NamedDims]]
+deps = ["AbstractFFTs", "ChainRulesCore", "CovarianceEstimation", "LinearAlgebra", "Pkg", "Requires", "Statistics"]
+git-tree-sha1 = "0856b62716585eb90cc1dada226ac9eab5f69aa5"
+uuid = "356022a1-0364-5f58-8944-0da4b18d706f"
+version = "0.2.47"
+
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
 git-tree-sha1 = "18efc06f6ec36a8b801b23f076e3c6ac7c3bf153"
@@ -1388,6 +1507,12 @@ deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Stat
 git-tree-sha1 = "bb16469fd5224100e422f0b027d26c5a25de1200"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.2.0"
+
+[[deps.PlutoTest]]
+deps = ["HypertextLiteral", "InteractiveUtils", "Markdown", "Test"]
+git-tree-sha1 = "17aa9b81106e661cffa1c4c36c17ee1c50a86eda"
+uuid = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
+version = "0.2.2"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
@@ -1863,6 +1988,7 @@ version = "3.5.0+0"
 # ╠═97e4f447-8cf5-4e51-988a-79975bd357b4
 # ╠═9c2505a8-462f-4c95-81ee-4dce4cfe7c43
 # ╠═198d8f45-20e6-4209-9a4a-1eefbd98428b
+# ╠═96a334af-eae6-4a2f-abc8-2e64a0c150df
 # ╠═2308ee1b-a990-4a0a-93d0-82b69bb16dc8
 # ╠═644ea8ed-ac5c-46f7-ad13-536c26579290
 # ╟─f89243e8-6b07-4a58-acd1-02ab6c98990e
@@ -1877,6 +2003,12 @@ version = "3.5.0+0"
 # ╠═a7a70051-7832-44fd-90d0-59a56ac59d80
 # ╠═3b2d7a3a-0891-49a6-b4da-bae29d2bc857
 # ╠═a6ad35a7-5f59-4a42-b126-efedf4f10a44
+# ╠═8c7df0e1-ba26-42cd-b580-eda759515d9a
+# ╠═803cadbf-5a46-49b8-93da-068b32815494
+# ╠═bcad77f2-649d-4fa2-a5ad-1ad9c61c5564
+# ╠═d5a7d15d-1ff6-4a90-bc1b-74151368edeb
+# ╠═780d7063-0109-4d19-9484-f24f39d3982a
+# ╠═53917502-551e-45e6-8e7f-e092150e03f3
 # ╟─d2149f28-54d3-41f9-b8ae-8e74d4919835
 # ╠═d721c87a-368b-4af0-951a-269aca12d4d7
 # ╠═188bd63d-59d2-4bf2-b902-a4435d6f3a2d
