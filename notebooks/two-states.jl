@@ -7,14 +7,17 @@ using InteractiveUtils
 # ╔═╡ 870837d2-ca44-11ec-091b-1f93f0cf9d2e
 using QuantEcon
 
-# ╔═╡ b2d5246d-2855-4f3e-9220-045a07d0a3d8
-using StructArrays
-
-# ╔═╡ 1ec30c7b-7d60-46be-aa7a-b802830d826d
-using Random
-
 # ╔═╡ d721c87a-368b-4af0-951a-269aca12d4d7
 using DataFrames
+
+# ╔═╡ 580e1257-b902-4a7b-815c-2811cae7fdef
+using PlutoUI
+
+# ╔═╡ 0944ad43-f26f-4352-9543-6f9878005b8a
+using SparseArrays
+
+# ╔═╡ b2d5246d-2855-4f3e-9220-045a07d0a3d8
+using StructArrays
 
 # ╔═╡ a68d41ae-f9ff-49f2-af23-1561892a9e42
 using AlgebraOfGraphics, CairoMakie
@@ -25,8 +28,66 @@ using DataFrameMacros
 # ╔═╡ a3c285be-9954-4f3e-815f-a662f9bf7749
 using Chain
 
-# ╔═╡ 0944ad43-f26f-4352-9543-6f9878005b8a
-using SparseArrays
+# ╔═╡ 4e45bb36-2569-4cdc-9097-2de27e17f9b7
+md"""
+!!! danger "Under construction!"
+
+	**This notebook is not ready for public consumption.** Use at your own risk.
+"""
+
+# ╔═╡ ac536cdb-45af-4c42-a6cd-f56010b89c91
+md"""
+`housing-wealth-effects.jl` | **Version 0.1** | *last updated: May 3 2022*
+"""
+
+# ╔═╡ 894cb6f2-ab56-41da-ad57-fa9cebc1defb
+md"""
+# Housing Wealth Effects
+
+> How does consumer spending react to changes in house prices?
+
+* Similar to the other model
+* House prices follow a Markov Chain
+* Incomes follow a Markov Chain
+"""
+
+# ╔═╡ 58d53f5a-9eb9-4f60-8686-0a56b6a0f7bc
+md"""
+## Parameters
+"""
+
+# ╔═╡ cde42c53-868b-4770-b912-508d28710c71
+function make_u(; ξ, σ)
+	function u(c, h)
+		if c > 0 && h > 0
+			C = c^(1-ξ) * h^ξ
+			σ == 1 ? log(C) : C^(1-σ) / (1-σ)
+		else #h > 0
+		#	-Inf
+			h^ξ + 100 * c - 100
+		end
+	end
+end
+
+# ╔═╡ 65b4cbc1-7c39-40c2-8ef5-a09ee24ca0b2
+function Household(; σ = 2.0, ξ = 0.3, β = 0.96,	
+                    u = make_u(; ξ, σ))
+	(; β, u)
+end
+
+# ╔═╡ c9ee0034-735f-434c-8c44-320566c5cb15
+household = Household()
+
+# ╔═╡ 61ffb43c-3717-40ae-91f3-a3da2f624ddf
+params = (θ=0.5, δ=0.02, γ=2.0)
+
+# ╔═╡ 0c47b605-a6c3-4bae-bb85-fce8a173eaf0
+prices = (; r=0.045, w=1.0)
+
+# ╔═╡ 686c7013-329a-447f-8cc7-a201be551b4f
+md"""
+## State space
+"""
 
 # ╔═╡ 8b7a1169-0836-4ad7-8bf1-aabee4b36c28
 ε = 0.25
@@ -43,27 +104,148 @@ z_chain = MarkovChain(
 	 ε 1-ε],
 	[0.7, 1.3])
 
-# ╔═╡ 97e4f447-8cf5-4e51-988a-79975bd357b4
-function reward_xxx(state, policy, (; r), (; θ, δ, γ))	
-	(; a_next, h_next) = policy
-	(; a, h, p, y) = state
-
-	c = y + p * h * (1-δ) + a * (1+r) - p * h_next - a_next
-	q = a_next + (1-θ) * (1-δ)/(1+r) * p * h_next
-
-	reward = c > 0 ? (c^0.3 * h^0.7)^(1-γ)/(1-γ) : -1000 + 100 * c + h^0.7
+# ╔═╡ 868a2f9f-edcd-4503-b356-2bdabc9c1c4c
+function statespace(; 
+		p_chain, z_chain,
+		h_grid,
+		a_grid	
+	)
 	
-	(; a_next, h_next, c, q, reward)
+	z_grid = z_chain.state_values
+	p_grid = p_chain.state_values
+	
+	policies = [(; a_next, h_next) for h_next in h_grid, a_next in a_grid] |> vec
 
+	states = [(; a, h, p, z) for a ∈ a_grid, h ∈ h_grid, p ∈ p_grid, z ∈ z_grid] |> vec
+	states_indices = [(; a_i, h_i, p_i, z_i) for a_i ∈ 1:length(a_grid), h_i ∈ 1:length(h_grid), p_i ∈ 1:length(p_grid), z_i ∈ 1:length(z_grid)] |> vec
+
+	policies = [(; a_next, h_next) for a_next ∈ a_grid, h_next ∈ h_grid] |> vec
+	policies_indices = [(; a_next_i, h_next_i) for a_next_i ∈ 1:length(a_grid), h_next_i ∈ 1:length(h_grid)] |> vec
+
+	(; states, states_indices, policies, policies_indices)
+end
+
+# ╔═╡ edfe7038-061c-4d85-b53e-0107a96421e4
+md"""
+## Setting up the `DDP`
+"""
+
+# ╔═╡ 4cc8de70-e8c1-4082-999b-51c45fef7dc3
+md"""
+## Rewards and policies
+"""
+
+# ╔═╡ 9c2505a8-462f-4c95-81ee-4dce4cfe7c43
+function consumption((; a, h, p, z), (; a_next, h_next), (; r, w), (; θ, δ, γ))
+	y = z * w
+	c = y + p * h * (1-δ) + a * (1+r) - p * h_next - a_next
+end
+
+# ╔═╡ 198d8f45-20e6-4209-9a4a-1eefbd98428b
+function voluntary_equity((; p), (; a_next, h_next), (; r), (; θ, δ, γ))
+	a_next + (1-θ) * (1-δ)/(1+r) * p * h_next
+end
+
+# ╔═╡ 97e4f447-8cf5-4e51-988a-79975bd357b4
+function reward_etc(state, policy, prices, params; u)
+
+	c = consumption(state, policy, prices, params)
+	q = voluntary_equity(state, policy, prices, params)
+
+	reward = u(c, policy.h_next)
+	
+	(; reward, c, q, policy...)
 end
 
 # ╔═╡ 2308ee1b-a990-4a0a-93d0-82b69bb16dc8
-function a_min(pₘᵢₙ, hₘₐₓ, (; r), (; θ, δ))
-	- (1-θ) * (1-δ) / (1+r) * pₘᵢₙ * hₘₐₓ
+function a_min((; p), (; h_next), (; r), (; θ, δ))
+	- (1-θ) * (1-δ) / (1+r) * p * h_next
 end
 
+# ╔═╡ 07a3ba63-8b96-4c14-9505-3a43826558a1
+begin
+	n = 20
+	p_grid = p_chain.state_values
+	h_grid = range(2.0, 8.0, n)
+	aₘᵢₙ = a_min((; p = minimum(p_grid)), (; h_next = maximum(h_grid)), prices, params)
+	a_grid = range(aₘᵢₙ, 17.0, n)
+	#statespace(; p_chain, z_chain, h_grid, a_grid)
+end
+
+# ╔═╡ 92dab147-8e38-46f2-817d-4839c8abff9a
+ss = statespace(; p_chain, z_chain, h_grid, a_grid)
+
 # ╔═╡ 644ea8ed-ac5c-46f7-ad13-536c26579290
-is_feasible(a_next, h_next, p, prices, params) = a_next > a_min(p, h_next, prices, params)
+is_feasible(state, policy, prices, params) = policy.a_next > a_min(state, policy, prices, params)
+
+# ╔═╡ 4bb57bdc-48b6-4930-b1be-22982b18578d
+function setup_Q_R_etc(household, statespace, prices, params)
+	(; u) = household
+	(; states, states_indices, policies, policies_indices) = statespace
+
+	proto = reward_etc(states[1], policies[1], prices, params; u)
+	T1 = (sa_ind = 1, s_next_ind = 1, prob = 0.1) |> typeof
+	T2 = (s_ind = 1, a_ind = 1, sa_ind = 1, proto...) |> typeof
+
+	out_transitions = T1[]
+	out_reward = T2[]
+
+	sa_ind = 0
+
+	for (i_state, (state, this)) ∈ enumerate(zip(states, states_indices))
+		for (i_policy, (policy, (; a_next_i, h_next_i))) ∈ enumerate(zip(policies, policies_indices))
+			if is_feasible(state, policy, prices, params)
+				sa_ind += 1
+				s_ind = i_state
+				a_ind = i_policy
+		
+				out = reward_etc(state, policy, prices, params; u)
+				push!(out_reward, (; s_ind, a_ind, sa_ind, out...))
+	
+				for (i_state_next, next) ∈ enumerate(states_indices)
+					if a_next_i == next.a_i && h_next_i == next.h_i
+						s_next_ind = i_state_next
+						π = p_chain.p[this.p_i, next.p_i] * z_chain.p[this.z_i, next.z_i]
+						push!(out_transitions, (; sa_ind, s_next_ind, prob=π))
+					end
+				end
+			end
+		end
+	end
+
+	out_transitions = StructArray(out_transitions)
+	out_reward = StructArray(out_reward)
+
+	Q = sparse(out_transitions.sa_ind, out_transitions.s_next_ind, out_transitions.prob)
+
+	(; Q, R = out_reward.reward, etc = out_reward, s_indices=out_reward.s_ind, a_indices=out_reward.a_ind)
+end
+
+# ╔═╡ 4a5b90cc-b6a7-4ae2-8d4e-1912b8bf4048
+function setup_DDPsa(household, statespace, prices, params)
+	(; β, u) = household
+
+	# Transition function, rewards and policies
+	(; R, Q, etc, s_indices, a_indices) = setup_Q_R_etc(household, statespace, prices, params)
+
+	ddp = DiscreteDP(R, Q, β, s_indices, a_indices)
+	
+	(; ddp, R, etc)
+end	
+
+# ╔═╡ f89243e8-6b07-4a58-acd1-02ab6c98990e
+md"""
+## Alternative: Standard formulation (slower)
+"""
+
+# ╔═╡ 6cf9fd6d-d2e1-4a59-8026-2cae734be434
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	reward_out = reward_etc.(states, permutedims(policies), Ref(prices), Ref(params))
+	R = StructArray(reward_out).reward
+end
+  ╠═╡ =#
 
 # ╔═╡ ca3b4629-88c3-48fb-bacf-4af70442dfaa
 # ╠═╡ disabled = true
@@ -74,38 +256,9 @@ let
 	params = (θ=0.5, δ=0.02, γ = 1.5)
 	prices = (; r = 0.05)
 
-	reward_xxx(state, policy, prices, params)
+	reward_out(state, policy, prices, params)
 end
   ╠═╡ =#
-
-# ╔═╡ 868a2f9f-edcd-4503-b356-2bdabc9c1c4c
-begin
-	params = (θ=0.5, δ=0.02, γ=2.0)
-	prices = (; r = 0.045)
-
-	n = 30
-	
-	h_grid = range(2.0, 8.0, n)
-	p_grid = p_chain.state_values
-	y_grid = z_chain.state_values
-	aₘᵢₙ = a_min(minimum(p_grid), maximum(h_grid), prices, params)
-
-	a_grid = range(aₘᵢₙ, 17.0, n)
-
-	policies = [(; a_next, h_next) for h_next in h_grid, a_next in a_grid] |> vec
-
-	states = [(; a, h, p, y) for a ∈ a_grid, h ∈ h_grid, p ∈ p_grid, y ∈ y_grid] |> vec
-	states_indices = [(; a_i, h_i, p_i, y_i) for a_i ∈ 1:length(a_grid), h_i ∈ 1:length(h_grid), p_i ∈ 1:length(p_grid), y_i ∈ 1:length(y_grid)] |> vec
-
-	policies = [(; a_next, h_next) for a_next ∈ a_grid, h_next ∈ h_grid] |> vec
-	policies_indices = [(; a_next_i, h_next_i) for a_next_i ∈ 1:length(a_grid), h_next_i ∈ 1:length(h_grid)] |> vec
-end
-
-# ╔═╡ 6cf9fd6d-d2e1-4a59-8026-2cae734be434
-begin
-	reward_etc = reward_xxx.(states, permutedims(policies), Ref(prices), Ref(params))
-	R = StructArray(reward_etc).reward
-end
 
 # ╔═╡ 27e105ec-4fa1-4a54-9b59-0a9a5d161c41
 
@@ -134,113 +287,73 @@ sizeof(Q) / 1024^2
   ╠═╡ =#
 
 # ╔═╡ 423271f2-41b0-44d1-96ea-8ddea6403433
+#=╠═╡
 R
+  ╠═╡ =#
 
 # ╔═╡ 34b0b379-3d1b-4acd-ae71-6a6c64f066af
 #=╠═╡
 Q_star_sas = solve(DiscreteDP(R, Q, 0.9), PFI).mc.p |> sparse
   ╠═╡ =#
 
-# ╔═╡ 4bb57bdc-48b6-4930-b1be-22982b18578d
-out_sa = let
-	T1 = (sa_ind = 1, s_next_ind = 1, prob = 0.1) |> typeof
-	T2 = (s_ind = 1, a_ind = 1, sa_ind = 1, reward = 0.1) |> typeof
-	#s_indices = Int64[]
-	#a_indices = Int64[]
-	#sa_indices = Int64[]
-	#s_next_indices = Int64[]
-	#probs = Float64[]
-	out1 = T1[]
-	out2 = T2[]
+# ╔═╡ 5c33d75f-0241-45c0-9afa-db73f753fed6
+md"""
+# Solution and Analysis
+"""
 
-	sa_ind = 0
+# ╔═╡ a6ad35a7-5f59-4a42-b126-efedf4f10a44
+function solve_details0(ddp, statespace, etc; solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
 
-	for (i_state, (state, this)) ∈ enumerate(zip(states, states_indices))
-		for (i_policy, (policy, (; a_next_i, h_next_i))) ∈ enumerate(zip(policies, policies_indices))
-			if is_feasible(policy.a_next, policy.h_next, state.p, prices, params)
-				sa_ind += 1
-				s_ind = i_state
-				a_ind = i_policy
+	(; states) = statespace
+	(; mc, sigma, v) = results
+
+	df = DataFrame(states)
+	df.s_ind = 1:length(sigma)
+	df.a_ind = sigma
+	df.value = v
+	df.π = stationary_distributions(mc) |> last
 	
-				#push!(s_indices, s_ind)
-		        #push!(a_indices, a_ind)
-		
-				(; reward) = reward_xxx(state, policy, prices, params)
-				push!(out2, (; s_ind, a_ind, sa_ind, reward))
-	
-				for (i_state_next, next) ∈ enumerate(states_indices)
-					if a_next_i == next.a_i && h_next_i == next.h_i
-						s_next_ind = i_state_next
-						π = p_chain.p[this.p_i, next.p_i] * z_chain.p[this.y_i, next.y_i]
-						push!(out1, (; sa_ind, s_next_ind, prob=π))
-						#push!(sa_indices, sa_ind)
-		       			#push!(s_next_indices, s_next_ind)
-						#push!(probs, )
-					end
-				end
-			end
-		end
-	end
+	df = @chain df begin
+		leftjoin!(_, DataFrame(etc), on=[:s_ind, :a_ind])
+		select(Not([:s_ind, :a_ind, :sa_ind]))
+	end	
 
-	out1 = StructArray(out1)
-	out2 = StructArray(out2)
-	#sa_indices
-	#probs
-	#t1 = @elapsed Q_sa1 = sparse(out.s_next_ind, out.sa_ind, out.prob) #, out.sa_ind[end], length(states))
-	#@info t1
-	Q_sa = sparse(out1.sa_ind, out1.s_next_ind, out1.prob)
-
-	#@info t1, size(Q_sa), size(R_sa), maximum(out1.sa_ind)
-	
-	#t2 = @elapsed Q_sa2 = sparse(out.sa_ind, out.s_next_ind, out.prob, out.sa_ind[end], length(states))
-	#@info t2, size(Q_sa2)
-
-	(; Q_sa, R_sa = out2.reward, out2.s_ind, out2.a_ind)
+	(; df, results)
 end
-
-# ╔═╡ f2b0bcd3-aeb8-4c72-9add-d9fcb6e41617
-# ╠═╡ disabled = true
-#=╠═╡
-let
-	n = 100_000#_000
-	I = randperm(n)#collect(1:n))
-	J = rand(1:100, n)
-	V = rand(n)
-
-	sparse(I, J, V, n, n)
-end
-  ╠═╡ =#
 
 # ╔═╡ 3b2d7a3a-0891-49a6-b4da-bae29d2bc857
-begin
-	(; R_sa, Q_sa, s_ind, a_ind) = out_sa
-	ddp_sa = DiscreteDP(R_sa, Q_sa, 0.95, s_ind, a_ind);
-	results_sa = solve(ddp_sa, PFI)
+results_sa = let
+	(; ddp, etc) = setup_DDPsa(household, ss, prices, params)
+	solve_details0(ddp, ss, etc)
 end
 
-# ╔═╡ fcf783c7-6f6b-4849-9fde-517d29188739
-Q_star_sa = results_sa
+# ╔═╡ d2149f28-54d3-41f9-b8ae-8e74d4919835
+md"""
+# Analysis
+"""
 
 # ╔═╡ 188bd63d-59d2-4bf2-b902-a4435d6f3a2d
-begin
-	df = DataFrame(states)
-	df.π = stationary_distributions(results_sa.mc) |> last #only
-	df
+@chain results_sa.df begin
+	stack([:c, :q, :a_next, :h_next], value_name = :val)
+	@subset(:z == 0.7, :p == 10)
+	data(_) * mapping(:a, :h, :val, layout = :variable) * visual(Surface)
+	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
 end
 
 # ╔═╡ da9c6d55-eccc-420a-a761-32d7249e2da4
-@chain df begin
-	@groupby(:a, :y, :p)
+@chain results_sa.df begin
+	@groupby(:a, :h, :p)#, :p)
 	@combine(:π = sum(:π))
-	data(_) * mapping(:a, :π, linestyle = :p => nonnumeric, color = :y => nonnumeric) * visual(Lines)
-	AlgebraOfGraphics.draw()
+	data(_) * mapping(:a, :h, :π, layout = :p => nonnumeric) * visual(Surface) #, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
 end
 
 # ╔═╡ 85a4ad90-6260-4649-aeb3-b414a7947eb4
-@chain df begin
-	@groupby(:h, :y, :p)
+@chain results_sa.df begin
+	@groupby(:h, :z, :p)
 	@combine(:π = sum(:π))
-	data(_) * mapping(:h, :π, linestyle = :p => nonnumeric, color = :y => nonnumeric) * visual(Lines)
+	data(_) * mapping(:h, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
 	AlgebraOfGraphics.draw()
 end
 
@@ -254,90 +367,21 @@ Q_star_sa - Q_star_sas
 all(sum(Q, dims=3) .≈ 1)
   ╠═╡ =#
 
+# ╔═╡ 4851ecd2-d523-4a71-b09d-044ae8ca301c
+
+
 # ╔═╡ ddbe33aa-8950-4c86-ac86-1dc0194c2295
-DiscreteDP
+md"""
+# Appendix
+"""
 
-# ╔═╡ 38d41bf4-4d6a-4ffb-80e0-d665608a516c
-let
-	B = 10
-	M = 5
-	α = 0.5
-	β = 0.9
-	u(c) = c^α
-	n = B + M + 1
-	m = M + 1
-	
-	s_indices = Int64[]
-	a_indices = Int64[]
-	sa_indices = Int64[]
-	s_next_indices = Int64[]
-	probs = Float64[]
-	
-	Q = zeros(0, n)
-	R = zeros(0)
-	sa_ind = 0
-		
-	b = 1 / (B + 1)
+# ╔═╡ 2d3c233a-f5f8-49da-a3e8-163df934df07
+TableOfContents()
 
-	for s in 0:(M + B)
-	    for a in 0:min(M, s)
-			sa_ind += 1
-			s_ind = s+1
-			a_ind = a+1
-	
-			push!(s_indices, s + 1)
-	        push!(a_indices, a + 1)
-			
-			for s_next_ind ∈ (a + 1):((a + B) + 1)
-				push!(sa_indices, sa_ind)
-	       		push!(s_next_indices, s_next_ind)
-				push!(probs, b)
-			end
-	        
-	        R = [R; u(s-a)]
-	    end
-	end
-
-	#sa_indices, s_next_indices, probs, R, n * m
-#	R
-	Q = sparse(sa_indices, s_next_indices, probs, sa_ind[end], n)
-	ddp = DiscreteDP(R, Q, β, s_indices, a_indices);
-	results = solve(ddp, PFI)
-end
-
-# ╔═╡ 28cbbd71-59a2-407e-93ce-cc0644890355
-let
-B = 10
-M = 5
-α = 0.5
-β = 0.9
-u(c) = c^α
-n = B + M + 1
-m = M + 1
-
-s_indices = Int64[]
-a_indices = Int64[]
-v = Float64[]
-Q = zeros(0, n)
-R = zeros(0)
-
-b = 1 / (B + 1)
-
-for s in 0:(M + B)
-    for a in 0:min(M, s)
-        push!(s_indices, s + 1)
-        push!(a_indices, a + 1)
-		
-        q = zeros(1, n)
-        q[(a + 1):((a + B) + 1)] .= b
-        Q = [Q; q]
-        R = [R; u(s-a)]
-    end
-end
-
-ddp = DiscreteDP(R, Q, β, s_indices, a_indices);
-results = solve(ddp, PFI)
-end
+# ╔═╡ 684e4980-5ef1-4225-849c-334d5bd85e19
+md"""
+## Packages
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -347,8 +391,8 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
@@ -358,6 +402,7 @@ CairoMakie = "~0.7.5"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.3"
+PlutoUI = "~0.7.38"
 QuantEcon = "~0.16.3"
 StructArrays = "~0.6.6"
 """
@@ -374,6 +419,12 @@ deps = ["ChainRulesCore", "LinearAlgebra"]
 git-tree-sha1 = "6f1d9bc1c08f9f4a8fa92e3ea3cb50153a1b40d4"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "1.1.0"
+
+[[deps.AbstractPlutoDingetjes]]
+deps = ["Pkg"]
+git-tree-sha1 = "8eaf9f1b4921132a4cff3f36a1d9ba923b14a481"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.1.4"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "03e0550477d86222521d254b741d470ba17ea0b5"
@@ -814,6 +865,23 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
+
+[[deps.Hyperscript]]
+deps = ["Test"]
+git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
+uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
+version = "0.0.4"
+
+[[deps.HypertextLiteral]]
+git-tree-sha1 = "2b078b5a615c6c0396c77810d92ee8c6f470d238"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.3"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
 
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
@@ -1301,6 +1369,12 @@ git-tree-sha1 = "bb16469fd5224100e422f0b027d26c5a25de1200"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.2.0"
 
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
+git-tree-sha1 = "670e559e5c8e191ded66fa9ea89c97f10376bb4c"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.38"
+
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
 uuid = "647866c9-e3ac-4575-94e7-e3d426903924"
@@ -1745,39 +1819,59 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─4e45bb36-2569-4cdc-9097-2de27e17f9b7
+# ╟─ac536cdb-45af-4c42-a6cd-f56010b89c91
+# ╟─894cb6f2-ab56-41da-ad57-fa9cebc1defb
 # ╠═870837d2-ca44-11ec-091b-1f93f0cf9d2e
+# ╟─58d53f5a-9eb9-4f60-8686-0a56b6a0f7bc
+# ╠═c9ee0034-735f-434c-8c44-320566c5cb15
+# ╠═cde42c53-868b-4770-b912-508d28710c71
+# ╠═65b4cbc1-7c39-40c2-8ef5-a09ee24ca0b2
+# ╠═61ffb43c-3717-40ae-91f3-a3da2f624ddf
+# ╠═0c47b605-a6c3-4bae-bb85-fce8a173eaf0
+# ╟─686c7013-329a-447f-8cc7-a201be551b4f
 # ╠═8b7a1169-0836-4ad7-8bf1-aabee4b36c28
 # ╠═76b12108-c137-4661-bd4f-6208f1d763cf
 # ╠═ec4b273c-74b1-4bc7-8058-de32e5f497ea
+# ╠═07a3ba63-8b96-4c14-9505-3a43826558a1
+# ╠═868a2f9f-edcd-4503-b356-2bdabc9c1c4c
+# ╠═92dab147-8e38-46f2-817d-4839c8abff9a
+# ╟─edfe7038-061c-4d85-b53e-0107a96421e4
+# ╠═4a5b90cc-b6a7-4ae2-8d4e-1912b8bf4048
+# ╠═4bb57bdc-48b6-4930-b1be-22982b18578d
+# ╟─4cc8de70-e8c1-4082-999b-51c45fef7dc3
 # ╠═97e4f447-8cf5-4e51-988a-79975bd357b4
+# ╠═9c2505a8-462f-4c95-81ee-4dce4cfe7c43
+# ╠═198d8f45-20e6-4209-9a4a-1eefbd98428b
 # ╠═2308ee1b-a990-4a0a-93d0-82b69bb16dc8
 # ╠═644ea8ed-ac5c-46f7-ad13-536c26579290
+# ╟─f89243e8-6b07-4a58-acd1-02ab6c98990e
 # ╠═ca3b4629-88c3-48fb-bacf-4af70442dfaa
-# ╠═868a2f9f-edcd-4503-b356-2bdabc9c1c4c
-# ╠═b2d5246d-2855-4f3e-9220-045a07d0a3d8
 # ╠═6cf9fd6d-d2e1-4a59-8026-2cae734be434
 # ╠═27e105ec-4fa1-4a54-9b59-0a9a5d161c41
 # ╠═a0d4440c-85ae-4495-a451-20024932bae7
 # ╠═97bdaed9-cf55-4bf2-8f9a-24181dcb51cc
 # ╠═423271f2-41b0-44d1-96ea-8ddea6403433
 # ╠═34b0b379-3d1b-4acd-ae71-6a6c64f066af
-# ╠═4bb57bdc-48b6-4930-b1be-22982b18578d
-# ╠═1ec30c7b-7d60-46be-aa7a-b802830d826d
-# ╠═f2b0bcd3-aeb8-4c72-9add-d9fcb6e41617
+# ╟─5c33d75f-0241-45c0-9afa-db73f753fed6
 # ╠═3b2d7a3a-0891-49a6-b4da-bae29d2bc857
-# ╠═fcf783c7-6f6b-4849-9fde-517d29188739
+# ╠═a6ad35a7-5f59-4a42-b126-efedf4f10a44
+# ╟─d2149f28-54d3-41f9-b8ae-8e74d4919835
 # ╠═d721c87a-368b-4af0-951a-269aca12d4d7
 # ╠═188bd63d-59d2-4bf2-b902-a4435d6f3a2d
-# ╠═a68d41ae-f9ff-49f2-af23-1561892a9e42
-# ╠═6973e87e-7428-493c-bf52-3959eaa884ae
-# ╠═a3c285be-9954-4f3e-815f-a662f9bf7749
 # ╠═da9c6d55-eccc-420a-a761-32d7249e2da4
 # ╠═85a4ad90-6260-4649-aeb3-b414a7947eb4
 # ╠═90feb1df-3bf5-4db3-a0d2-f836ed14bccb
 # ╠═26e20bff-164b-4077-8eec-f73e59d6d683
-# ╠═ddbe33aa-8950-4c86-ac86-1dc0194c2295
+# ╠═4851ecd2-d523-4a71-b09d-044ae8ca301c
+# ╟─ddbe33aa-8950-4c86-ac86-1dc0194c2295
+# ╠═580e1257-b902-4a7b-815c-2811cae7fdef
+# ╠═2d3c233a-f5f8-49da-a3e8-163df934df07
 # ╠═0944ad43-f26f-4352-9543-6f9878005b8a
-# ╠═38d41bf4-4d6a-4ffb-80e0-d665608a516c
-# ╠═28cbbd71-59a2-407e-93ce-cc0644890355
+# ╠═b2d5246d-2855-4f3e-9220-045a07d0a3d8
+# ╟─684e4980-5ef1-4225-849c-334d5bd85e19
+# ╠═a68d41ae-f9ff-49f2-af23-1561892a9e42
+# ╠═6973e87e-7428-493c-bf52-3959eaa884ae
+# ╠═a3c285be-9954-4f3e-815f-a662f9bf7749
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
