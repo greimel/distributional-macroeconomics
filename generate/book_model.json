@@ -53,6 +53,12 @@
                 "notebook_path": "notebooks/housing.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Housing Wealth Effects",
+                "notebook_path": "notebooks/housing-wealth-effects.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     },
