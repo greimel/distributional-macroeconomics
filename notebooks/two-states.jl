@@ -96,7 +96,7 @@ md"""
 p_chain = MarkovChain(
 	[1-ε ε;
 	 ε 1-ε],
-	10 .* [0.75, 1.0])
+	5 .* [0.75, 1.0])
 
 # ╔═╡ ec4b273c-74b1-4bc7-8058-de32e5f497ea
 z_chain = MarkovChain(
@@ -114,15 +114,18 @@ function statespace(;
 	z_grid = z_chain.state_values
 	p_grid = p_chain.state_values
 	
-	policies = [(; a_next, h_next) for h_next in h_grid, a_next in a_grid] |> vec
+	policies = [(; a_next, a_next_i, h_next, h_next_i) for 
+					(h_next_i, h_next) ∈ enumerate(h_grid), 
+					(a_next_i, a_next) ∈ enumerate(a_grid)] |> vec
 
-	states = [(; a, h, p, z) for a ∈ a_grid, h ∈ h_grid, p ∈ p_grid, z ∈ z_grid] |> vec
-	states_indices = [(; a_i, h_i, p_i, z_i) for a_i ∈ 1:length(a_grid), h_i ∈ 1:length(h_grid), p_i ∈ 1:length(p_grid), z_i ∈ 1:length(z_grid)] |> vec
+	states = [(; a_i, a, h_i, h, p_i, p, z_i, z) for 
+					(a_i, a) ∈ enumerate(a_grid),
+					(h_i, h) ∈ enumerate(h_grid),
+					(p_i, p) ∈ enumerate(p_grid),
+					(z_i, z) ∈ enumerate(z_grid)
+				] |> vec
 
-	policies = [(; a_next, h_next) for a_next ∈ a_grid, h_next ∈ h_grid] |> vec
-	policies_indices = [(; a_next_i, h_next_i) for a_next_i ∈ 1:length(a_grid), h_next_i ∈ 1:length(h_grid)] |> vec
-
-	(; states, states_indices, policies, policies_indices)
+	(; states, policies)
 end
 
 # ╔═╡ edfe7038-061c-4d85-b53e-0107a96421e4
@@ -164,7 +167,7 @@ end
 
 # ╔═╡ 07a3ba63-8b96-4c14-9505-3a43826558a1
 begin
-	n = 20
+	n = 30
 	p_grid = p_chain.state_values
 	h_grid = range(2.0, 8.0, n)
 	aₘᵢₙ = a_min((; p = minimum(p_grid)), (; h_next = maximum(h_grid)), prices, params)
@@ -181,7 +184,7 @@ is_feasible(state, policy, prices, params) = policy.a_next > a_min(state, policy
 # ╔═╡ 4bb57bdc-48b6-4930-b1be-22982b18578d
 function setup_Q_R_etc(household, statespace, prices, params)
 	(; u) = household
-	(; states, states_indices, policies, policies_indices) = statespace
+	(; states, policies) = statespace
 
 	proto = reward_etc(states[1], policies[1], prices, params; u)
 	T1 = (sa_ind = 1, s_next_ind = 1, prob = 0.1) |> typeof
@@ -192,8 +195,9 @@ function setup_Q_R_etc(household, statespace, prices, params)
 
 	sa_ind = 0
 
-	for (i_state, (state, this)) ∈ enumerate(zip(states, states_indices))
-		for (i_policy, (policy, (; a_next_i, h_next_i))) ∈ enumerate(zip(policies, policies_indices))
+	for (i_state, state) ∈ enumerate(states)
+		for (i_policy, policy) ∈ enumerate(policies)
+			(; a_next_i, h_next_i) = policy
 			if is_feasible(state, policy, prices, params)
 				sa_ind += 1
 				s_ind = i_state
@@ -202,10 +206,10 @@ function setup_Q_R_etc(household, statespace, prices, params)
 				out = reward_etc(state, policy, prices, params; u)
 				push!(out_reward, (; s_ind, a_ind, sa_ind, out...))
 	
-				for (i_state_next, next) ∈ enumerate(states_indices)
+				for (i_state_next, next) ∈ enumerate(states)
 					if a_next_i == next.a_i && h_next_i == next.h_i
 						s_next_ind = i_state_next
-						π = p_chain.p[this.p_i, next.p_i] * z_chain.p[this.z_i, next.z_i]
+						π = p_chain.p[state.p_i, next.p_i] * z_chain.p[state.z_i, next.z_i]
 						push!(out_transitions, (; sa_ind, s_next_ind, prob=π))
 					end
 				end
@@ -301,6 +305,9 @@ md"""
 # Solution and Analysis
 """
 
+# ╔═╡ a7a70051-7832-44fd-90d0-59a56ac59d80
+ddp_etc = setup_DDPsa(household, ss, prices, params)
+
 # ╔═╡ a6ad35a7-5f59-4a42-b126-efedf4f10a44
 function solve_details0(ddp, statespace, etc; solver = PFI)
 	results = QuantEcon.solve(ddp, solver)
@@ -312,7 +319,7 @@ function solve_details0(ddp, statespace, etc; solver = PFI)
 	df.s_ind = 1:length(sigma)
 	df.a_ind = sigma
 	df.value = v
-	df.π = stationary_distributions(mc) |> last
+	df.π = stationary_distributions(mc) |> first
 	
 	df = @chain df begin
 		leftjoin!(_, DataFrame(etc), on=[:s_ind, :a_ind])
@@ -324,7 +331,7 @@ end
 
 # ╔═╡ 3b2d7a3a-0891-49a6-b4da-bae29d2bc857
 results_sa = let
-	(; ddp, etc) = setup_DDPsa(household, ss, prices, params)
+	(; ddp, etc) = ddp_etc
 	solve_details0(ddp, ss, etc)
 end
 
@@ -336,16 +343,16 @@ md"""
 # ╔═╡ 188bd63d-59d2-4bf2-b902-a4435d6f3a2d
 @chain results_sa.df begin
 	stack([:c, :q, :a_next, :h_next], value_name = :val)
-	@subset(:z == 0.7, :p == 10)
+	@subset(:z_i == 1, :p_i == 1)
 	data(_) * mapping(:a, :h, :val, layout = :variable) * visual(Surface)
 	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
 end
 
 # ╔═╡ da9c6d55-eccc-420a-a761-32d7249e2da4
 @chain results_sa.df begin
-	@groupby(:a, :h, :p)#, :p)
+	@groupby(:a, :h, :p_i)#, :p)
 	@combine(:π = sum(:π))
-	data(_) * mapping(:a, :h, :π, layout = :p => nonnumeric) * visual(Surface) #, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	data(_) * mapping(:a, :h, :π, layout = :p_i => nonnumeric) * visual(Surface) #, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
 	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
 end
 
@@ -354,6 +361,14 @@ end
 	@groupby(:h, :z, :p)
 	@combine(:π = sum(:π))
 	data(_) * mapping(:h, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	AlgebraOfGraphics.draw()
+end
+
+# ╔═╡ c64b37b1-6068-4205-88fd-41e40d257a30
+@chain results_sa.df begin
+	@groupby(:a, :z, :p)
+	@combine(:π = sum(:π))
+	data(_) * mapping(:a, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
 	AlgebraOfGraphics.draw()
 end
 
@@ -368,6 +383,11 @@ all(sum(Q, dims=3) .≈ 1)
   ╠═╡ =#
 
 # ╔═╡ 4851ecd2-d523-4a71-b09d-044ae8ca301c
+md"""
+# Simulation
+"""
+
+# ╔═╡ 6ee776ab-2cd5-4d41-afc5-e579e45f9dfa
 
 
 # ╔═╡ ddbe33aa-8950-4c86-ac86-1dc0194c2295
@@ -1854,6 +1874,7 @@ version = "3.5.0+0"
 # ╠═423271f2-41b0-44d1-96ea-8ddea6403433
 # ╠═34b0b379-3d1b-4acd-ae71-6a6c64f066af
 # ╟─5c33d75f-0241-45c0-9afa-db73f753fed6
+# ╠═a7a70051-7832-44fd-90d0-59a56ac59d80
 # ╠═3b2d7a3a-0891-49a6-b4da-bae29d2bc857
 # ╠═a6ad35a7-5f59-4a42-b126-efedf4f10a44
 # ╟─d2149f28-54d3-41f9-b8ae-8e74d4919835
@@ -1861,9 +1882,11 @@ version = "3.5.0+0"
 # ╠═188bd63d-59d2-4bf2-b902-a4435d6f3a2d
 # ╠═da9c6d55-eccc-420a-a761-32d7249e2da4
 # ╠═85a4ad90-6260-4649-aeb3-b414a7947eb4
+# ╠═c64b37b1-6068-4205-88fd-41e40d257a30
 # ╠═90feb1df-3bf5-4db3-a0d2-f836ed14bccb
 # ╠═26e20bff-164b-4077-8eec-f73e59d6d683
-# ╠═4851ecd2-d523-4a71-b09d-044ae8ca301c
+# ╟─4851ecd2-d523-4a71-b09d-044ae8ca301c
+# ╠═6ee776ab-2cd5-4d41-afc5-e579e45f9dfa
 # ╟─ddbe33aa-8950-4c86-ac86-1dc0194c2295
 # ╠═580e1257-b902-4a7b-815c-2811cae7fdef
 # ╠═2d3c233a-f5f8-49da-a3e8-163df934df07
