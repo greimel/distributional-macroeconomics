@@ -7,17 +7,17 @@ using InteractiveUtils
 # ╔═╡ 870837d2-ca44-11ec-091b-1f93f0cf9d2e
 using QuantEcon
 
+# ╔═╡ d721c87a-368b-4af0-951a-269aca12d4d7
+using DataFrames
+
+# ╔═╡ 780d7063-0109-4d19-9484-f24f39d3982a
+using AoGExtensions
+
 # ╔═╡ 803cadbf-5a46-49b8-93da-068b32815494
 using StatsBase: weights
 
 # ╔═╡ bcad77f2-649d-4fa2-a5ad-1ad9c61c5564
 using Statistics: mean
-
-# ╔═╡ 780d7063-0109-4d19-9484-f24f39d3982a
-using AoGExtensions
-
-# ╔═╡ d721c87a-368b-4af0-951a-269aca12d4d7
-using DataFrames
 
 # ╔═╡ 580e1257-b902-4a7b-815c-2811cae7fdef
 using PlutoUI
@@ -189,12 +189,11 @@ end
 
 # ╔═╡ 07a3ba63-8b96-4c14-9505-3a43826558a1
 begin
-	n = 30
+	n = 25
 	p_grid = p_chain.state_values
 	h_grid = range(1.5, 5.0, n)
 	aₘᵢₙ = a_min((; p = minimum(p_grid)), (; h_next = maximum(h_grid)), prices, params)
 	a_grid = range(aₘᵢₙ, 17.0, n)
-	#statespace(; p_chain, z_chain, h_grid, a_grid)
 end
 
 # ╔═╡ 92dab147-8e38-46f2-817d-4839c8abff9a
@@ -267,59 +266,43 @@ md"""
 # ╔═╡ 6cf9fd6d-d2e1-4a59-8026-2cae734be434
 # ╠═╡ disabled = true
 #=╠═╡
-begin
-	reward_out = reward_etc.(states, permutedims(policies), Ref(prices), Ref(params))
+R0 = let
+	(; states, policies) = ss
+	
+	reward_out = reward_etc.(states, permutedims(policies), Ref(prices), Ref(params); household.u)
 	R = StructArray(reward_out).reward
 end
   ╠═╡ =#
 
-# ╔═╡ ca3b4629-88c3-48fb-bacf-4af70442dfaa
-# ╠═╡ disabled = true
-#=╠═╡
-let
-	policy = (a_next=1.9, h_next=1.25)
-	state = (a=1.5, h=1.1, p=1.5, y=1.0)
-	params = (θ=0.5, δ=0.02, γ = 1.5)
-	prices = (; r = 0.05)
-
-	reward_out(state, policy, prices, params)
-end
-  ╠═╡ =#
-
-# ╔═╡ 27e105ec-4fa1-4a54-9b59-0a9a5d161c41
-
-
 # ╔═╡ 97bdaed9-cf55-4bf2-8f9a-24181dcb51cc
 # ╠═╡ disabled = true
 #=╠═╡
-begin
+Q0 = let
+	(; states, policies) = ss
+
+	if length(states) > 1000
+		throw(ArgumentError("Don't do this - it will take too long"))
+	end
+	
 	Q = zeros(length(states), length(policies), length(states))	
-	for (i_state, this) ∈ enumerate(states_indices)
-		for (i_policy, (; a_next_i, h_next_i)) ∈ enumerate(policies_indices)
-			for (i_state_next, next) ∈ enumerate(states_indices)
+	for (i_state, this) ∈ enumerate(states)
+		for (i_policy, (; a_next_i, h_next_i)) ∈ enumerate(policies)
+			for (i_state_next, next) ∈ enumerate(states)
 				if a_next_i == next.a_i && h_next_i == next.h_i
 					Q[i_state, i_policy, i_state_next] = 
-						p_chain.p[this.p_i, next.p_i] * z_chain.p[this.y_i, next.y_i]
+						p_chain.p[this.p_i, next.p_i] * z_chain.p[this.z_i, next.z_i]
 				end
 			end
 		end
 	end
+	@info "Q takes $(sizeof(Q) ÷ 1024^2) MB of memory"
+	Q
 end
-  ╠═╡ =#
-
-# ╔═╡ a0d4440c-85ae-4495-a451-20024932bae7
-#=╠═╡
-sizeof(Q) / 1024^2
-  ╠═╡ =#
-
-# ╔═╡ 423271f2-41b0-44d1-96ea-8ddea6403433
-#=╠═╡
-R
   ╠═╡ =#
 
 # ╔═╡ 34b0b379-3d1b-4acd-ae71-6a6c64f066af
 #=╠═╡
-Q_star_sas = solve(DiscreteDP(R, Q, 0.9), PFI).mc.p |> sparse
+Q_star_sas = solve(DiscreteDP(R0, Q0, household.β), PFI).mc.p |> sparse
   ╠═╡ =#
 
 # ╔═╡ 5c33d75f-0241-45c0-9afa-db73f753fed6
@@ -357,6 +340,53 @@ results_sa = let
 	solve_details0(ddp, ss, etc)
 end
 
+# ╔═╡ 90feb1df-3bf5-4db3-a0d2-f836ed14bccb
+#=╠═╡
+results_sa.results.mc.p ≈ Q_star_sas
+  ╠═╡ =#
+
+# ╔═╡ d2149f28-54d3-41f9-b8ae-8e74d4919835
+md"""
+# Analysis
+"""
+
+# ╔═╡ 188bd63d-59d2-4bf2-b902-a4435d6f3a2d
+@chain results_sa.df begin
+	stack([:c, :q, :a_next, :h_next], value_name = :val)
+	@subset(:z_i == 1, :p_i == 1)
+	data(_) * mapping(:a, :h, :val, layout = :variable) * visual(Surface)
+	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
+end
+
+# ╔═╡ da9c6d55-eccc-420a-a761-32d7249e2da4
+@chain results_sa.df begin
+	@groupby(:a, :h, :p_i)#, :p)
+	@combine(:π = sum(:π))
+	data(_) * mapping(:a, :h, :π, layout = :p_i => nonnumeric) * visual(Surface) #, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
+end
+
+# ╔═╡ 85a4ad90-6260-4649-aeb3-b414a7947eb4
+@chain results_sa.df begin
+	@groupby(:h, :z, :p)
+	@combine(:π = sum(:π))
+	data(_) * mapping(:h, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	AlgebraOfGraphics.draw()
+end
+
+# ╔═╡ c64b37b1-6068-4205-88fd-41e40d257a30
+@chain results_sa.df begin
+	@groupby(:a, :z, :p)
+	@combine(:π = sum(:π))
+	data(_) * mapping(:a, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	AlgebraOfGraphics.draw()
+end
+
+# ╔═╡ 4851ecd2-d523-4a71-b09d-044ae8ca301c
+md"""
+# Simulating a Housing Bust
+"""
+
 # ╔═╡ 8c7df0e1-ba26-42cd-b580-eda759515d9a
 outtt = let
 	(;df, results) = results_sa
@@ -382,7 +412,6 @@ outtt = let
 
 	
 	πs = Vector{Float64}[]
-	#πs[1] = copy(π)
 
 	for t ∈ 1:100
 		π = Q_pre' * π
@@ -424,61 +453,6 @@ end
 # ╔═╡ 53917502-551e-45e6-8e7f-e092150e03f3
 select(DataFrame(ss.states), :a_i, :h_i, :z_i)[outtt.s_ind_pre, :] ==
 select(DataFrame(ss.states), :a_i, :h_i, :z_i)[outtt.s_ind_post, :]
-
-# ╔═╡ d2149f28-54d3-41f9-b8ae-8e74d4919835
-md"""
-# Analysis
-"""
-
-# ╔═╡ 188bd63d-59d2-4bf2-b902-a4435d6f3a2d
-@chain results_sa.df begin
-	stack([:c, :q, :a_next, :h_next], value_name = :val)
-	@subset(:z_i == 1, :p_i == 1)
-	data(_) * mapping(:a, :h, :val, layout = :variable) * visual(Surface)
-	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
-end
-
-# ╔═╡ da9c6d55-eccc-420a-a761-32d7249e2da4
-@chain results_sa.df begin
-	@groupby(:a, :h, :p_i)#, :p)
-	@combine(:π = sum(:π))
-	data(_) * mapping(:a, :h, :π, layout = :p_i => nonnumeric) * visual(Surface) #, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
-	AlgebraOfGraphics.draw(axis = (type = Axis3, ))
-end
-
-# ╔═╡ 85a4ad90-6260-4649-aeb3-b414a7947eb4
-@chain results_sa.df begin
-	@groupby(:h, :z, :p)
-	@combine(:π = sum(:π))
-	data(_) * mapping(:h, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
-	AlgebraOfGraphics.draw()
-end
-
-# ╔═╡ c64b37b1-6068-4205-88fd-41e40d257a30
-@chain results_sa.df begin
-	@groupby(:a, :z, :p)
-	@combine(:π = sum(:π))
-	data(_) * mapping(:a, :π, linestyle = :p => nonnumeric, color = :z => nonnumeric) * visual(Lines)
-	AlgebraOfGraphics.draw()
-end
-
-# ╔═╡ 90feb1df-3bf5-4db3-a0d2-f836ed14bccb
-#=╠═╡
-Q_star_sa - Q_star_sas
-  ╠═╡ =#
-
-# ╔═╡ 26e20bff-164b-4077-8eec-f73e59d6d683
-#=╠═╡
-all(sum(Q, dims=3) .≈ 1)
-  ╠═╡ =#
-
-# ╔═╡ 4851ecd2-d523-4a71-b09d-044ae8ca301c
-md"""
-# Simulation
-"""
-
-# ╔═╡ 6ee776ab-2cd5-4d41-afc5-e579e45f9dfa
-
 
 # ╔═╡ ddbe33aa-8950-4c86-ac86-1dc0194c2295
 md"""
@@ -1992,34 +1966,28 @@ version = "3.5.0+0"
 # ╠═2308ee1b-a990-4a0a-93d0-82b69bb16dc8
 # ╠═644ea8ed-ac5c-46f7-ad13-536c26579290
 # ╟─f89243e8-6b07-4a58-acd1-02ab6c98990e
-# ╠═ca3b4629-88c3-48fb-bacf-4af70442dfaa
 # ╠═6cf9fd6d-d2e1-4a59-8026-2cae734be434
-# ╠═27e105ec-4fa1-4a54-9b59-0a9a5d161c41
-# ╠═a0d4440c-85ae-4495-a451-20024932bae7
 # ╠═97bdaed9-cf55-4bf2-8f9a-24181dcb51cc
-# ╠═423271f2-41b0-44d1-96ea-8ddea6403433
 # ╠═34b0b379-3d1b-4acd-ae71-6a6c64f066af
+# ╠═90feb1df-3bf5-4db3-a0d2-f836ed14bccb
 # ╟─5c33d75f-0241-45c0-9afa-db73f753fed6
 # ╠═a7a70051-7832-44fd-90d0-59a56ac59d80
 # ╠═3b2d7a3a-0891-49a6-b4da-bae29d2bc857
 # ╠═a6ad35a7-5f59-4a42-b126-efedf4f10a44
-# ╠═8c7df0e1-ba26-42cd-b580-eda759515d9a
-# ╠═803cadbf-5a46-49b8-93da-068b32815494
-# ╠═bcad77f2-649d-4fa2-a5ad-1ad9c61c5564
-# ╠═d5a7d15d-1ff6-4a90-bc1b-74151368edeb
-# ╠═780d7063-0109-4d19-9484-f24f39d3982a
-# ╠═53917502-551e-45e6-8e7f-e092150e03f3
 # ╟─d2149f28-54d3-41f9-b8ae-8e74d4919835
 # ╠═d721c87a-368b-4af0-951a-269aca12d4d7
 # ╠═188bd63d-59d2-4bf2-b902-a4435d6f3a2d
 # ╠═da9c6d55-eccc-420a-a761-32d7249e2da4
 # ╠═85a4ad90-6260-4649-aeb3-b414a7947eb4
 # ╠═c64b37b1-6068-4205-88fd-41e40d257a30
-# ╠═90feb1df-3bf5-4db3-a0d2-f836ed14bccb
-# ╠═26e20bff-164b-4077-8eec-f73e59d6d683
 # ╟─4851ecd2-d523-4a71-b09d-044ae8ca301c
-# ╠═6ee776ab-2cd5-4d41-afc5-e579e45f9dfa
+# ╠═8c7df0e1-ba26-42cd-b580-eda759515d9a
+# ╠═d5a7d15d-1ff6-4a90-bc1b-74151368edeb
+# ╠═53917502-551e-45e6-8e7f-e092150e03f3
 # ╟─ddbe33aa-8950-4c86-ac86-1dc0194c2295
+# ╠═780d7063-0109-4d19-9484-f24f39d3982a
+# ╠═803cadbf-5a46-49b8-93da-068b32815494
+# ╠═bcad77f2-649d-4fa2-a5ad-1ad9c61c5564
 # ╠═580e1257-b902-4a7b-815c-2811cae7fdef
 # ╠═2d3c233a-f5f8-49da-a3e8-163df934df07
 # ╠═0944ad43-f26f-4352-9543-6f9878005b8a
