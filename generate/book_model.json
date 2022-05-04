@@ -72,6 +72,12 @@
                 "preview_image_url": ""
             },
             {
+                "name": "Indebted Demand",
+                "notebook_path": "notebooks/indebted-demand.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "Redistributive Growth",
                 "notebook_path": "notebooks/redistributive-growth.jl",
                 "video_id": "",
