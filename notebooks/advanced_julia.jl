@@ -69,7 +69,7 @@ end
 md"""
 ### Keyword arguments
 
-A similar syntax with a semicolon is used for keyword arguments that are identified by name (and not be their position as normal function arguments):
+A similar syntax with a semicolon is used for keyword arguments that are identified by name (and not by their position as normal function arguments):
 """
 
 # ╔═╡ aef759a7-a0ed-41e5-b91b-f276853bd30b
