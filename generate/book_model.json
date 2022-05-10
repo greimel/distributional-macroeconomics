@@ -15,6 +15,12 @@
                 "preview_image_url": ""
             },
             {
+                "name": "Macroeconomic Trends",
+                "notebook_path": "notebooks/macroeconomic-trends.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "Bewley-Huggett-Aiyagari",
                 "notebook_path": "notebooks/aiyagari.jl",
                 "video_id": "",
