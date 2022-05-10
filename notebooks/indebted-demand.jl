@@ -14,9 +14,6 @@ macro bind(def, element)
     end
 end
 
-# ╔═╡ 6fdf48d6-91dd-4150-b145-1f0acb38f3a2
-using Distributions
-
 # ╔═╡ 5ae7887a-b71a-40b8-ac3a-a8ccc30aed08
 using LinearAlgebra
 
@@ -41,13 +38,6 @@ using PlutoUI
 # ╔═╡ eac92f77-1859-43fa-86c2-cab504706e66
 using PlutoUI: Slider
 
-# ╔═╡ 9b0d87c3-4a6d-4293-a43f-54597f4e12aa
-md"""
-!!! danger "Under construction!"
-
-	**This notebook is not ready for public consumption.** Use at your own risk.
-"""
-
 # ╔═╡ 76b7a87d-af6a-4dcc-a887-198abcc1e857
 md"""
 `indebted-demand.jl` | **Version 0.1** | *last updated: May 4 2022*
@@ -56,259 +46,11 @@ md"""
 # ╔═╡ eafe7d0c-5da3-4d3b-affc-0afc828fb528
 md"""
 ### To dos
-
-* move CT code to CT notebook
 * provide some skeleton code for Huggett
 * try if the assignment works
 * compute MPCs
 * visualize comparative statics exercises
 """
-
-# ╔═╡ 701cdfe5-416c-4417-8180-a029b9c5a0eb
-md"""
-# Neoclassical Growth Model and Real Business Cycle Model
-"""
-
-# ╔═╡ 6b47912e-2232-4976-9445-fb45ca58fd13
-md"""
-## Neoclassical Growth Model
-
-The HJB equation is
-```math
-\rho v(k) = \max_{c} u(c) + v'(k)(F(k) - c - \delta k)
-```
-The first order condition is ``u'(c) = v'(k) \iff c^* = (u')^{-1}(v'(k))``
-or
-```math
-\rho v(k) = u(c^*) + v'(k)(F(k) - c^* - \delta k)
-```
-
-## Real Business Cycle Model
-
-The HJB equation is
-```math
-\rho v(k, z) = \max_{c} u(c) + v_k(k, z)(F(k, z) - c - \delta k) + \underbrace{v_z(k, z) \mu(z) + \frac{1}{2} v_{zz}(k, z) \sigma^2(z)}_{\text{exo}}
-```
-The first order condition is ``u'(c) = v'(k) \iff c^* = (u')^{-1}(v'(k))``
-or
-```math
-\rho v(k) = \underbrace{u(c^*) + v'(k)(F(k) - c^* - \delta k)}_{\text{endo}} + \underbrace{v_z(k, z) \mu(z) + \frac{1}{2} v_{zz}(k, z) \sigma^2(z)}_{\text{exo}}
-```
-
-"""
-
-# ╔═╡ 5508df5e-81d8-4b35-8590-abc4d651974a
-u(c; γ) = c > 0 ? γ == 1 ? log(c) : c^(1-γ)/(1-γ) : 10 * c - 100
-
-# ╔═╡ 80e994f1-28a2-4d23-b01e-ba79f2eaf443
-u_prime(c; γ) = c^(-γ)
-
-# ╔═╡ 4369136a-8b24-4766-8149-3a26228eb53d
-u_prime_inv(x; γ) = x^(-1/γ)
-
-# ╔═╡ 0a51b10e-bcf5-4c44-831a-fff24275d36d
-map(c -> u_prime_inv(u_prime(c; γ=2.0); γ=2.0), 1:100)
-
-# ╔═╡ 572f52ff-d143-4db1-9b2f-8c19a6735b26
-NGM_steady_state((; α, ρ, δ)) = (α*1/(ρ+δ))^(1/(1-α))
-
-# ╔═╡ 9fa4bea3-81c9-4a5b-bc4b-8d8ac2e5daea
-(; out, k_grid) = let
-	N = 300
-	param = (α = 0.3, γ = 5.0, δ = 0.05, ρ = 0.05, κy = 0.1, ybar = 1.0, σy = 0.05) # √(eps()))
-	kss = NGM_steady_state(param)
-
-	k_min = 0.01 #0.0001 * kss
-	k_max = 5.0 #1.5 * kss
-
-	@info (; kss, k_min, k_max)
-	k_grid = range(k_min, k_max, length = N)
-
-	# exogenous state: productivity
-	distribution = Gamma(2 * param.κy * param.ybar / param.σy^2, param.σy^2 / (2 * param.κy))
-	y_grid = range(quantile(distribution, 0.01), quantile(distribution, 0.99), length = 10) 
-	
-	rbc = let
-		stategrid = OrderedDict(:k => k_grid, :y => y_grid)
-		solend = OrderedDict(:v => [u(y * k ^ param.α; param.γ) / param.ρ for k ∈ k_grid, y ∈ y_grid])
-		(; stategrid, solend)
-	end
-
-	ngm = let
-		stategrid = OrderedDict(:k => k_grid)
-		solend = OrderedDict(:v => [u(1 * k ^ param.α; param.γ) / param.ρ for k ∈ k_grid])
-		(; stategrid, solend)
-	end
-
-	function c_kdot_vk(vk, (; y, k), (; α, δ, γ))
-		vk = max(vk, eps())
-		c_star = u_prime_inv(vk; γ)
-		k_dot = y * k^α - δ*k - c_star
-		(; vk, c_star, k_dot)
-	end
-
-	function c₀_kdot_vk((; y, k), (; α, δ, γ))
-		c_star = y * k^α - δ * k
-        vk = u_prime(c_star; γ)
-        k_dot = 0.0
-		
-		(; vk, c_star, k_dot)
-	end
-	
-	function f(state::NamedTuple, sol::NamedTuple)
-		(; α, γ, δ, ρ, κy, ybar, σy) = param
-		
-		# Only relevant for RBC
-		if haskey(state, :y)
-			(; y) = state
-			(; vy_up, vy_down, vyy) = sol
-			μy = κy * (ybar - y)
-    		vy = (μy >= 0) ? vy_up : vy_down
-			exo = μy * vy + 0.5 * vyy * σy^2
-		else
-			exo = 0
-			state = (; y = 1, state...)
-		end
-
-		(; k) = state
-        (; v, vk_up, vk_down) = sol
-
-		(; vk, c_star, k_dot) = c_kdot_vk(vk_up, state, param)
-		if k_dot ≤ 0.0
-			(; vk, c_star, k_dot) = c_kdot_vk(vk_down, state, param)
-		end
-		if (k ≈ k_min) && (k_dot ≤ 0.0)
-			(; vk, c_star, k_dot) = c₀_kdot_vk(state, param)
-    	end
-		endo = u(c_star; γ) + vk * k_dot
-        
-		vt = ρ * v - (endo + exo)
-		(vt = vt,), (; k_dot, c_star)
-	end
-
-	#ys, residual_norms = pdesolve(f, stategrid, solend, range(0, 1000, length = 100))
-
-	out = pdesolve(f, rbc...)
-	(; out, k_grid)
-end
-
-# ╔═╡ 05f7eff2-7a5a-410d-a011-7397097d0456
-let
-	(; zero, residual_norm, optional) = out
-	fig = Figure()
-	lines(fig[1,1], k_grid, zero[:v][:,1], axis=(; title = "value"))
-	lines(fig[1,2], k_grid, optional[:c_star][:,1], axis=(; title = "consumption"))
-	lines(fig[1,3], k_grid, optional[:k_dot][:,1], axis=(; title = "savings"))
-	if length(size(zero[:v])) > 1
-		surface(fig[2,1], zero[:v], axis = (type = Axis3, title = "value"))
-		surface(fig[2,2], optional[:c_star], axis = (type = Axis3, title = "consumption"))
-	end	
-	fig
-end
-
-# ╔═╡ 23bdda11-0f40-4aa1-a91e-fed0537a22d2
-md"""
-# Consumption-saving
-"""
-
-# ╔═╡ dcc67d9d-a792-4314-8b6a-ad48d3b7c742
-md"""
-The HJB equation is
-```math
-\rho v(k) = \max_{c} u(c) + v'(k)(r k - c)
-```
-The first order condition is ``u'(c) = v'(k) \iff c^* = (u')^{-1}(v'(k))``
-or
-```math
-\rho v(k) = u(c^*) + v'(k)(r k - c^*)
-```
-"""
-
-# ╔═╡ f39c67aa-d84a-40c1-b441-558d5f7cd398
-out2, k_grid2 = let
-	N = 100
-	param = (γ = 2.0, ρ = 0.05, r = 0.03, κy = 0.1, ybar = 1.0, σy = 0.000001)
-	k_min = 0.0
-	k_max = 5.0 # 500
-
-	k_grid = range(k_min, k_max, N)
-	distribution = Gamma(2 * param.κy * param.ybar / param.σy^2, param.σy^2 / (2 * param.κy))
-	y_grid = range(quantile(distribution, 0.01), quantile(distribution, 0.99), length = 10) 
-	@info k_grid, y_grid
-	
-	stategrid = OrderedDict(:k => k_grid, :y => y_grid)
-	
-	solend = OrderedDict(:v => [log(k + y) for k in k_grid, y ∈ y_grid])
-
-	function c_kdot_vk(vk, (; y, k), (; r, γ))
-		vk = max(vk, eps())
-		c_star = u_prime_inv(vk; γ)
-		k_dot = y + k * r - c_star
-		(; vk, c_star, k_dot)
-	end
-
-	function c₀_kdot_vk((; y, k), (; r, γ))
-		c_star = y + k * r
-        vk = u_prime(c_star; γ)
-        k_dot = 0.0
-		
-		(; vk, c_star, k_dot)
-	end
-		
-	function f(state::NamedTuple, sol::NamedTuple)
-		(; γ, ρ, r, κy, ybar, σy) = param
-	
-		# Only relevant for RBC
-		if haskey(state, :y)
-			(; y) = state
-			(; vy_up, vy_down, vyy) = sol
-			μy = κy * (ybar - y)
-    		vy = (μy >= 0) ? vy_up : vy_down
-			exo = μy * vy + 0.5 * vyy * σy^2
-		else
-			exo = 0
-			state = (; y = 1, state...)
-		end
-
-		(; k) = state
-        (; v, vk_up, vk_down) = sol
-
-		(; vk, c_star, k_dot) = c_kdot_vk(vk_up, state, param)
-		if k_dot ≤ 0.0
-			(; vk, c_star, k_dot) = c_kdot_vk(vk_down, state, param)
-		end
-		if (k ≈ k_min) && (k_dot ≤ 0.0)
-			(; vk, c_star, k_dot) = c₀_kdot_vk(state, param)
-    	end
-		endo = u(c_star; γ) + vk * k_dot
-        
-		vt = ρ * v - (endo + exo)
-		(vt = vt,), (; k_dot, c_star)
-	end
-
-	#ys, residual_norms = pdesolve(f, stategrid, solend, range(0, 1000, length = 100))
-
-	out = pdesolve(f, stategrid, solend)
-	(; out, k_grid)
-end
-
-# ╔═╡ 91ddd649-5dc3-4ffa-bca5-37e249731555
-
-
-# ╔═╡ 1857955f-36ad-4c57-b4e8-e4486a7436a4
-let
-	out = out2
-	k_grid = k_grid2
-	(; zero, residual_norm, optional) = out
-	fig = Figure()
-	lines(fig[1,1], k_grid, zero[:v][:,1], axis=(; title = "value"))
-	lines(fig[1,2], k_grid, optional[:c_star][:,1], axis=(; title = "consumption"))
-	lines(fig[1,3], k_grid, optional[:k_dot][:,1], axis=(; title = "savings"))
-	surface(fig[2,1], zero[:v], axis = (type = Axis3, title = "value"))
-	surface(fig[2,2], optional[:c_star], axis = (type = Axis3,))
-	
-	fig
-end
 
 # ╔═╡ 95275f17-8cbd-4718-b806-64bcbe0919eb
 md"""
@@ -586,13 +328,23 @@ show_words(answer) = md"_approximately $(wordcount(answer)) words_"
 
 # ╔═╡ ee7dd9b4-aeb9-4899-84cd-986f68921448
 begin
-	hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]))
-	almost(text) = Markdown.MD(Markdown.Admonition("warning", "Almost there!", [text]))
-	still_missing(text=md"Replace `missing` with your answer.") = Markdown.MD(Markdown.Admonition("warning", "Here we go!", [text]))
-	keep_working(text=md"The answer is not quite right.") = Markdown.MD(Markdown.Admonition("danger", "Keep working on it!", [text]))
+	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
+	hint(text, title="Hint")       = admonition("hint",    title, text)
+	warning(text, title="Warning") = admonition("warning", title, text)
+	danger(text, title="Danger")   = admonition("danger",  title, text)
+	correct(text, title="Correct") = admonition("correct", title, text)
+
+	almost(text) = warning(text, "Almost there!")
+	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
 	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
-	correct(text=rand(yays)) = Markdown.MD(Markdown.Admonition("correct", "Got it!", [text]))
+	got_it(text=rand(yays)) = correct(text, "Got it!")
 end
+
+# ╔═╡ 9b0d87c3-4a6d-4293-a43f-54597f4e12aa
+danger(
+	md"**This notebook is not ready for public consumption.** Use at your own risk",	
+	"Under construction!"
+)
 
 # ╔═╡ 33e9b7d9-64a0-4659-a862-83ddcf11bae7
 function show_words_limit(answer, limit)
@@ -621,7 +373,6 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 EconPDEs = "a3315474-fad9-5060-8696-cee5f38a87b7"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -634,7 +385,6 @@ CairoMakie = "~0.7.5"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.3"
-Distributions = "~0.25.56"
 EconPDEs = "~1.0.1"
 ForwardDiff = "~0.10.27"
 PlutoUI = "~0.7.38"
@@ -2039,22 +1789,7 @@ version = "3.5.0+0"
 # ╔═╡ Cell order:
 # ╟─9b0d87c3-4a6d-4293-a43f-54597f4e12aa
 # ╟─76b7a87d-af6a-4dcc-a887-198abcc1e857
-# ╟─eafe7d0c-5da3-4d3b-affc-0afc828fb528
-# ╟─701cdfe5-416c-4417-8180-a029b9c5a0eb
-# ╟─6b47912e-2232-4976-9445-fb45ca58fd13
-# ╠═5508df5e-81d8-4b35-8590-abc4d651974a
-# ╠═80e994f1-28a2-4d23-b01e-ba79f2eaf443
-# ╠═4369136a-8b24-4766-8149-3a26228eb53d
-# ╠═0a51b10e-bcf5-4c44-831a-fff24275d36d
-# ╠═572f52ff-d143-4db1-9b2f-8c19a6735b26
-# ╠═05f7eff2-7a5a-410d-a011-7397097d0456
-# ╠═9fa4bea3-81c9-4a5b-bc4b-8d8ac2e5daea
-# ╟─23bdda11-0f40-4aa1-a91e-fed0537a22d2
-# ╟─dcc67d9d-a792-4314-8b6a-ad48d3b7c742
-# ╠═6fdf48d6-91dd-4150-b145-1f0acb38f3a2
-# ╠═f39c67aa-d84a-40c1-b441-558d5f7cd398
-# ╠═91ddd649-5dc3-4ffa-bca5-37e249731555
-# ╠═1857955f-36ad-4c57-b4e8-e4486a7436a4
+# ╠═eafe7d0c-5da3-4d3b-affc-0afc828fb528
 # ╟─95275f17-8cbd-4718-b806-64bcbe0919eb
 # ╠═c52304d6-625c-42b5-bb1d-6050862a8a18
 # ╠═7080e3d1-fc4a-4023-89ca-7bfc1c16d02c
