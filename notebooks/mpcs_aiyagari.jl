@@ -28,6 +28,11 @@ using DataFrames
 # ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
 using QuantEcon
 
+# ╔═╡ e2fd4ac1-ad11-4d48-bcf0-d38d32384b0c
+md"""
+`mpcs_aiyagari.jl` | **Version 1.0** | *last updated: May 10 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+"""
+
 # ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
 md"""
 # MPCs in the Aiyagari model
@@ -133,11 +138,6 @@ md"""
 👉 Use the smoothed consumption policy to compute the MPC at each point of the state space. Save the MPC values in an additional column of the results data frame.
 
 Hint: It is most convenient to consider a transitory income shock of the size $dx = (1+r) \Delta a$ where $\Delta a$ is the distance between two adjacent grid points.
-"""
-
-# ╔═╡ 19376876-cb3c-4f33-bb08-3c3aa2939d48
-md"""
-**Answer**
 """
 
 # ╔═╡ 0bf278e7-25f8-4830-8162-67e6d1113b3b
@@ -1901,6 +1901,7 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─e2fd4ac1-ad11-4d48-bcf0-d38d32384b0c
 # ╟─4aa065ca-d54c-419a-a31a-7063fbb98a33
 # ╟─ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
 # ╠═f983a093-d397-43fe-8951-4ad1e795df3c
@@ -1929,7 +1930,6 @@ version = "3.5.0+0"
 # ╠═1b3d36ab-adae-40be-a14c-7ea6d9381a31
 # ╟─e7f75845-242f-45c6-9b33-11fd2bacb478
 # ╟─2402fba6-80e1-4fe4-8873-7a62ce6f9427
-# ╟─19376876-cb3c-4f33-bb08-3c3aa2939d48
 # ╠═0bf278e7-25f8-4830-8162-67e6d1113b3b
 # ╟─af81921e-d454-4341-979d-752f5e4540b7
 # ╠═19121a39-f18e-409b-b787-154ce2b309a1
