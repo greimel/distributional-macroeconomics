@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.0
+# v0.19.3
 
 using Markdown
 using InteractiveUtils
@@ -34,27 +34,127 @@ using LinearAlgebra
 # ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
 using QuantEcon
 
-# ╔═╡ bd569ec0-644e-4f94-ae43-aac97d583f50
-md"""
-!!! danger "Under construction!"
-
-	**This notebook is not ready for public consumption.** Use at your own risk.
-"""
+# ╔═╡ cebc58b8-ac45-4f07-b2a4-a12663a738e5
+using MarkdownLiteral: @markdown
 
 # ╔═╡ f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 md"""
-`default.jl` | **Version 0.1** | *last updated: Mar 24 2022*
+`default.jl` | **Version 1.0** | *last updated: May 10 2022*
 """
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
 md"""
 # Unsecured debt and default
+
+_Based on the survey article **Consumer Debt and Default: A Macro Perspective** (Exler & Tertilt, 2020)._
 """
+
+# ╔═╡ 76d93dfa-c743-4917-bc84-b738646fb9a3
+md"""
+# Model
+We use the model from _**Exler & Tertilt (2020)**_. The model is a minor extension of the Huggett model. There are two exogenous states: income ``y`` and an expense shock ``\kappa``. The expense shock captures rare and unexpected expenses like health shocks, pregnancies (both of which involve hefty bills in the USA) or pregnancies.
+
+Banks can set specific borrowing rates for individuals. In equilibrium, banks will charge higher rates to compensate default risk of individuals. Default risk will depend on expected income ``\mathbb{E}(y'|y)`` and size of the loan ``d'``.
+
+The indiviual state is ``(d, y, \kappa)`` where 
+* ``d`` is debt (in the code we will stick to using ``a = -d``)
+* ``y`` is income
+* ``\kappa`` is the expense shock
+
+```math
+\begin{align}
+V(d, y, \kappa) &= \max_{c, d'} u(c) + \beta \mathbb{E}(\max\{V(d', y', \kappa'), B(y')\}|y) \\
+&\text{s.t. } c + d + \kappa \leq y + q(d',y) d' \\
+\end{align}
+```
+"""
+
+# ╔═╡ b89e8e73-c0fe-4e93-a89f-18331dd511f6
+md"""
+Consumers can choose to default instead of repaying their debt. Default comes at a cost, though. This formalized below.
+
+Let ``B(\cdot)`` is the value of filing for bankruptcy. It is given by
+```math
+\begin{align}
+B(y) &= u(c) - \chi + \beta \mathbb{E}(V(0, y', \kappa')|y) \\
+&\text{s.t. } c (1 + \lambda) = (1-\gamma)(y - \phi)
+\end{align}
+```
+* ``\chi`` captures the stigma that comes with filing bankruptcy
+* ``\lambda`` captures that some consumption becomes more expensive while bankrupt (it is harder to get phone contracts or rent an apartment)
+* ``\gamma`` is the fraction of the wage that is garnished
+* ``\phi`` captures the fixed cost of filing for bankruptcy
+"""
+
+# ╔═╡ ceed4629-bc7d-4d10-a65d-7fa6704a00b6
+md"""
+``q(d', y)`` is the price of borrowing. The bank will take into account the probability of default depending on the current income and the amount of debt. The cost of borrowing is determined by an arbitrage condition.
+
+```math
+\begin{align}
+\overbrace{\frac{1}{q^s}}^{\text{riskless investment}} = \overbrace{\frac{1}{q(d',y)}(\underbrace{(1-\theta)\cdot 1 + \theta \cdot \rho(d', y)}_{\text{expected repayment}})}^{\text{expected return of lending $d$ to agent with income $y$}} \\
+\iff q^s ((1-\theta)\cdot 1 + \theta \cdot \rho(d', y)) = q(d', y)
+\end{align}
+```
+where
+* ``\theta(d', y)`` is the probability of default in the subsequent period
+* ``\rho(d', y) = \mathbb{E}(\frac{\gamma y'}{d'+\kappa'}|y)`` is the expected recovery rate in case of default. It comes from the assumption that the total liabilities ``d' + \kappa'`` are served in equal proportions from the garnished part of the income ``\gamma y'``.
+"""
+
+# ╔═╡ fb2d806a-d36b-4229-8ac2-c8d25e6f87f7
+@markdown("""
+<details> <summary> Alternative formulation (closer to the code) </summary>
+
+$(md"
+```math
+\begin{align}
+V(d, y, \kappa, b=0) &= \max_{c, d', b'} u(c) + \beta \mathbb{E}(\max\{V(d', y', \kappa', b' = 1), V(0, y', \kappa', b'=1)\}|y) \\
+&\text{s.t. } c + d + \kappa \leq y + q(d',y) d' \\
+V(0,y,\kappa,b=1) &= u(c) - \chi + \beta \mathbb{E}(V(0, y', \kappa', b'=0)|y) \\
+&\text{s.t. } c (1 + \lambda) = (1-\gamma)(y - \phi)
+\end{align}
+```
+")
+
+</details>
+""")
 
 # ╔═╡ a274b461-a5df-446a-8374-f04267f5db69
 md"""
-# Households' problem
+## Parameters
 """
+
+# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
+q(r) = 1/(1+r)
+
+# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
+r = 0.0188
+
+# ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
+prices = (; q = q(r), w = 1.0)
+
+# ╔═╡ ae3730e8-e3f1-4a06-bc3d-6141241238b0
+Base.@kwdef struct ExlerTertiltModel
+	χ = 0 #0.6
+	λ = 0 #0.1
+	γ = 0 #0.3
+	ϕ = 0.0
+	β = 0.90
+	#ρ = 1 # probability of losing the bankruptcy flag
+end
+
+# ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+function Household(; σ = 1.0, β = 0.96,	
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
+	(; β, u)
+end
+
+# ╔═╡ 8e46d9df-f987-438b-9ebc-c52c8a0f4a1a
+params = ExlerTertiltModel()
+
+# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
+# Create an instance of Household
+am = Household()
 
 # ╔═╡ fa42601c-ccbf-4009-8c59-595542c241c8
 md"""
@@ -64,60 +164,98 @@ md"""
 # ╔═╡ 9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
 function statespace(;
 			a_vals = range(1e-10, 20.0, length = 200),
-			z_chain,
+			mc,
 			d_vals = [0, 1] # solvent, borrowing-constrained
 		)
-	states = 
-		[(; a, d, z) for a ∈ a_vals, d ∈ d_vals, z ∈ z_chain.state_values] |> vec
-	states_indices = 
-		[(; a_i, d_i, z_i) for a_i ∈ 1:length(a_vals), d_i ∈ 1:length(d_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
-    policies = 
-	    [(; a_next, d_next) for a_next ∈ a_vals, d_next ∈ d_vals] |> vec
-	policies_indices = 
-	    [(; a_next_i, d_next_i) for a_next_i ∈ 1:length(a_vals), d_next_i ∈ 1:length(d_vals)] |> vec
 
-	(; states, states_indices, policies, policies_indices, z_chain)
+	if 0 ∉ a_vals
+		a_vals = sort([a_vals; 0.0])
+	end
+	a_i_0 = findall(a_vals .== 0) |> only
+		
+	states = 
+		[(; a, d, x) for a ∈ a_vals, d ∈ d_vals, x ∈ mc.state_values] |> vec
+
+	states_indices = 
+		[(; a_i, d_i, x_i) for a_i ∈ 1:length(a_vals), d_i ∈ 1:length(d_vals), x_i ∈ 1:length(mc.state_values)] |> vec
+
+	filter!(x -> !(x.d==1 && x.a != 0), states)
+	filter!(x -> !(x.d_i==2 && x.a_i != a_i_0), states_indices)
+
+    policies = 
+	    [[(; a_next, d_next=0) for a_next ∈ a_vals]; (; a_next = 0.0, d_next = 1)] |> vec
+	
+	policies_indices = 
+	    [[(; a_next_i, d_next_i=1) for a_next_i ∈ 1:length(a_vals)]; (; a_next_i = a_i_0, d_next_i = 2)] |> vec
+
+	(; states, states_indices, policies, policies_indices, mc)
 end
 
-# ╔═╡ b3fd6423-214a-4d73-9a51-f7a76d8c97f3
-function Household(; σ = 1.0, β = 0.96,	
-                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
-	(; β, u)
+# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
+function setup_Q!(Q, states, states_indices, policies, policies_indices, mc, params)
+	#(; ρ) = params
+    for (I_next, (next, i_next)) ∈ enumerate(zip(states, states_indices))
+		d_next = next.d
+        for (I_policy, (policy, i_policy)) ∈ enumerate(zip(policies, policies_indices))
+			d_chosen = policy.d_next
+            for (I_state, (state, i_state)) ∈ enumerate(zip(states, states_indices))
+				d = state.d
+                if i_next.a_i == i_policy.a_next_i
+					pr = mc.p[i_state.x_i, i_next.x_i]
+					if d == 0 && d_next == d_chosen
+                    	Q[I_state, I_policy, I_next] = pr
+					#elseif d == 1 && 1 == d_next
+					#	Q[I_state, I_policy, I_next] = (1-ρ) * pr
+					elseif d == 1 && 0 == d_next
+						Q[I_state, I_policy, I_next] = pr # ρ * pr
+					end
+                end
+            end
+        end
+    end
+    return Q
+end
+
+# ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
+function setup_Q(states, states_indices, policies, policies_indices, z_chain, params)
+	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
+	setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain, params)
+	Q
 end
 
 # ╔═╡ 7a15adab-ae5e-4bf1-ac61-ae90d4393552
-function consumption((; z, a, d), (; d_next, a_next), (; q, w), (; Δr), def_prob)
+function consumption((; x, a, d), (; d_next, a_next), (; q, w), (; γ, ϕ, λ), def_prob)
+	(; z, κ) = x
 	default = d == 0 && d_next == 1
 	constrained = d == 1 || d_next == 1
+	y = w * z
 	
 	if a_next < 0 
 		q = q * (1-def_prob)
 	end
-
-	repay = default ? 0 : a
-	c = w * z + repay - q * a_next
+	if d == 1
+		c = (1-γ)*(y - ϕ - q * a_next)/(1+λ) 
+	else
+		repay = a #default ? 0 : a
+		c = y + repay - q * a_next - κ
+	end
 end
 
 # ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
 function reward(state, policy, prices, params, u, def_prob)
 	(; d) = state
 	(; d_next, a_next) = policy
-	(; λ) = params
+	(; χ) = params
 
+	c = consumption(state, policy, prices, params, def_prob)
 	
-	default = d == 0 && d_next == 1
-	constrained = d == 1 || d_next == 1
-	
-	if constrained && a_next < 0
-		c = -999999.0 + 100 * a_next
+    if false #d == 1 && !(a_next ≈ 0)
+		#- 1_000_000 - abs(a_next)
+		# this is handled in consumption instead
+	elseif c > 0
+		u(c) - χ * d #default
 	else
-		c = consumption(state, policy, prices, params, def_prob)
-	end
-	
-    if c > 0
-		u(c) - λ * default
-	else
-		- 1_000_000 + c
+		- 1_000_000 + c * 100
 	end
 end
 
@@ -140,22 +278,71 @@ function setup_R(states, policies, prices, params, u, default_probilities)
 	setup_R!(R, states, policies, prices, params, u, default_probilities)
 end
 
+# ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
+function setup_DDP(household, statespace, prices, params, default_probabilities)
+	(; β, u) = household
+	(; states, policies, states_indices, policies_indices, mc) = statespace
+    
+	R = setup_R(states, policies, prices, params, u, default_probabilities)
+	Q = setup_Q(states, states_indices, policies, policies_indices, mc, params)
+
+	DiscreteDP(R, Q, β)
+end
+
 # ╔═╡ 9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
 md"""
 ## State space
 """
 
-# ╔═╡ 02da9c09-1fde-4831-9a01-ee07d2856aff
-q(r) = 1/(1+r)
+# ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
+ε = 0.25
 
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-# Create an instance of Household
-am = Household()
+# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
+z_chain = MarkovChain([1-ε ε; ε 1-ε], [(; z = 1.25), (; z = 0.75)])
+
+# ╔═╡ 40846574-829b-4776-9cf8-16665a477001
+ε_κ = 0.0001
+
+# ╔═╡ c42fc8cc-f865-4de3-9dcd-ede0c697421e
+κ_chain = MarkovChain([1-ε_κ ε_κ; 1-ε_κ ε_κ], [(; κ=0.0), (; κ=4.0)])
+#κ_chain = MarkovChain([1 ;;], [(; κ=0.0)])
+
+# ╔═╡ f877fdda-3302-44fa-ab3c-0c3d83921a64
+
+
+# ╔═╡ 108f0e83-8fbf-41a8-97ee-3b0c297b6a3d
+function combine_markov_chains(X, Y)
+	nx = length(X.state_values)
+	ny = length(Y.state_values)
+
+	P = zeros(nx * ny, nx * ny)
+	state_values = [(; x..., y...) for x in X.state_values, y ∈ Y.state_values] |> vec
+	indices = [(; i_x, i_y) for i_x ∈ 1:nx, i_y ∈ 1:ny] |> vec
+
+	for (i_cur, cur) ∈ enumerate(indices)
+		for (i_next, next) ∈ enumerate(indices)
+			P[i_cur, i_next] = X.p[cur.i_x, next.i_x] * Y.p[cur.i_y, next.i_y]
+		end
+	end
+
+	MarkovChain(P, state_values)
+	
+	#@Pxy = zeros()
+end
+
+# ╔═╡ 1959e7b5-9b45-4e87-8918-3a21bdaa3726
+mc = combine_markov_chains(z_chain, κ_chain)
+
+# ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
+ss = statespace(; a_vals = sort([0.0; range(-2, 2.0, length = 200)]), mc)
 
 # ╔═╡ 006fae27-9ab0-4736-afa2-2ecd5b22871e
 md"""
-## Solve Households' problem
+# Solve Households' problem
 """
+
+# ╔═╡ 3b462afc-d4ed-4f5b-9e62-370da4387814
+
 
 # ╔═╡ 3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # Use the instance to build a discrete dynamic program
@@ -199,101 +386,21 @@ function solve_details(ddp, states, policies; solver = PFI)
 	df, results.sigma
 end
 
-# ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
-md"""
-## Policy functions – How much to invest next period?
-"""
-
-# ╔═╡ b2c8040f-d377-4b2a-b40f-00b234303391
-md"""
-## Parameters to play with
-
-policy parameters: ``\lambda`` (punishment/stigma) and ``\rho`` (exclusion from financial markets)
-"""
-
-# ╔═╡ fe3cb967-ce8e-4de8-8289-9e72189e17f9
-λ = 0.6
-
-# ╔═╡ 8dc245ed-77b5-4308-aabb-762cf86ae248
-ρ = 0.75
-
-# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
-function setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain, params)
-    for (I_next, (next, i_next)) ∈ enumerate(zip(states, states_indices))
-		d_next = next.d
-        for (I_policy, (policy, i_policy)) ∈ enumerate(zip(policies, policies_indices))
-			d_chosen = policy.d_next
-            for (I_state, (state, i_state)) ∈ enumerate(zip(states, states_indices))
-				d = state.d
-                if i_next.a_i == i_policy.a_next_i
-					pr = z_chain.p[i_state.z_i, i_next.z_i]
-					if d == 0 && d_next == d_chosen
-                    	Q[I_state, I_policy, I_next] = pr
-					elseif d == 1 && 1 == d_next
-						Q[I_state, I_policy, I_next] = (1-ρ) * pr
-					elseif d == 1 && 0 == d_next
-						Q[I_state, I_policy, I_next] = ρ * pr
-					end
-                end
-            end
-        end
-    end
-    return Q
-end
-
-# ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
-function setup_Q(states, states_indices, policies, policies_indices, z_chain, params)
-	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
-	setup_Q!(Q, states, states_indices, policies, policies_indices, z_chain, params)
-	Q
-end
-
-# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.0188
-
-# ╔═╡ 213239c6-74cc-405a-8eab-08899fc3cf42
-Δr = 0.3
-
-# ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
-prices = (; q = q(r), w = 1.0, Δr)
-
-# ╔═╡ 455ea341-79c3-4a18-af41-7c80cadfc2a1
-params = (; λ, Δr, ρ)
-
-# ╔═╡ 590243ba-49fc-4d1e-a5a5-56551d4fa9d6
-ε = 0.25
-
-# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
-z_chain = MarkovChain([1-ε ε; ε 1-ε], [1.25, 0.75])
-
-# ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
-function setup_DDP(household, statespace, prices, params, default_probabilities)
-	(; β, u) = household
-	(; states, policies, states_indices, policies_indices) = statespace
-    
-	R = setup_R(states, policies, prices, params, u, default_probabilities)
-	Q = setup_Q(states, states_indices, policies, policies_indices, z_chain, params)
-
-	DiscreteDP(R, Q, β)
-end
-
-# ╔═╡ 2234335c-bd4a-436a-b4bd-5d486c15a098
-ss = statespace(; a_vals = range(-1, 1.0, length = 200), z_chain)
-
 # ╔═╡ b91f93d0-3bcb-45bf-8ae0-3e388db0c593
 (; am_ddp, results_df0) = let
-	default_probabilities = fill(0.0, 800, 400)
+	default_probabilities = fill(0.0, length(ss.states), length(ss.policies))
 	am_ddp = setup_DDP(am, ss, prices, params, default_probabilities)
 
 	results_df0, σ = solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 
-	for i in 1:10
+	for i in 1:2 # 10
 		update_default_probs!(default_probabilities, am_ddp.Q, results_df0.d_next)
 		am_ddp = setup_DDP(am, ss, prices, params, default_probabilities)
 
 		results_df0, σ =  solve_details(am_ddp, ss.states, ss.policies, solver = PFI)
 	end
-
+	
+	select!(results_df0, :x => AsTable, Not(:x))
 	#results_df0.default_probability = [default_probabilities[i,s] for (i, s) ∈ enumerate(σ)]
 	
 	(; am_ddp, results_df0)
@@ -306,6 +413,16 @@ results = @chain results_df0 begin
 	select!(Not([:state, :policy]))
 end
 
+# ╔═╡ 9d2a3789-f66d-4f6c-b4fd-99bfbc78b357
+md"""
+# Analysis
+"""
+
+# ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
+md"""
+## Policy functions
+"""
+
 # ╔═╡ c9771579-bf40-4f39-b272-4bd5b3be9730
 @chain results begin
 	stack(Not(:π))
@@ -316,13 +433,14 @@ end
 # ╔═╡ 48eced48-2b86-4199-8637-4619c40c55e9
 let
 	fg = @chain results begin
-		stack(Not([:a, :z, :π, :d])) #[:a_next, :consumption, :saving])
+		stack(Not([:a, :z, :π, :d, :κ])) #[:a_next, :consumption, :saving])
 		data(_) * mapping(
 			:a => L"current assets $a$",
 			:value => "policy",
 			layout = :variable,
 			color = :z => nonnumeric,
-			linestyle = :d => nonnumeric
+			linestyle = :κ => nonnumeric,
+			group = :d => nonnumeric
 		) * visual(Lines)
 		#select(Not([:d_next]))
 		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
@@ -342,17 +460,6 @@ end
 	@combine(first(:a))
 end
 
-# ╔═╡ 7cf49d32-d3fc-421e-bcf2-e690d69467cb
-md"""
-## What's the probability of defaulting next period?
-"""
-
-# ╔═╡ 043dc9bf-842c-4cce-ac74-9a871f3368a5
-
-
-# ╔═╡ daf585bf-46d2-4a5b-81fb-77062f51ea6a
-results.d
-
 # ╔═╡ 51615ade-06d2-40dd-9d54-f0dab0fe5e92
 md"""
 ## Stationary distribution
@@ -360,7 +467,7 @@ md"""
 
 # ╔═╡ f9ea2cc1-43b7-4953-8183-f0165448265b
 @chain results begin
-	data(_) * mapping(:a, :π, linestyle = :d => nonnumeric, color = :z => nonnumeric) * visual(Lines)
+	data(_) * mapping(:a, :π, linestyle = :d => nonnumeric, layout = :z => nonnumeric, color = :κ => nonnumeric) * visual(Lines)
 	draw
 end
 
@@ -372,11 +479,6 @@ end
 	draw
 end
 
-# ╔═╡ e816135f-7f19-4a47-9ed1-fbc935506e17
-md"""
-## Aggregate outcomes
-"""
-
 # ╔═╡ fd97aa43-5e80-4be9-92d1-44d9fc371b84
 md"""
 # Appendix
@@ -384,6 +486,46 @@ md"""
 
 # ╔═╡ 1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 TableOfContents()
+
+# ╔═╡ 743ffec8-511a-4c3b-8ce3-ede3d4101dca
+function wordcount(text)
+	stripped_text = strip(replace(string(text), r"\s" => " "))
+   	words = split(stripped_text, (' ', '-', '.', ',', ':', '_', '"', ';', '!', '\''))
+   	length(filter(!=(""), words))
+end
+
+# ╔═╡ 2d85f938-e117-472b-8967-e0ca2c96a7b1
+show_words(answer) = md"_approximately $(wordcount(answer)) words_"
+
+# ╔═╡ d43930ce-1094-4f03-ba7a-a8cd124a7bcd
+begin
+	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
+	hint(text, title="Hint")       = admonition("hint",    title, text)
+	warning(text, title="Warning") = admonition("warning", title, text)
+	danger(text, title="Danger")   = admonition("danger",  title, text)
+	correct(text, title="Correct") = admonition("correct", title, text)
+
+	almost(text) = warning(text, "Almost there!")
+	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
+	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
+	got_it(text=rand(yays)) = correct(text, "Got it!")
+end
+
+# ╔═╡ 04abc8c3-f01f-43d1-bd6f-edbea62d586f
+warning(md"""
+1. The code hasn't implemented θ correctly
+2. The code doesn't implement the lifecycle version of the model -- see `lifecycle.jl` to see how to do this. That is why there is no mass at defaulting states.
+""")
+
+# ╔═╡ 7603c970-71e6-41fa-b8b8-7db5897b3e6d
+function show_words_limit(answer, limit)
+	count = wordcount(answer)
+	if count < 1.02 * limit
+		return show_words(answer)
+	else
+		return almost(md"You are at $count words. Please shorten your text a bit, to get **below $limit words**.")
+	end
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -394,6 +536,7 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MarkdownLiteral = "736d6165-7244-6769-4267-6b50796e6954"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -405,6 +548,7 @@ CairoMakie = "~0.7.5"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.2"
+MarkdownLiteral = "~0.1.1"
 PlutoUI = "~0.7.23"
 QuantEcon = "~0.16.3"
 StatsBase = "~0.33.14"
@@ -578,6 +722,12 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
+
+[[deps.CommonMark]]
+deps = ["Crayons", "JSON", "URIs"]
+git-tree-sha1 = "4cd7063c9bdebdbd55ede1af70f3c2f48fab4215"
+uuid = "a80b9123-70ca-4bc0-993e-6e3bcb318db6"
+version = "0.8.6"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -1165,6 +1315,12 @@ version = "0.4.1"
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
+[[deps.MarkdownLiteral]]
+deps = ["CommonMark", "HypertextLiteral"]
+git-tree-sha1 = "0d3fa2dd374934b62ee16a4721fe68c418b92899"
+uuid = "736d6165-7244-6769-4267-6b50796e6954"
+version = "0.1.1"
+
 [[deps.Match]]
 git-tree-sha1 = "1d9bc5c1a6e7ee24effb93f175c9342f9154d97f"
 uuid = "7eb4fadd-790c-5f42-8a69-bfa0b872bfbf"
@@ -1694,6 +1850,11 @@ git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.6"
 
+[[deps.URIs]]
+git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.3.0"
+
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
@@ -1844,13 +2005,23 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─bd569ec0-644e-4f94-ae43-aac97d583f50
 # ╟─f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 # ╟─7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
+# ╟─76d93dfa-c743-4917-bc84-b738646fb9a3
+# ╟─b89e8e73-c0fe-4e93-a89f-18331dd511f6
+# ╟─ceed4629-bc7d-4d10-a65d-7fa6704a00b6
+# ╟─04abc8c3-f01f-43d1-bd6f-edbea62d586f
+# ╟─fb2d806a-d36b-4229-8ac2-c8d25e6f87f7
 # ╟─a274b461-a5df-446a-8374-f04267f5db69
+# ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
+# ╠═59d7c6f7-4704-4866-9280-22d37b328499
+# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
+# ╠═ae3730e8-e3f1-4a06-bc3d-6141241238b0
+# ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
+# ╠═8e46d9df-f987-438b-9ebc-c52c8a0f4a1a
+# ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╟─fa42601c-ccbf-4009-8c59-595542c241c8
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
-# ╠═b3fd6423-214a-4d73-9a51-f7a76d8c97f3
 # ╠═df975df6-90db-408b-a908-52fb4b0637f6
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
 # ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
@@ -1860,37 +2031,31 @@ version = "3.5.0+0"
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
 # ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
 # ╟─9d7c2920-c1f9-45ed-b4dd-57e2fd71de2e
-# ╠═02da9c09-1fde-4831-9a01-ee07d2856aff
-# ╠═59d7c6f7-4704-4866-9280-22d37b328499
-# ╠═455ea341-79c3-4a18-af41-7c80cadfc2a1
-# ╠═9be81a15-7117-4911-8254-4848df50c059
+# ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 # ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
+# ╠═40846574-829b-4776-9cf8-16665a477001
+# ╠═c42fc8cc-f865-4de3-9dcd-ede0c697421e
+# ╠═f877fdda-3302-44fa-ab3c-0c3d83921a64
+# ╠═108f0e83-8fbf-41a8-97ee-3b0c297b6a3d
+# ╠═1959e7b5-9b45-4e87-8918-3a21bdaa3726
 # ╠═2234335c-bd4a-436a-b4bd-5d486c15a098
 # ╟─006fae27-9ab0-4736-afa2-2ecd5b22871e
 # ╠═b91f93d0-3bcb-45bf-8ae0-3e388db0c593
+# ╠═3b462afc-d4ed-4f5b-9e62-370da4387814
 # ╠═3392e6f0-e98d-42f6-9deb-51880b6fe38b
 # ╠═40c2424e-96ff-4a3f-b8d3-4e98872089bc
 # ╠═bf5420bc-5847-4dcf-9972-9ac6378dbd03
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
 # ╟─5a1cd51e-b378-450f-99b3-b033baff0ab8
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
+# ╟─9d2a3789-f66d-4f6c-b4fd-99bfbc78b357
 # ╟─48c6da76-288d-4bd1-8f03-9a4815bd94dd
-# ╟─b2c8040f-d377-4b2a-b40f-00b234303391
-# ╠═fe3cb967-ce8e-4de8-8289-9e72189e17f9
-# ╠═8dc245ed-77b5-4308-aabb-762cf86ae248
-# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
-# ╠═213239c6-74cc-405a-8eab-08899fc3cf42
-# ╠═590243ba-49fc-4d1e-a5a5-56551d4fa9d6
 # ╟─c9771579-bf40-4f39-b272-4bd5b3be9730
-# ╟─48eced48-2b86-4199-8637-4619c40c55e9
+# ╠═48eced48-2b86-4199-8637-4619c40c55e9
 # ╟─0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
-# ╟─7cf49d32-d3fc-421e-bcf2-e690d69467cb
-# ╠═043dc9bf-842c-4cce-ac74-9a871f3368a5
-# ╠═daf585bf-46d2-4a5b-81fb-77062f51ea6a
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
 # ╠═f9ea2cc1-43b7-4953-8183-f0165448265b
 # ╠═0ace3bd5-3c87-431d-85c5-7707b7e2eb77
-# ╟─e816135f-7f19-4a47-9ed1-fbc935506e17
 # ╟─fd97aa43-5e80-4be9-92d1-44d9fc371b84
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
@@ -1903,5 +2068,10 @@ version = "3.5.0+0"
 # ╠═a9518320-15c5-49ef-b0b7-65989836a63c
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╠═743ffec8-511a-4c3b-8ce3-ede3d4101dca
+# ╠═2d85f938-e117-472b-8967-e0ca2c96a7b1
+# ╠═7603c970-71e6-41fa-b8b8-7db5897b3e6d
+# ╠═d43930ce-1094-4f03-ba7a-a8cd124a7bcd
+# ╠═cebc58b8-ac45-4f07-b2a4-a12663a738e5
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

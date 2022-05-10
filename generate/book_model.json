@@ -38,13 +38,7 @@
         "title": "Consumer credit and default",
         "contents": [
             {
-                "name": "Athreya (2002)",
-                "notebook_path": "notebooks/athreya.jl",
-                "video_id": "",
-                "preview_image_url": ""
-            },
-            {
-                "name": "Soft borrowing constraint",
+                "name": "Unsecured debt and default",
                 "notebook_path": "notebooks/default.jl",
                 "video_id": "",
                 "preview_image_url": ""
@@ -97,6 +91,17 @@
             {
                 "name": "Continuous time",
                 "notebook_path": "notebooks/continuous-time.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
+    },
+    {
+        "title": "Other unfinished notebooks",
+        "contents": [
+            {
+                "name": "Simpler defaults (Athreya 2002)",
+                "notebook_path": "notebooks/athreya.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
