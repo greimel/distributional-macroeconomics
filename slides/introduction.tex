@@ -1,0 +1,288 @@
+\documentclass[aspectratio=169,mathserif]{beamer}
+
+\useoutertheme[numbering=fraction]{metropolis}
+\useinnertheme{metropolis}
+\usefonttheme{metropolis}
+\usecolortheme{default}
+
+\usepackage{array}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\usepackage[longnamesfirst]{natbib}
+\usepackage{minibox}
+\usepackage{amsmath,centernot}
+% \input{../header-files/src/metropolis-titlepage}
+% \input{../header-files/src/header.tex}
+% \input{../header-files/src/acronyms.tex}
+% \input{../header-files/src/math-def.tex}
+% \input{../header-files/src/tikz-def.tex}
+% %\input{../header-files/src/beamer-header.tex}
+% \input{../header-files/src/falling-behind.tex}
+
+\usepackage{pgfplots}
+\usetikzlibrary{tikzmark, positioning}
+
+\AtBeginSection[]
+{
+  \frame{\sectionpage}
+  % \begin{frame}
+  %   \frametitle{Outline}
+  %   \tableofcontents[currentsubsection]
+  % \end{frame}
+}
+
+\newcommand\blfootnote[1]{%
+  \begingroup
+  \renewcommand\thefootnote{}\footnote{#1}%
+  \addtocounter{footnote}{-1}%
+  \endgroup
+}
+
+\newcommand{\credittoben}{\blfootnote{Taken from Ben Moll's slides with only minor adjustments}}
+
+ \author{Fabian Greimel}
+\title{Topics in Distributional Macroeconomics}
+
+\begin{document}
+ 
+\frame[plain]{\maketitle}
+
+\begin{frame}{What is \emph{Distributional Macroeconomics}?}
+
+  \begin{itemize}
+  \item basic point of view: the \alert{macroeconomy is a distribution} (of productivities, incomes, wealth)
+  \item Goals
+    \begin{enumerate}
+    \item study of \alert{macroeconomic questions in terms of distributions} rather than just aggregates
+      
+    \item study \alert{rich intereactions} of heterogeneity and macroeconomic aggregates
+    \end{enumerate}
+  \item Methods
+    \begin{enumerate}
+    \item \alert{models with heteregeneous agents} (agents or firms)
+    \item use \alert{micro data} (e.g. household surveys) and \alert{macro data} (e.g. time series and country panels) to inform models
+    \end{enumerate}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Questions we address in this course}
+  \begin{enumerate}
+  \item Why have household debt and bankruptcies risen prior to 2007?
+  \item How do bankruptcy laws affect social welfare?
+  \item (How) has the housing boom prior to 2007 amplified the Great Recession?
+  \item Where did the housing boom come from?
+  \item ... And what role does inequality play in all theses questions?
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Course logistics: Everything is in flux}
+  \begin{columns}
+    \begin{column}{0.5\linewidth}
+      \begin{block}{Background}
+        \begin{itemize}
+        \item designed from scratch
+        \item \emph{the course that I've always wanted}
+        \item \dots{} but things take time
+        \item your feedback will shape this course     
+        \end{itemize}
+      \end{block}
+      \begin{block}{Your Tasks}
+        \begin{enumerate}
+        \item interact with me
+        \item graded assignments
+        \item present a paper
+        \item write a short research proposal
+        \end{enumerate}
+      \end{block} 
+    \end{column}
+    \begin{column}{0.5\linewidth}
+      \begin{block}{Assignments}
+        \begin{itemize}
+        \item focus on topics, not methods
+        \item start from runnable code
+        \end{itemize}
+      \end{block}
+      \begin{block}{Presentation}
+        \begin{itemize}
+        \item paper \emph{suggestions} in the syllabus
+        \item starting point for your proposal?
+        \end{itemize}
+      \end{block}
+      \begin{block}{Goals of Research Proposal}
+        \begin{itemize}
+        \item focus your interests
+        \item generate original idea(s)
+        \item get you started with your research
+        \end{itemize} 
+      \end{block}
+    \end{column}
+  \end{columns}
+
+
+\end{frame}
+
+
+
+\begin{frame}{Inequality in macroeconomics: A brief history of economic hought\credittoben}
+  \begin{itemize}
+  \item before modern macro: 1930 to 1970
+  \item 1st generation modern macro: 1970 to 1990
+  \item 2nd generation modern macro: 1990 to financial crisis
+  \item 3rd generation modern macro: after the financial crisis
+  \end{itemize}
+  
+  Main drivers of evolution in modern macro era
+  \begin{enumerate}
+  \item better data
+  \item better computers \& algorithms
+  \item current events (rising inequality, financial crisis)
+  \end{enumerate}
+
+  
+\end{frame}
+
+\begin{frame}{Before modern macro: 1930 to 1970\credittoben}
+  \begin{itemize}
+  \item Keynesian IS/LM: about aggregates, no role for inequality/distribution by design
+  \item Distribution does play role in growth theory 
+    \begin{itemize}
+    \item mostly \alert{factor} income distribution (capital vs labor): Kaldor, Pasinetti and other Cambridge UK theorists
+    \item rarely \alert{personal} income distribution: e.g. Stiglitz, Blinder 
+    \end{itemize}
+  \item Disconnected empirical work on inequality (Kuznets)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{First Generation Macro Theories: 1970 to 1990\credittoben}
+  \begin{itemize}
+  \item representative agent (RA) models, e.g.\ RBC \& New Keynesian (NK) models
+  \item about aggregates, no role for inequality/distribution by design
+  \item advertised as ``microfounded'' but representative agent assumption cuts it from much of micro research
+    
+  \item What's wrong with that?
+    \begin{enumerate}
+    \item cannot speak to a number of important empirical facts, e.g.
+      \begin{itemize}
+      \item unequally distributed growth
+      \item poorest hit hardest in recessions
+      \end{itemize}
+    \item cannot think coherently about welfare --- ``who gains, who loses?''
+    \end{enumerate}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Second Generation Macro Theories: 1990 to 2008\credittoben}
+  \begin{itemize}
+  \item incorporate income and wealth heterogeneity from micro data
+  \item represent economy with a distribution \dots
+  \item \dots{} that moves over time, responding to macroeconomic shocks and policies
+  \item referred to as \alert{\emph{heterogeneous agent (HA) models}}
+  \item important early contributions by Aiyagari, Bewley, Huggett, Krusell-Smith, Den Haan, \dots
+  \item can potentially speak to
+    \begin{itemize}
+    \item unequally distributed growth
+    \item poorest hit hardest in recessions
+    
+    \end{itemize}
+  \item and are useful for welfare analysis
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Second Generation (continued): Inequality $\centernot\implies$ Macro\credittoben}
+  \begin{itemize}
+  \item heterogeneity doesn't matter much for aggregates (\alert{``inequality  $\centernot\implies$ macro'' })
+  \item Reason: in these theories, \alert{rich $=$ scaled version of poor}
+    \begin{itemize}
+    \item rich and poor differ in wealth \dots
+    \item \dots{} but not consumption and saving behavior
+    \end{itemize}
+  \item Problem: in data, \alert{rich $\ne$ scaled version of poor}, e.g. rich have
+    \begin{itemize}
+    \item lower MPCs out of transitory income changes
+    \item higher saving rates out of permanent income, wealth
+    \end{itemize}
+  \item Note: some important contributions from this period don’t fit this narrative
+    \begin{itemize}
+    \item Banerjee-Newman, Benabou, Galor-Zeira, Persson-Tabellini, \dots
+    \item also related: 1950s “capitalist-worker theories” of Kaldor, Pasinetti, \dots
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Third Generation Theories: after the Crisis\credittoben}
+  \begin{itemize}
+  \item \alert{take micro data more seriously}
+  \item emphasize things like
+    \begin{itemize}
+    \item household balance sheets
+    \item credit constraints
+    \item MPCs that are high on average but heterogeneous
+    \item non-homotheticities, non-convexities
+    \end{itemize}
+  \item Typical finding: distribution matters for macro (\alert{``inequality  $\implies$ macro'' })
+  \item Will see a number of examples throughout the course
+\end{itemize}
+\end{frame}
+
+\begin{frame}{This course is about ``3rd generation'' models\credittoben}
+  \begin{itemize}
+    %\item Methods for solving them and some fun applications
+  \item \emph{Distributional macroeconomics} is hard
+      \begin{itemize}
+      \item closed-form solutions are rare
+      \item computations are challenging
+      \item large micro datasets that may be hard to think through
+      \item (Note: even though models harder to solve, they are often easier to understand --- you have good intuition about micro behavior!)
+      \end{itemize}
+    \item Why should you be interested in this?
+      \begin{itemize}
+      \item fertile area of research, excellent dissertation topics!
+      \item many open questions
+      \item economics is becoming more empirical, macro no exception
+      % \item pays off to be a bit strategic in your choice of topic
+      \end{itemize}
+  \end{itemize}
+ 
+\end{frame}
+
+\section{Literature}
+%\input{literature}
+
+\section{Model}
+%\input{model}
+
+\section{Results}
+%\input{results}
+
+\section{Summary}
+%\input{conclusion}
+
+
+\appendix
+% \backupbegin
+
+\begin{frame}[allowframebreaks]{Literature}
+  \bibliographystyle{ecta} 
+  \bibliography{../inequality}
+\end{frame}
+
+
+\section{Back-up slides}
+
+\begin{frame}{Back-up 1}
+  bla
+\end{frame}
+\begin{frame}{Back-up 2}
+  bla bla   
+\end{frame}
+
+
+% \backupend
+
+
+\end{document}
+
+%%% Local Variables:
+%%% TeX-engine: luatex
+%%% TeX-master: t
+%%% End:
