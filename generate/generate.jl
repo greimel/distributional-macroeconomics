@@ -287,7 +287,7 @@ function sidebar_code(book_model)
     <div class="container sidebar-sticky">
     <div class="sidebar-about">
     <br>
-    <img src="$(path_to_asset(LOGO_FILE))" style="margin-left:1em; width: 80px; height: auto; display: inline">
+    <img src="$(path_to_asset(LOGO_FILE))" style="margin-left:1em; width: 120px; height: auto; display: inline">
     <div style="font-weight: bold; margin-bottom: 0.5em">
 	$(href("$(SLASH_PREPATH)/semesters/", TERM))
 	<span style="opacity: 0.6;">|

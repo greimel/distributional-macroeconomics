@@ -1,4 +1,4 @@
-# Course Website of _The New Course_
+# _Topic in Distributional Macroeconomics_
 
 This website is under construction.
 

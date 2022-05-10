@@ -6,7 +6,8 @@
 
 ## Class schedule
 
-| Lecture | Title | Date | Lecturer | Notebooks | Reading |
-|:-------:|:-----:|:----:|:--------:|:---------:|:-------:|
-| 1 | Introduction      | Feb  7, 2022 | Person 1  | [basic Julia](/notebooks/notebooks_basic_syntax), [Open source](/notebooks/notebooks_week12_how_to_collaborate_on_software) | Ch. 1 & 2 |
-| 2 | Newton method     | Feb 10, 2022 | Person 2  | [Newton method](/notebooks/notebooks_week3_newton_method) | Ch. 3 |
+* May 11 – Greimel – Introduction ⋅ Debt & Default
+* May 18 – Greimel – **Housing** – Housing Wealth Effects ⋅ Inequality & the mortgage Boom
+* May 25 – Perotti & Greimel – **Long-run trends** – Indebted Demand ⋅ Redistributive Growth
+* June 8 – Greimel – **Heterogeneity and monetary policy** – HANK
+* June 15 – Huber – **Behavioural macroeconomics**

@@ -3,14 +3,20 @@
         "title": "Preliminaries",
         "contents": [
             {
-                "name": "Julia Basics",
-                "notebook_path": "notebooks/basic_syntax.jl",
+                "name": "Basic Julia",
+                "notebook_path": "notebooks/basic-julia.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
             {
                 "name": "More Julia",
-                "notebook_path": "notebooks/advanced_julia.jl",
+                "notebook_path": "notebooks/advanced-julia.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Macroeconomic Trends",
+                "notebook_path": "notebooks/macroeconomic-trends.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
@@ -38,13 +44,7 @@
         "title": "Consumer credit and default",
         "contents": [
             {
-                "name": "Athreya (2002)",
-                "notebook_path": "notebooks/athreya.jl",
-                "video_id": "",
-                "preview_image_url": ""
-            },
-            {
-                "name": "Soft borrowing constraint",
+                "name": "Unsecured debt and default",
                 "notebook_path": "notebooks/default.jl",
                 "video_id": "",
                 "preview_image_url": ""
@@ -59,6 +59,12 @@
                 "notebook_path": "notebooks/housing.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Housing Wealth Effects",
+                "notebook_path": "notebooks/housing-wealth-effects.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     },
@@ -68,6 +74,12 @@
             {
                 "name": "Social comparisons",
                 "notebook_path": "notebooks/comparisons.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Indebted Demand",
+                "notebook_path": "notebooks/indebted-demand.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
@@ -87,6 +99,24 @@
                 "notebook_path": "notebooks/continuous-time.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            }
+        ]
+    },
+    {
+        "title": "Other unfinished notebooks",
+        "contents": [
+            {
+                "name": "Simpler defaults (Athreya 2002)",
+                "notebook_path": "notebooks/athreya.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "HANK (not working)",
+                "notebook_path": "notebooks/hank-econpdes.jl",
+                "video_id": "",
+                "preview_image_url": ""
+
             }
         ]
     }

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.0
+# v0.19.3
 
 using Markdown
 using InteractiveUtils
@@ -15,6 +15,11 @@ using DataFrameMacros
 
 # ╔═╡ b9aea038-b0f5-4101-b8d8-840caf80e9b2
 using PlutoUI
+
+# ╔═╡ ba649465-3d71-4854-9151-bf6147225865
+md"""
+`advanced-julia.jl` | **Version 1.0** | *last updated: May 10 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+"""
 
 # ╔═╡ e44404db-3327-4c52-8841-b5c10287a08e
 md"""
@@ -292,11 +297,11 @@ md"""
 # ╔═╡ 07374ec1-2f35-431a-9001-4f9e47cf40c5
 TableOfContents()
 
-# ╔═╡ 54416ff1-ef91-4ff3-968f-22acae580f4f
-g = 1
-
 # ╔═╡ 7b78d185-12c6-4baa-8ffc-b5a806cda32f
 g = 2
+
+# ╔═╡ 54416ff1-ef91-4ff3-968f-22acae580f4f
+g = 1
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -637,6 +642,7 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 """
 
 # ╔═╡ Cell order:
+# ╟─ba649465-3d71-4854-9151-bf6147225865
 # ╟─e44404db-3327-4c52-8841-b5c10287a08e
 # ╟─c704103c-3093-4f50-971e-c37eb14546de
 # ╟─ae686dfa-a6e1-4d30-89bf-03d1ea809849
