@@ -3,14 +3,14 @@
         "title": "Preliminaries",
         "contents": [
             {
-                "name": "Julia Basics",
-                "notebook_path": "notebooks/basic_syntax.jl",
+                "name": "Basic Julia",
+                "notebook_path": "notebooks/basic-julia.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
             {
                 "name": "More Julia",
-                "notebook_path": "notebooks/advanced_julia.jl",
+                "notebook_path": "notebooks/advanced-julia.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },

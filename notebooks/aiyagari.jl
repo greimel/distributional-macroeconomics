@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.4
+# v0.19.3
 
 using Markdown
 using InteractiveUtils
@@ -49,7 +49,7 @@ using QuantEcon
 
 # ╔═╡ f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 md"""
-`aiyagari.jl` | **Version 0.1** | *last updated: May 2, 2022*
+`aiyagari.jl` | **Version 1.0** | *last updated: May 10, 2022*
 """
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
@@ -797,6 +797,13 @@ md"""
 
 # ╔═╡ 1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 TableOfContents()
+
+# ╔═╡ 410f31a0-3a11-44bb-b189-afa634bef102
+md"""
+## Acknowledgements
+
+This notebook has been dramatically improved by [Daniel Schmidt](https://github.com/danieljschmidt).
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2370,5 +2377,6 @@ version = "3.5.0+0"
 # ╠═32086d8d-8518-4fef-a425-e87a2da8b346
 # ╠═dd62503f-431a-43b7-b555-7ab8e7c98cdd
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╟─410f31a0-3a11-44bb-b189-afa634bef102
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
