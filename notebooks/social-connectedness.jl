@@ -25,6 +25,9 @@ using DataFrames, DataFrameMacros, Chain
 # ╔═╡ e3a83114-db7d-4488-9db7-14ed919b0f33
 using CairoMakie, AlgebraOfGraphics
 
+# ╔═╡ cb6557ad-1cc6-417b-8668-38e2399fd6af
+using StatsBase: weights
+
 # ╔═╡ 93c33060-d39f-4ece-ab2c-c929cc249a5b
 using PlutoUI
 
@@ -38,6 +41,23 @@ hmda_df = @chain hmda_df0 begin
 	@transform(:state = Int(:state), :county = tryparse(Int, replace(get(:county), "O" => "0")))
 	@subset(!isnothing(:county))
 end
+
+# ╔═╡ 445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
+md"""
+# Friends' house price experiences
+"""
+
+# ╔═╡ f273a4f6-efcb-4005-bfe3-059bc62f8917
+add0_infty(from, to, dist) = from == to ? 0.0 : ismissing(dist) ? 500 : dist
+
+# ╔═╡ 4a7781a2-93f3-43c7-8a41-c136316029bd
+# 134s
+
+# ╔═╡ 9aad2e32-6d16-464a-b96e-6bd51b52b2fa
+# 170s
+
+# ╔═╡ b298a227-9381-4c07-854e-97e5229b25c2
+
 
 # ╔═╡ 844c432e-c804-4a47-adad-bef2887f7dc0
 md"""
@@ -204,6 +224,9 @@ function SCI_data(id)
 	CSV.File(path) |> DataFrame
 end
 
+# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
+county_df = SCI_data(:US_counties)
+
 # ╔═╡ fa730aed-a6f6-4a4a-94b2-76633eb8551b
 function get_pop(args...; kwargs...)
 	file = joinpath(datadep"county_pop", "co-est2019-alldata.csv")
@@ -213,9 +236,9 @@ end
 # ╔═╡ 0176205f-b123-4b1d-b38a-d871b1c6bbe4
 pop_df = @chain begin
 	get_pop(select = [:REGION, :DIVISION, :STATE, :COUNTY, :STNAME, :CTYNAME, :CENSUS2010POP])
-	@transform(:fips_str = string(:STATE) * lpad(string(:COUNTY), 3, '0'))
+	@transform(:fips = string(:STATE) * lpad(string(:COUNTY), 3, '0'))
 	@select(
-		#:fips = Meta.parse(:fips_str),
+		:fips = Meta.parse(:fips),
 	#	:state_name = :STNAME, :county_name = :CTYNAME,
 		:state = :STATE, :county = :COUNTY,
 		:population2010 = :CENSUS2010POP,
@@ -223,6 +246,27 @@ pop_df = @chain begin
 	)
 	#@transform(:county_match = clean_county_name_for_matching(:county))
 	@subset(:county != 0)
+end
+
+# ╔═╡ c18a3695-6768-4eb4-aa15-47c5dcef27f9
+df_c = @chain county_df begin		
+	# add distances
+	leftjoin(_, county_dist_data("500mi"), on=[:user_loc => :county1, :fr_loc => :county2])
+	# set distance to infinity if there are no data
+	@transform!(:distance = add0_infty(:user_loc, :fr_loc, :mi_to_county))
+	# add population
+	leftjoin(_, pop_df, on = :fr_loc => :fips)
+	@subset!(!ismissing(:population2010))
+	disallowmissing!(:population2010)
+	rename!(:population2010 => :fr_population, :user_loc => :user_fips, :fr_loc => :fr_fips, :state => :fr_state, :county => :fr_county)
+	#leftjoin(_, df_regions, on = :state => :State)
+	#disallowmissing!([:Region, :Division])
+	#@transform(
+	#	:user_state = :user_loc ÷ 1000,
+	#	:fr_state = :fr_loc ÷ 1000
+	#)
+	#@aside states = _.user_state ∩ _.fr_state
+	#@subset(:user_state ∈ states)
 end
 
 # ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
@@ -243,13 +287,6 @@ end
 zillow_df_annual = @chain zillow_df begin
 	@groupby(:state, :county, :year)
 	@combine(:hpi = mean(:hpi))
-end
-
-# ╔═╡ 81fe46fa-3b6c-47f4-997c-1b1a3e292541
-df_joined = @chain hmda_df begin
-	innerjoin(zillow_df_annual, on = [:state, :county, :year])
-	leftjoin(pop_df, on = [:state, :county])
-	@transform(:originations_per_capita = :count / :population2010)
 	@transform(:lhpi = log(:hpi))
 	@groupby(:state, :county)
 	@transform(
@@ -259,11 +296,89 @@ df_joined = @chain hmda_df begin
 	)
 end
 
+# ╔═╡ 7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
+zillow_df_annual_stacked = @chain zillow_df_annual begin
+	stack(Not([:state, :county, :year]))
+	@subset(!ismissing(:value))
+end
+
+# ╔═╡ a685f091-c2a3-4198-bf83-811e85dde740
+df_friends = @chain df_c begin
+	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
+	#@subset(:fr_fips ≠ :user_fips)
+	@subset(:distance ≥ 500)
+	#@subset(:user_fips ∈ [1001, 1002, 1003])
+	@groupby(:user_fips)
+	combine(_) do subdf
+		@chain subdf begin
+			innerjoin(
+				zillow_df_annual_stacked,
+				on = [:fr_state => :state, :fr_county => :county]
+			)
+			@groupby(:year, :variable)
+			@combine(
+				:friends_value = mean(:value, weights(:scaled_number_links_capita))
+			)
+		end
+	end
+end
+
+# ╔═╡ da73a540-77dc-416e-ae39-480d9e1456d1
+df_friends0 = @chain df_c begin
+	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
+	@subset(:fr_fips ≠ :user_fips)
+	#@subset(:distance ≥ 000)
+	#@subset(:user_fips ∈ [1001, 1002, 1003])
+	@groupby(:user_fips)
+	combine(_) do subdf
+		@chain subdf begin
+			innerjoin(
+				zillow_df_annual_stacked,
+				on = [:fr_state => :state, :fr_county => :county]
+			)
+			@groupby(:year, :variable)
+			@combine(
+				:friends_value = mean(:value, weights(:scaled_number_links_capita))
+			)
+		end
+	end
+end
+
+# ╔═╡ 49ef5550-a71b-4aa0-88da-510b100fc2bf
+zillow_with_friends = @chain zillow_df_annual_stacked begin
+	@transform(:fips = string(:state) * lpad(:county, 3, '0'))
+	@transform(:fips = Meta.parse(:fips))
+	select(:fips, :)# Not([:state, :county]))
+	leftjoin(df_friends0, on = [:year, :variable, :fips => :user_fips])
+	rename!(:friends_value => :friends_value0)
+	leftjoin(df_friends, on = [:year, :variable, :fips => :user_fips])
+	rename!(:friends_value => :friends_value500)
+end
+
+# ╔═╡ 0411bfbb-8790-4fab-9f7d-e1b2abe55aaa
+zillow_sub = @chain zillow_with_friends begin
+	@subset(:variable == "lhpi_D2")
+end
+
+# ╔═╡ 81fe46fa-3b6c-47f4-997c-1b1a3e292541
+df_joined = @chain hmda_df begin
+	innerjoin(zillow_df_annual, on = [:state, :county, :year])
+	leftjoin(pop_df, on = [:state, :county])
+	@transform(:originations_per_capita = :count / :population2010)
+	innerjoin(zillow_sub, on = [:state, :county, :fips, :year])
+end
+
 # ╔═╡ 5f07e878-cfc1-49b5-a9c9-be7b254fab1a
-reg(df_joined, @formula(originations_per_capita ~ lhpi_D1 + lhpi_D2 + lhpi_D3 + log(income) + fe(year)), weights = :county)
+reg(df_joined, @formula(originations_per_capita ~ lhpi_D1 + lhpi_D2 + lhpi_D3  + log(income) + fe(year)), weights = :county)
+
+# ╔═╡ 69eb0012-68d9-4b0f-b141-51c2f20edbab
+reg(df_joined, @formula(originations_per_capita ~ lhpi_D2 + friends_value500 + log(income) + fe(year)), weights = :county)
+
+# ╔═╡ 7902b275-2440-4297-8f8d-2715d43bbc62
+reg(df_joined, @formula(log(amount) ~ lhpi_D2 + (friends_value0 ~ friends_value500) + log(income) + fe(year)), weights = :county)
 
 # ╔═╡ 7eaf948a-b4e3-45df-a765-d61df175e54b
-reg(df_joined, @formula(amount ~ lhpi_D1 + lhpi_D2 + lhpi_D3 + log(income) + fe(year)), weights = :county)
+reg(df_joined, @formula(log(amount) ~ lhpi_D1 + lhpi_D2 + lhpi_D3 + log(income) + fe(year)), weights = :county)
 
 # ╔═╡ b4035cfa-d421-4677-bc8c-93fa721383f5
 CSV.File("/Users/fabiangreimel/Data/hmda/data-processed/hmda_inc_hpi_ineq.csv") |> DataFrame
@@ -288,6 +403,7 @@ PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 RData = "df47a6cb-8c03-5eed-afd8-b6050d6c41da"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 AlgebraOfGraphics = "~0.6.6"
@@ -302,6 +418,7 @@ HTTP = "~0.9.17"
 PlutoUI = "~0.7.38"
 RData = "~0.8.3"
 ShiftedArrays = "~1.0.0"
+StatsBase = "~0.33.16"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1676,18 +1793,33 @@ version = "3.5.0+0"
 # ╔═╡ Cell order:
 # ╠═2357bd9e-93e2-468e-8bd4-7720f07eed5e
 # ╠═fefa0c22-b554-49d5-a024-2f5307f13b31
+# ╠═0411bfbb-8790-4fab-9f7d-e1b2abe55aaa
 # ╠═81fe46fa-3b6c-47f4-997c-1b1a3e292541
 # ╠═af98fe40-d533-46fc-a3da-2cee27a40b9e
 # ╠═5f07e878-cfc1-49b5-a9c9-be7b254fab1a
+# ╠═69eb0012-68d9-4b0f-b141-51c2f20edbab
+# ╠═7902b275-2440-4297-8f8d-2715d43bbc62
 # ╠═7eaf948a-b4e3-45df-a765-d61df175e54b
 # ╠═c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
 # ╠═a5455cd9-fe6c-4bbe-a0c6-4537ddf585b5
 # ╠═e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
+# ╠═7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
 # ╠═e85d31e6-0068-44df-a88d-f245d90e21d1
 # ╠═c1c01e0e-d155-11ec-14a0-1173f9a37f8f
 # ╠═54c7ee04-19f9-4083-8869-f6a9d07ba51f
 # ╠═e3a83114-db7d-4488-9db7-14ed919b0f33
 # ╠═550295bd-ae15-404c-810a-f2f2561fcf5f
+# ╟─445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
+# ╠═6afa713a-291c-41bc-94fc-466d64d73eef
+# ╠═f273a4f6-efcb-4005-bfe3-059bc62f8917
+# ╠═c18a3695-6768-4eb4-aa15-47c5dcef27f9
+# ╠═cb6557ad-1cc6-417b-8668-38e2399fd6af
+# ╠═a685f091-c2a3-4198-bf83-811e85dde740
+# ╠═4a7781a2-93f3-43c7-8a41-c136316029bd
+# ╠═da73a540-77dc-416e-ae39-480d9e1456d1
+# ╠═9aad2e32-6d16-464a-b96e-6bd51b52b2fa
+# ╠═49ef5550-a71b-4aa0-88da-510b100fc2bf
+# ╠═b298a227-9381-4c07-854e-97e5229b25c2
 # ╟─844c432e-c804-4a47-adad-bef2887f7dc0
 # ╠═93c33060-d39f-4ece-ab2c-c929cc249a5b
 # ╠═4953ba71-27ae-4197-9d2d-997c7f513159
