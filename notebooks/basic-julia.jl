@@ -215,17 +215,8 @@ md"A nice alternative syntax to create matrices following a certain pattern is a
 
 # ╔═╡ e03be0e6-160c-46ac-a417-32e7299be02d
 md"""
-# Acknowledgement
+# Appendix
 """
-
-# ╔═╡ 2548306d-ed5d-4793-b925-7b36e932841c
-Markdown.MD(
-	Markdown.Admonition("warning", "This notebook is taken from", 
-[md"""
-		
-_**Computational Thinking**, a live online Julia/Pluto textbook._ ([computationalthinking.mit.edu](https://computationalthinking.mit.edu), [original notebook](https://github.com/mitmath/18S191/blob/Fall20/lecture_notebooks/Basic%20Julia%20syntax.jl))
-"""] 
-	))
 
 # ╔═╡ f15d5b3e-7639-4d20-9cfd-ef6bc07451c3
 TableOfContents()
@@ -502,7 +493,6 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╟─54e47e9e-edef-11ea-2d75-b5f550902528
 # ╠═6348edce-edef-11ea-1ab4-019514eb414f
 # ╟─e03be0e6-160c-46ac-a417-32e7299be02d
-# ╠═2548306d-ed5d-4793-b925-7b36e932841c
 # ╠═6e618eb2-037a-4688-bc7b-53fda57993a1
 # ╠═f15d5b3e-7639-4d20-9cfd-ef6bc07451c3
 # ╟─00000000-0000-0000-0000-000000000001
