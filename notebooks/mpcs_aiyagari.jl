@@ -37,9 +37,9 @@ md"""
 md"""
 # MPCs in the Aiyagari model
 
-**Deadline**: To be announced
+**Deadline**: May 17, 23:59
 
-Solutions to the exercises will be discussed in the first tutorial.
+Solutions to the exercises will be discussed in the first tutorial which will take place on May 18, 9:30-11:00 in room 1.01 (TI Amsterdam).
 
 ## Households' problem
 
