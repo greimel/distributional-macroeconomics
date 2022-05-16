@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.3
+# v0.18.4
 
 using Markdown
 using InteractiveUtils
@@ -49,7 +49,7 @@ using QuantEcon
 
 # ╔═╡ f8af393f-9d66-4a58-87f5-91f8b73eb4fe
 md"""
-`aiyagari.jl` | **Version 1.0** | *last updated: May 10, 2022*
+`aiyagari.jl` | **Version 1.1** | *last updated: May 16, 2022*
 """
 
 # ╔═╡ 7ce76fa6-5e4a-11ec-34b0-37ddd6335f4d
@@ -365,10 +365,85 @@ The figure below depicts the probability density over assets for separately for 
 """
 
 # ╔═╡ 47f3e4bc-affe-4463-b71e-36d9744b6c63
-	@chain results begin
+@chain results begin
+	data(_) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
+	draw
+end
+
+# ╔═╡ 086f0798-da62-4490-9ab7-8a531f97cf2d
+md"""
+**More on the stationary distribution**
+
+In the first lecture you have learned that the Aiyagari model is a Markov chain with respect to the $n \times n$ transition matrix $Q^*$ that is implicitly defined by the stochastic income process and the optimal savings rule. 
+
+Note that $Q^*$ is different from the $n \times m \times n$ matrix $Q$ which did not impose the optimal savings rule. 
+
+In the cell below, we compute $Q^*$ by combining the optimal savings rule with the $Q$ matrix. We also check if the rows of $Q^*$ sum to 1:
+"""
+
+# ╔═╡ 51b199a6-68fe-4b00-baff-ad4a108c7dde
+begin
+	res = QuantEcon.solve(ddp, PFI)
+	Q = setup_Q(ss.states_indices, ss.policies_indices, ss.z_chain)
+	Q_star_1 = zeros(length(ss.states), length(ss.states))
+	for (i_state, state) ∈ enumerate(ss.states_indices)
+		Q_star_1[i_state,:] = Q[i_state,res.sigma[i_state],:]
+	end
+	sum(Q_star_1; dims = 2)'
+end
+
+# ╔═╡ f20c6c28-c8f2-4870-9c98-d5e06cf52d6c
+md"""
+Within the QuantEcon framework, the $Q^*$ matrix is saved as ```res.mc.p``` where ```res``` is some results object that is returned by the ```QuantEcon.solve``` function. Below, we check if the $Q^*$ matrix computed by us is the same as the $Q^*$ matrix computed by the ```QuantEcon project```:
+"""
+
+# ╔═╡ ea9018ef-d82d-4514-958f-a6fc0f790dd5
+begin
+	Q_star_2 = res.mc.p
+	isapprox(Q_star_1, Q_star_2)
+end
+
+# ╔═╡ 9a089263-06ce-46e9-9bc7-0b7cdb83246f
+md"""
+If the Markov chain is ergodic, we can obtain the stationary distribution by starting with an arbitray distribution $\pi_1$ over the state space and applying the transition matrix to it until the distribution converges to the stationary distribution $\pi_\infty$. You can do this using the buttons below:
+- Restart: Initialize $\pi_1$ such that all agents are in the high income state with zero assets
+- Update: $\pi_{i+1}' = \pi_i' \cdot Q^*$
+
+Feel free to choose another initialization.
+
+Note that Pluto automatically applies one update step after you press "Restart".
+"""
+
+# ╔═╡ 9ac4d48e-e77e-405e-a8f7-bd69df5cd629
+md"""
+$(@bind restart_dens Button("Restart"))
+$(@bind update_dens Button("Update"))
+"""
+
+# ╔═╡ 858bace0-da73-48af-b35a-9601f4b96a62
+begin 
+	restart_dens
+	j = [1] 
+	# I need to use array here because otherwise Pluto complains that there are multiple definitions of j
+	dist = zeros(size(ss.states))
+	dist[1] = 1.
+	df = DataFrame(ss.states)
+	df.π = dist
+end;
+
+# ╔═╡ 5b9fb8c5-1396-497d-9469-651a0832db29
+begin 
+	update_dens
+	j[1] = 	j[1] + 1
+	df.π = (df.π'*Q_star_1)'
+
+	print(j[1], " iterations")
+
+	@chain df begin
 		data(_) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
 		draw
 	end
+end
 
 # ╔═╡ e816135f-7f19-4a47-9ed1-fbc935506e17
 md"""
@@ -487,9 +562,9 @@ md"""
 
 As a first step, we need to find an interval so that excess savings are positive at one endpoint and negative at the other endpoint.
 
-Left endpoint $r_l =$ 	$(@bind left NumberField(0.00:0.01:0.04, 0.02))
+Left endpoint $r_l =$ 	$(@bind left NumberField(0.00:0.01:0.04, 0.01))
 
-Right endpoint $r_r =$ 	$(@bind right NumberField(0.01:0.01:0.04, 0.02))
+Right endpoint $r_r =$ 	$(@bind right NumberField(0.01:0.01:0.04, 0.03))
 """
 
 # ╔═╡ 68596b0a-4ce5-4371-ac1e-e180092e4e48
@@ -2312,6 +2387,14 @@ version = "3.5.0+0"
 # ╠═0945aaef-6f3c-43c7-9cea-7f358ce4a4c8
 # ╟─51615ade-06d2-40dd-9d54-f0dab0fe5e92
 # ╠═47f3e4bc-affe-4463-b71e-36d9744b6c63
+# ╟─086f0798-da62-4490-9ab7-8a531f97cf2d
+# ╠═51b199a6-68fe-4b00-baff-ad4a108c7dde
+# ╟─f20c6c28-c8f2-4870-9c98-d5e06cf52d6c
+# ╠═ea9018ef-d82d-4514-958f-a6fc0f790dd5
+# ╟─9a089263-06ce-46e9-9bc7-0b7cdb83246f
+# ╟─9ac4d48e-e77e-405e-a8f7-bd69df5cd629
+# ╟─858bace0-da73-48af-b35a-9601f4b96a62
+# ╟─5b9fb8c5-1396-497d-9469-651a0832db29
 # ╟─e816135f-7f19-4a47-9ed1-fbc935506e17
 # ╟─16775912-a025-47f3-8e4f-fc6ce6142302
 # ╠═4d34729d-43e0-4f4b-a700-a6b8c896d7e9
