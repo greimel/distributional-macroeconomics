@@ -14,458 +14,405 @@ macro bind(def, element)
     end
 end
 
-# ╔═╡ 7fadac3a-6b77-11eb-2030-f92648bcef71
+# ╔═╡ 49914c8d-b321-4042-8b8e-acd74bab1021
 md"""
-`comparisons.jl` | **Version 1.0** | *last updated: May 17 2022*
+`simple-housing-wealth-effects.jl` | **Version 1.0** | *last updated: May 16 2022*
 """
 
-# ╔═╡ 549c17f0-6b77-11eb-3cc7-379d1bcfad6f
+# ╔═╡ 8b0be852-af27-4347-8981-04c4cb7cfd3e
 md"""
-# Social Comparisons, Income Inequality and the Mortgage Boom
+# Simple Housing Wealth Effects
 
-This lecture is an OLG version of the model in [_Drechsel Grau & Greimel, 2022, Working Paper_](https://www.greimel.eu/static/falling-behind-paper.pdf). 
-
-# Motivation
-
-## Inequality and the Mortage Boom
-
-_See the notebook `macroeconomic-trends.jl`._
-
-## Others Shape Our Economic Decisions
-
-Our economic decisions are influenced by our peers. *(Our consumption of visible goods depends on the consumption of our peers' visible goods.)*
-   * [Neighbors of lottery winners buy bigger cars](https://www.aeaweb.org/articles?id=10.1257/aer.101.5.2226)
-   * [Nonrich consume more visible goods when top incomes rise](https://www.mitpressjournals.org/doi/abs/10.1162/REST_a_00613)
-   * [Home owners are less happy with their house when a big house is built nearby](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3378131)
-
+_Based on the article **Understanding Housing Wealth Effects: Debt, Homeownership and the Lifecycle** (Greimel & Zadow, 2020)._
 """
 
-# ╔═╡ b56fdf06-54db-4d19-8141-5df17224cf7c
+# ╔═╡ c2af58e4-3e90-4013-814e-84224aa8575a
 md"""
 # Model
 
-We consider a lifecycle model where consumers live for two periods.
-
+The model is a simplified version of the canonical macroeconomic model with housing. The agents' optimal value is
 ```math
 \begin{align}
-&\max_{c_1, c_2, h} u(c_1, s) + \beta u(c_2, s)) \\
-&\begin{aligned}
-\text{s.t. }
-&u(c, s) = c^{1-\xi} s^\xi \\
-&s = s(h, \bar h) = h - \phi \bar h \\
-&c_1 + p h = y + d \\
-&c_2 + d(1+r) = y
-\end{aligned}
+V_0(h_0, d_0) = &\max_{(c_t, h_{t+1})} \sum_{j = 0}^{J-1} \beta^j u(c_t, h_{t+1}) + \beta^{J-1} \psi(h_{J}) \\
+&\begin{aligned}\text{s.t. }
+	& c_t + p x_t + \pi_t = y \\
+	& x_t =  h_{t+1} - (1-\delta) h_t \\
+	& \pi_t = (1+r) d_t - d_{t+1}\\
+	&d_J \leq 0
+&\end{aligned}
 \end{align}
 ```
 """
 
-# ╔═╡ dbe0d58a-4224-4ea2-a5d0-a50165906152
-Base.@kwdef struct ComparisonsOLGModel
-	β = 0.95 # discount factor
-	ξ = 0.3 # utility weight of consumption
-	ϕ = 0.7 # strength of the comparison motive
-	G = [0  0   0.5;
-		 0  0   0.5;
-		 0  0  0]
+# ╔═╡ 75f75a2d-462f-4f69-87c0-830e1d9f88f3
+md"""
+* agents life for ``J`` periods and earn a deterministic income ``y`` in each period
+* agents consume a non-durable consumption good ``c`` and durable housing ``h`` (which depreciates at rate ``\delta``)
+* agents can borrow debt ``d`` at interest rate ``r`` (``\beta (1 + r) = 1``)
+* agents cannot die with debt ``d_J \leq 0``
+* ``p`` follows a Markov Chain on ``\{p_1, p_2\}``, with transition matrix ``\begin{pmatrix}1-\varepsilon & \varepsilon \\  \varepsilon & 1-\varepsilon \end{pmatrix}`` with ``\varepsilon \to 0``. That is agents think that the house price is constant.
+* ``\psi(h)`` captures a _warm glow_ bequest motive. Old agents get some utility of passing on their house to the next generation. Absent a bequest motive agents would sell off their house before their death. The functional form is chosen to allow a closed form solution.
+"""
+
+# ╔═╡ e1fe4d08-d51f-11ec-0b38-31a08767dfd6
+md"""
+## Parameters and Solution
+"""
+
+# ╔═╡ 9176246a-e134-430d-b112-09047fb1556c
+Base.@kwdef struct SimpleHousingModel
+	β = 1/(1+0.0245)
+	δ = 0.022
+	ξ = 1 - 0.8875
+	J = 60
+	y = 1.0
+	d₀ = 0.0
+end
+
+# ╔═╡ 7afded13-d11d-43bc-8dc7-b790d00bd22f
+rate(β) = 1/β - 1
+
+# ╔═╡ ed0a3c26-ba03-4925-a634-f280a58e8cc2
+θ(J,r) = sum(1/(1+r)^j for j in 0:J-1) ## bad name!
+
+# ╔═╡ 5f389e7c-e890-4b93-ad13-cebba3e0c2c6
+function solve_tractable(param, p)
+	(; J, β, y, d₀) = param
+	#r = rate(β)
+	#𝒴 = θ(J,r) * y - d₀
+
+	_solve_tractable_(param, (; d₀, J, p))
+end
+
+# ╔═╡ 2c81c88d-9b0a-44f7-a61b-2682ee3b980e
+function _solve_tractable_((; δ, β, ξ, y), (; d₀, J, p))
+	r = rate(β)
+	𝒴 = θ(J,r) * y - d₀
+	
+  	#κ₁ = ξ * β * (1-δ) / (1 - β * (1-δ))
+  	#κ₂ = ((1 - β * (1-δ)) * (1-ξ)/ξ * p)^(1-ξ)
+	κ₃ = (1 - β * (1-δ)) * (1-ξ)/ξ
+
+	Ω = κ₃
+
+
+	ph = 𝒴 / (1 - δ + θ(J,r) * (δ + κ₃))
+	h = ph / p
+	c = κ₃ * ph
+	π = y - ph * δ - c
+
+	d = zeros(J)
+	d[1] = d₀ + ph + c - y
+	for j ∈ 2:J
+		d[j] = d[j-1] * (1+r) - π
+	end
+	df = DataFrame(; j = 0:J-1, d, c, ph, h, π, y)
+	
+	(; c, h, ph, π, d, df)  
+end
+
+# ╔═╡ 1f488ec2-0f6b-4a7c-8891-944b86189608
+mod0 = SimpleHousingModel()
+
+# ╔═╡ 657815e7-e8b9-477f-8a9d-349b822c5c94
+PROJ_DIR = joinpath(@__DIR__(), "..", "..") |> normpath
+
+# ╔═╡ 58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
+md"""
+## Optimal policies
+"""
+
+# ╔═╡ 19a2bc1f-41c4-4548-b2fe-e72280b9a842
+md"""
+* ``\beta``: $(@bind β1 Slider(0.8:0.01:1.0, default=1/(1+0.0245), show_value = true))
+* ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
+* ``\xi``: $(@bind ξ1 Slider(0.0:0.05:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
+* ``J``: $(@bind J1 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
+* ``y``: $(@bind y1 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
+* ``d_0``: $(@bind d₀1 Slider(-5:0.5:5, default = 0, show_value=true)) (initial debt; if negative: asset)
+*  $(@bind compare1 CheckBox(default = true)) (compare with defaults)
+"""
+
+# ╔═╡ 448fd3c7-3092-40a2-a037-4303222c6424
+policies0 = solve_tractable(mod0, 1.0).df;
+
+# ╔═╡ d404371b-9382-4aca-b7d1-5a4fed0d9849
+let
+	mod1 = SimpleHousingModel(; β=β1, δ=δ1, J=J1, ξ=ξ1, y=y1, d₀=d₀1)
+	
 	p = 1.0
-	groups = ["bottom 50", "middle 40", "top 10"]
-	group_weights = weights([0.5, 0.4, 0.1])
+
+	df = solve_tractable(mod1, p).df
+
+	if compare1
+		df = vcat(df, policies0, source = :parameters => ["sliders", "default"])
+	else
+		@transform!(df, :parameters = "sliders")
+	end
+
+	@chain df begin
+		@transform(:age = :j + 25)
+		stack(Not([:age, :j, :parameters]))
+		data(_) * mapping(:age, :value, color = :variable, layout = :parameters) * visual(ScatterLines, markersize = 5)
+		draw
+	end	
 end
 
-# ╔═╡ e2d28589-f573-4491-b040-d473692c44f2
-par0 = ComparisonsOLGModel()
-
-# ╔═╡ 5cd12ef6-9535-425c-b47e-ba64a0c51fac
-par1 = ComparisonsOLGModel(β = β1, ξ = ξ1, ϕ = ϕ1, G = G1)
-
-# ╔═╡ 0b59d111-56e3-43ca-b324-bb5d5b1d03e0
-rate(β) = 1/(1+r)
-
-# ╔═╡ fcdbad94-6b78-11eb-1f33-4b35fee6b1b9
+# ╔═╡ ad4bbbcd-8856-4533-9b1e-103f36707ebc
 md"""
-# Simulating the model
+# Housing Wealth Effects
 """
 
-# ╔═╡ 2b9592ca-7688-11eb-34c2-3d4f2e4f3159
-par_md = md"""
-* ``\beta``: discount factor (assume ``\beta = 1/(1+r)``)
-* ``\theta``: utility weight of housing
-* ``\phi``: strength of the comparison motive
-* ``p``: house price
+# ╔═╡ dc1680b3-7754-4923-ad93-895a26f676b6
+md"""
+## An unexpected house price shock
 """
 
-# ╔═╡ 4b3e320e-6b79-11eb-2336-d57c4c0e784c
-function solution((; β, ξ, ϕ, p, G, groups), y₀)
-	
-	κ₀ = ξ/(1 - ξ) * (1 + β)
-	κ₁ = (1 + β) * ξ / p
-	κ₂ = 1 - ξ
-	
-	h_next(y, h) = κ₁ * y + (κ₂ * ϕ) * G * h
-	
-	function m_next(y, h)
-		h_n = h_next(y, h)
-		
-		β .* (y - p/κ₀ * (h_n - ϕ * G * h)) 
-	end
+# ╔═╡ 5a18c115-254d-4eeb-993f-42f2772f91f0
+md"""
+``j_\text{shock}`` $(@bind j_shock Slider(0:mod0.J-1, default=10, show_value=true))
+"""
 
+# ╔═╡ 6af88c45-7e54-4b32-b943-48064b2b4736
+let
+	mod0
+	p₀ = 1
+	p₁ = 0.5
+	(; J, β, d₀, δ) = mod0
+	r = rate(β)
+
+	df₀ = _solve_tractable_(mod0, (; d₀, J, p=p₀)).df
+	nt = @subset(df₀, :j == j_shock - 1) |> only |> NamedTuple
+	@subset!(df₀, :j < j_shock)
 	
-	h₀ = (I - (ϕ * κ₂ * G)) \ (κ₁ * y₀)
+	d₁ = nt.d - nt.ph / p₀ * p₁ * (1-δ) / (1+r)
+
+	df₁ = _solve_tractable_(mod0, (; d₀=d₁, J=J - j_shock, p=p₁)).df
+	@transform!(df₁, :j = :j + j_shock)
+
+	df = [df₀; df₁]
+
+	@chain df begin
+		@transform(:age = :j + 25)
+		stack(Not([:age, :j]))
+		data(_) * mapping(:age, :value, color = :variable) * visual(ScatterLines, markersize = 5)
+		draw
+	end	
 	
-	(; h_next, m_next, h₀)
 end
 
-# ╔═╡ f6e061ce-6b7c-11eb-351d-8f890bc5318c
-function simulate(par, y₀, solution, T)
-	N = size(par.G, 2)
-	h_sim = zeros(N, T)
-	m_sim = zeros(N, T)
+# ╔═╡ f437f295-4ccf-4d57-b358-51df02e1deae
+md"""
+## Consumption response over the lifecycle
+"""
+
+# ╔═╡ 7266f832-71a0-40bb-92cc-462fd95e546b
+md"""
+* ``\beta``: $(@bind β2 Slider(0.8:0.01:1.0, default=1/(1+0.0245), show_value = true))
+* ``\delta``: $(@bind δ2 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
+* ``\xi``: $(@bind ξ2 Slider(0.0:0.05:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
+* ``J``: $(@bind J2 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
+* ``y``: $(@bind y2 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
+*  $(@bind compare2 CheckBox(default = true)) (compare with defaults)
+"""
+
+# ╔═╡ a468386a-d300-4665-92b1-5ef7636fdfc0
+let
+	mod2 = SimpleHousingModel(; β=β2, δ=δ2, J=J2, ξ=ξ2, y=y2)
 	
+	df = consumption_response(mod2)
 
-	y_panel = zeros(N, T)
-	y_panel[:, 1] .= y₀
-	for t in 2:T
-		y_panel[1, t] = y_panel[1, t-1]
-		y_panel[2, t] = y_panel[2, t-1]
-		y_panel[3, t] = 1.1 * y_panel[3, t-1]
+	if compare2
+		df = vcat(df, cres_df, source = :parameters => ["sliders", "default"])
+	else
+		@transform!(df, :parameters = "sliders")
 	end
+	
+	data(df) * mapping(:age, :c_res => "consumption response", color = :parameters) * visual(ScatterLines) |> draw
+end
 
-	(; m_next, h_next, h₀) = solution
+# ╔═╡ 71df2ab5-b4fa-4ea7-b345-87e7372d3eb9
+function consumption_response((; J, δ, β, ξ))
+	r = rate(β)
+	
+	q_by_p = 0.9
 
-	h_sim[:, 1] = h₀
-	m_sim[:, 1] .= m_next(y₀, h₀)
+	κ₃ = (1 - β * (1-δ)) * (1-ξ)/ξ
+	Ω = κ₃
 
-	for t in 2:T
-		h_sim[:, t] = h_next(y_panel[:, t], h_sim[:, t-1])
-		m_sim[:, t] = m_next(y_panel[:, t], h_sim[:, t-1])
-	end
+	df = map(0:J-1) do j
+		num = (1-δ) * q_by_p + θ(J-j,r) * (δ + Ω)
+		den = (1-δ) + θ(J-j,r) * (δ + Ω)
+		c_res = num / den - 1
+		(; j, c_res)
+	end |> DataFrame
 
-	sim_df = [(; grp=par.groups[i], t) for i in 1:N, t in 1:T] |> vec |> DataFrame
-	sim_df.y = y_panel |> vec
-	sim_df.h = h_sim |> vec
-	sim_df.m = m_sim |> vec
+	@transform!(df, :age = :j + 25)
+end
 
-	@chain sim_df begin
-		@transform!(
-			:house2income = :h / :y,
-			:mort2income = :m / :y
-		)
-		leftjoin!(weight_df(par), on=:grp)
-		disallowmissing!
-	end
-end	
+# ╔═╡ bbbdb059-4bb9-4964-87b1-57f1c411546e
+cres_df = consumption_response(mod0)
 
-# ╔═╡ b8290da5-dd07-408d-a8c2-a9fd863f8172
+# ╔═╡ 80d7b8f4-8346-439c-a4c4-f7b7c21c80d7
+ages = cres_df.age
+
+# ╔═╡ d59caf31-60d5-411d-abbc-26e2e3131860
+md"""
+# Assignment: Housing Wealth Effects in an Ageing Society
+
+In this assignment we will explore how demographic change is affecting the aggregate response to house price changes.
+"""
+
+# ╔═╡ 895c1fb6-bd6f-4b00-9121-898fc08fb000
+md"""
+## Exercise 1: Bla (1 point)
+
+👉 Why do . (max. $(limit1) words)
+"""
+
+# ╔═╡ fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
+answer1 = md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ ab6a85f4-22f6-4cb6-9e2e-b3b08848f801
 begin
-	y₀ = [0.5, 1, 2]
-	T = 10
+	limit1 = 100
+	show_words_limit(answer1, limit1)
 end
 
-# ╔═╡ ceeeee84-92e4-484a-ba82-656c1e66895f
-sim_df0 = simulate(par0, y₀, solution(par0, y₀), T)
-
-# ╔═╡ 4638a13c-2f23-4199-8370-4852ed708017
-sim_df = vcat(sim_df0, simulate(par1, y₀, solution(par1, y₀), T), source = :parameters => [:baseline, :sliders])
-
-# ╔═╡ 1f50fc09-3e17-4586-97f2-f566b67a1a2d
-weight_df(par) = DataFrame(; grp = par.groups, wgt = par.group_weights)
-
-# ╔═╡ 0f2e51ad-a0df-441f-9ac1-6caacc955734
-aggregates(sim_df, par) = @chain sim_df begin
-	stack([:h, :m, :y], [:grp, :t, :wgt, :parameters])
-	@groupby(:t, :variable, :parameters)
-	@combine(:value = mean(:value, weights(:wgt)))
-
-	unstack(:variable, :value)
-	@transform(
-		:house2income = :h / :y,
-		:mort2income = :m / :y
-	)
-	stack(Not([:t, :parameters]))
-	@groupby(:variable, :parameters)	
-	@transform(:normed = @c normalize(:value, (:t, 1)))
-end
-
-# ╔═╡ a0208167-05b7-4876-b848-86f6c24b485a
-@chain aggregates(sim_df, par0) begin
-	data(_) * mapping(:t, :normed, color = :parameters => "", layout = :variable) * visual(ScatterLines)
-	draw(legend = (position = :top, titleposition = :left))
-end
-
-# ╔═╡ ad46fe02-928c-4dd4-85cc-ee52fde6658d
+# ╔═╡ fb8dc44d-32a2-4e47-a1d3-a79f48870388
 md"""
-* ``\beta`` $(@bind β1 Slider(0.7:0.05:1.0, show_value = true, default = 0.95)) (discount factor)
-* ``\xi`` $(@bind ξ1 Slider(0.1:0.1:0.9, show_value = true, default = 0.3)) (utility weight of housing)
-* ``\phi`` $(@bind ϕ1 Slider(0.1:0.1:0.9, show_value = true, default = 0.7)) (strength of the comparison motive)
-* ``G`` (comparison network)
-  
-    $(@bind gPP1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0)) $(@bind gPM1 Slider(0.0:0.1:1.0, show_value = true, default = 0.7)) $(@bind gPR1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0))
-
-    $(@bind gMP1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0)) $(@bind gMM1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0)) $(@bind gMR1 Slider(0.0:0.1:1.0, show_value = true, default = 0.7))
-
-    $(@bind gRP1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0)) $(@bind gRM1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0)) $(@bind gRR1 Slider(0.0:0.1:1.0, show_value = true, default = 0.0))
-
+## Demographic change in the USA
 """
 
-# ╔═╡ 0812b99e-8d80-48fc-a254-7dc960f8cbeb
-G1 = [gPP1 gPM1 gPR1;
- gMP1 gMM1 gMR1;
- gRP1 gRM1 gRR1]
+# ╔═╡ d8f5fa4d-e2e2-4985-bb60-5f7ba2efc268
+import HTTP
 
-# ╔═╡ 3935f4fb-ef21-408f-a0bb-9f271827bacd
-@chain sim_df begin
-	stack(Not([:grp, :t, :parameters]))
-	@subset(:variable ∉ ["wgt", "y", "h", "m"])
-	@groupby(:variable, :grp, :parameters)
-	@transform(:value = @c normalize(:value, (:t, 1)))
-	data(_) * mapping(:t, :value, color = :grp => "", col = :parameters, row = :variable) * visual(Lines, markersize = 5)
-	draw(
-		legend = (position=:top, titleposition=:left),
-		facet = (; linkyaxes=:minimal)
-	)
+# ╔═╡ b2dc724c-bacf-4876-9485-cb0a3977e36a
+url = "https://www2.census.gov/programs-surveys/popproj/datasets/2017/2017-popproj/np2017_d1_mid.csv"
+
+# ╔═╡ 515d0102-69e3-41a5-9126-b36af0d96468
+df_pop = DataFrame(CSV.File(HTTP.get(url).body))
+
+# ╔═╡ 6ce85450-6b32-4b2b-af25-f8f00d15c004
+names(df_pop)
+
+# ╔═╡ 20cdd9c4-419a-49d1-8701-ba335be8777a
+age_df = CSV.File(joinpath(PROJ_DIR, "julia/tables/age.csv")) |> DataFrame
+
+# ╔═╡ 192288e6-30ae-481f-8927-c8794e790ef5
+@chain age_df begin
+	@transform(:age_bin = (:from + :to)/2)
+	@subset(:year ∈ 1980:20:2060)
+	data(_) * mapping(:age_bin, :share, color = :year => nonnumeric) * visual(Lines)
+	draw(axis = (; title = "The age distribution over time"))
 end
 
-# ╔═╡ df5509d8-6b77-11eb-1f61-6d9fe9729e46
+# ╔═╡ 18040182-9592-4fdc-a206-a167d152d475
+age_weights = @chain age_df begin
+	@subset(:year ∈ 1980:10:2040)
+	@transform(:age_range = :from:(:to))
+	@select(:age_range, :share = :share / length(:age_range), :year)
+	flatten(:age_range)
+	rename(:age_range => :age)
+	@subset(:age ∈ ages)
+	@aside wgts80 = sum(@subset(_, :year == 1980).share)
+	@transform(:share = :share / wgts80)
+end
+
+# ╔═╡ baea9480-de9e-4619-ae91-0b55b366dfb1
+agg_res = @chain age_weights begin
+	leftjoin(cres_df, on = :age)
+	@groupby(:year)
+	@combine(:agg = sum(:c_res, weights(:share)))
+end
+
+# ╔═╡ 2389faea-94ea-4308-9ce2-f2248c337db6
+let # responses_simple
+	fig = Figure()
+	ax1 = Axis(fig[1,1], xlabel="age", ylabel="%", title="individual response")
+ 	ax2 = Axis(fig[2,1], xlabel="age distribution", ylabel="%", title="aggregate response")
+
+	lines!(ax1, cres_df.age, 100* cres_df.c_res, color=:black)
+	scatterlines!(ax2, agg_res.year, 100 * agg_res.agg, color=:black)
+
+	fig	
+end
+
+# ╔═╡ ac432f89-c103-4268-ae68-d8c668b6cddc
 md"""
 # Appendix
 """
 
-# ╔═╡ 14f6fe13-f2d9-46b3-9341-8837f952e5d0
-function normalize(var, (norm_var, norm_val))
-	ref = @chain begin
-		DataFrame(; var, norm_var)
-		@subset(:norm_var == norm_val)
-		_.var
-		only
-	end
-
-	var ./ ref
-end
-
-# ╔═╡ 09ba58f9-b345-4fa7-8926-ce6d043098b9
-function normalize(var, (norm_var, norm_val), (norm_var2, norm_val2))
-	ref = @chain begin
-		DataFrame(; var, norm_var, norm_var2)
-		@subset(:norm_var == norm_val, :norm_var2 == norm_val2)
-		_.var
-		only
-	end
-
-	var ./ ref
-end
-
-# ╔═╡ 03b47940-6f73-11eb-32d8-818a673be255
-md"""
-## Controlling for consumer price inflation
-
-[to be improved]
-"""
-
-# ╔═╡ 0f2f65f0-6f73-11eb-282f-3ff2adc50614
-begin
-	gdpdef = CSV.File(IOBuffer(
-"""
-DATE	GDPDEF
-1947-01-01	12.2662500000000000
-1948-01-01	12.9542500000000000
-1949-01-01	12.9345000000000000
-1950-01-01	13.0880000000000000
-1951-01-01	14.0227500000000000
-1952-01-01	14.2650000000000000
-1953-01-01	14.4392500000000000
-1954-01-01	14.5722500000000000
-1955-01-01	14.8172500000000000
-1956-01-01	15.3225000000000000
-1957-01-01	15.8322500000000000
-1958-01-01	16.1905000000000000
-1959-01-01	16.4132500000000000
-1960-01-01	16.6380000000000000
-1961-01-01	16.8140000000000000
-1962-01-01	17.0190000000000000
-1963-01-01	17.2137500000000000
-1964-01-01	17.4767500000000000
-1965-01-01	17.7955000000000000
-1966-01-01	18.2945000000000000
-1967-01-01	18.8252500000000000
-1968-01-01	19.6257500000000000
-1969-01-01	20.5900000000000000
-1970-01-01	21.6772500000000000
-1971-01-01	22.7747500000000000
-1972-01-01	23.7565000000000000
-1973-01-01	25.0605000000000000
-1974-01-01	27.3225000000000000
-1975-01-01	29.8405000000000000
-1976-01-01	31.4877500000000000
-1977-01-01	33.4400000000000000
-1978-01-01	35.7845000000000000
-1979-01-01	38.7665000000000000
-1980-01-01	42.2740000000000000
-1981-01-01	46.2737500000000000
-1982-01-01	49.1317500000000000
-1983-01-01	51.0447500000000000
-1984-01-01	52.8917500000000000
-1985-01-01	54.5665000000000000
-1986-01-01	55.6680000000000000
-1987-01-01	57.0402500000000000
-1988-01-01	59.0510000000000000
-1989-01-01	61.3700000000000000
-1990-01-01	63.6722500000000000
-1991-01-01	65.8217500000000000
-1992-01-01	67.3197500000000000
-1993-01-01	68.9162500000000000
-1994-01-01	70.3870000000000000
-1995-01-01	71.8645000000000000
-1996-01-01	73.1792500000000000
-1997-01-01	74.4417500000000000
-1998-01-01	75.2792500000000000
-1999-01-01	76.3655000000000000
-2000-01-01	78.0732500000000000
-2001-01-01	79.7897500000000000
-2002-01-01	81.0505000000000000
-2003-01-01	82.5510000000000000
-2004-01-01	84.7730000000000000
-2005-01-01	87.4147500000000000
-2006-01-01	90.0637500000000000
-2007-01-01	92.4825000000000000
-2008-01-01	94.2887500000000000
-2009-01-01	95.0027500000000000
-2010-01-01	96.1067500000000000
-2011-01-01	98.1152500000000000
-2012-01-01	99.9987500000000000
-2013-01-01	101.7512500000000000
-2014-01-01	103.6322500000000000
-2015-01-01	104.6225000000000000
-2016-01-01	105.7190000000000000
-2017-01-01	107.7050000000000000
-2018-01-01	110.2917500000000000
-2019-01-01	112.2615000000000000
-2020-01-01	113.6112500000000000
-"""
-			)) |> DataFrame
-
-	gdpdef.year = year.(gdpdef.DATE)
-end
-
-# ╔═╡ 455a7190-6a52-44a7-bbf8-634858198166
-md"""
-## DataDeps
-"""
-
-# ╔═╡ 155047e2-70c6-49af-b836-80e59fcdea26
-scf_checksums = Dict(
-	1989 => "3600d39fa908f2b6b32a63518fe38d2b7ca7d9c8047e947b054ea2e7d36f7b9e",
-	1992 => "d86da7dc07819adb1f08683d7b04f782d2fb1c135ea94880ce4b6550db3c0ccd",
-	1995 => "c28169ca73855a1b1f22a999655ea573fc5391b11884b9272c9cf2bf1ee5c442",
-	1998 => "69fda43abc88df203f03b9a9e8cf5bf5bc0a626da4b99d44f2fd11dee2c0b11e",
-	2001 => "28f5548f91d5f851ad643d9c172e00ecfeb1d6fe47126fb2496af5b980f75ffd",
-	2004 => "bb08a6122a25348f6507fcd9377511820972108e8642d6ec1ab3ddf262c21071",
-	2007 => "85324789b2ab6f5e5dfc05a8de294e4fd837f7e2174f41e5be5e146435a68aa9",
-	2010 => "a85ee57748ec28b3366a4f0b9446ec8b0c34710f14097b6a6e03089c9ad8823a",
-	2013 => "f13ed12756798c7e696dbf56ec26438cc2e0c46de4c3343afd3fd05ddfb9e6e8",
-	2016 => "11e92c267f333fe10678c9cbb9752c10290085c35abd7c52f7f21c8df45dc468",
-	2019 => "87766da9024f7b6742d277c955234cf6bee439248fbc5f689c81d91880fd1b05",
-)
-
-# ╔═╡ a2784f1c-a6c1-457f-aa4a-556e5c6eb663
-begin
-	using DataDeps; ENV["DATADEPS_ALWAYS_ACCEPT"] = true
-
-	for year in 1989:3:2019
-		register(DataDep(
-    		"SCF$(year)",
-    		"",
-    		"https://www.federalreserve.gov/econres/files/scfp$(year)excel.zip",
-   			scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
-    		post_fetch_method=unpack
-		))
-	end
-
-	register(DataDep(
-   		"MacroHistory",
-   		"",
-   			["http://data.macrohistory.net/JST/JSTdatasetR5.dta"],				
- 			["e4691b8ac90e8d6947c65ae197841862ded27a00c167a578c38eccf4f73043ce"]
-	))
-	
-	register(DataDep(
-   		"CEX_Betrand_Morse",
-   		"",
-   			["https://dataverse.harvard.edu/api/access/datafile/2781811?format=tab&gbrecs=true"]
-				
-		,
- 			# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
-	))
-
-	register(DataDep(
-   		"AggregatedDINA",
-   		"",
-   			["https://greimel.github.io/DINA.jl/dev/dina-aggregated.csv"]
-				
-		,
- 			["869b880aca5d8614135cd1910e4addaf9a1807dd88d050b890c970efffda7231"]
-	))
-
-end
-
-# ╔═╡ 20d39712-78c6-401a-86cf-819c987535f4
-get_dina_df() = CSV.File(joinpath(datadep"AggregatedDINA", "dina-aggregated.csv")) |> DataFrame
-
-# ╔═╡ 09cabee2-6b78-11eb-29c8-8f616a79d0e5
-md"""
-## Package environment
-"""
-
-# ╔═╡ 449a52cc-6b7c-11eb-035a-355b0c334582
-using PlutoUI: Slider, TableOfContents, CheckBox, NumberField
-
-# ╔═╡ 43a79cd2-e2c9-43e1-99f9-b5c9c3206335
-md"""
-### Plotting
-"""
-
-# ╔═╡ c4c9f65f-88a0-4682-9097-4ba97fde8e69
-using CairoMakie, AlgebraOfGraphics
-
-# ╔═╡ 5350a65e-6b7c-11eb-3725-d59f6c3cf1a7
-md"""
-### Data wrangling
-"""
-
-# ╔═╡ 07f0bd96-05d6-40a0-b639-825700d76ad8
-using Chain: @chain
-
-# ╔═╡ a2924101-d354-468a-b505-d00761381260
-using DataFrameMacros
-
-# ╔═╡ 241513b2-adf0-4952-b5f5-ceb102b94e04
-using DataFrames
-
-# ╔═╡ 19d2ed76-a3b7-4b40-8e2f-3f7c71da6744
-using CategoricalArrays
-
-# ╔═╡ 7eec46cd-c671-4038-b0a1-0dfef8290d9e
-using StatsBase: weights
-
-# ╔═╡ 45b113b7-9d9e-4ae0-9db3-f35aced47f9d
+# ╔═╡ 2b083233-a57c-455d-bafd-f54b42d52f6e
 using Statistics: mean
 
-# ╔═╡ 034e3d13-e67c-4077-96da-177694dbadd0
-md"""
-### Other
-"""
+# ╔═╡ 65cad8a4-3bc2-4558-a65b-5c50d3d9c99c
+using StatsBase: weights
 
-# ╔═╡ 6fd26ade-41fe-4556-88bf-0fc4aefd43a2
+# ╔═╡ d9bcf2cc-a9df-459d-a4d4-06a580263e5a
+using CairoMakie
+
+# ╔═╡ 34938368-a7cd-4eaf-b55a-cfa3365ccd49
+using AlgebraOfGraphics
+
+# ╔═╡ f7e7964a-ce7b-41bd-94bc-47af01b8e291
 import CSV
 
-# ╔═╡ 4d17e266-6db1-46cb-8f02-eedddf8d34b6
-using LinearAlgebra: I
+# ╔═╡ 5127223c-7fdf-4585-80fb-f7255b5aff7e
+using DataFrames, DataFrameMacros, Chain
 
-# ╔═╡ 15253560-6b78-11eb-12f6-91d27770a192
-using Dates: year
+# ╔═╡ 336c19d5-4245-48be-b28e-f7c33fafedca
+using StructArrays
 
-# ╔═╡ b1baa0d2-6b7c-11eb-39ec-f393691c37d9
+# ╔═╡ 4c02b6a0-31cf-4212-a70f-d0070772b0dd
+using PlutoUI
+
+# ╔═╡ 6e28e04d-fa36-486f-b0fe-c1beff6e8ca3
+using PlutoUI: Slider
+
+# ╔═╡ 9a01c6c8-49df-4a42-8385-5a2bc93ad604
 TableOfContents()
+
+# ╔═╡ cb582f5c-51ff-48b5-9dbc-fd3f679b3f63
+md"""
+## Infrastructure
+"""
+
+# ╔═╡ 734c2fa3-2f12-4452-b9c0-858f0c85279e
+function wordcount(text)
+	stripped_text = strip(replace(string(text), r"\s" => " "))
+   	words = split(stripped_text, (' ', '-', '.', ',', ':', '_', '"', ';', '!', '\''))
+   	length(filter(!=(""), words))
+end
+
+# ╔═╡ 3d1b9683-1e2c-4281-85e5-c100623700c7
+show_words(answer) = md"_approximately $(wordcount(answer)) words_"
+
+# ╔═╡ fbc167ac-c200-4294-b651-ed1b92ba40da
+function show_words_limit(answer, limit)
+	count = wordcount(answer)
+	if count < 1.02 * limit
+		return show_words(answer)
+	else
+		return almost(md"You are at $count words. Please shorten your text a bit, to get **below $limit words**.")
+	end
+end
+
+# ╔═╡ 07315b3f-e958-4358-ba29-7feeed2ec640
+begin
+	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
+	hint(text, title="Hint")       = admonition("hint",    title, text)
+	warning(text, title="Warning") = admonition("warning", title, text)
+	danger(text, title="Danger")   = admonition("danger",  title, text)
+	correct(text, title="Correct") = admonition("correct", title, text)
+
+	almost(text) = warning(text, "Almost there!")
+	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
+	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
+	got_it(text=rand(yays)) = correct(text, "Got it!")
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -473,28 +420,26 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
-DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 AlgebraOfGraphics = "~0.6.7"
 CSV = "~0.10.4"
 CairoMakie = "~0.8.1"
-CategoricalArrays = "~0.10.5"
 Chain = "~0.4.10"
-DataDeps = "~0.7.7"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
+HTTP = "~0.9.17"
 PlutoUI = "~0.7.38"
 StatsBase = "~0.33.16"
+StructArrays = "~0.6.7"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -560,12 +505,6 @@ version = "1.0.1"
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
-[[deps.BinaryProvider]]
-deps = ["Libdl", "Logging", "SHA"]
-git-tree-sha1 = "ecdec412a9abc8db54c0efc5548c64dfce072058"
-uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
-version = "0.5.10"
-
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "19a35467a82e236ff51bc17a3a44b69ef35185a2"
@@ -600,12 +539,6 @@ deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
-
-[[deps.CategoricalArrays]]
-deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
-git-tree-sha1 = "109664d3a6f2202b1225478335ea8fea3cd8706b"
-uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
-version = "0.10.5"
 
 [[deps.Chain]]
 git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
@@ -685,12 +618,6 @@ version = "4.1.1"
 git-tree-sha1 = "fb5f5316dd3fd4c5e7c30a24d50643b73e37cd40"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.10.0"
-
-[[deps.DataDeps]]
-deps = ["BinaryProvider", "HTTP", "Libdl", "Reexport", "SHA", "p7zip_jll"]
-git-tree-sha1 = "4f0e41ff461d42cfc62ff0de4f1cd44c6e6b3771"
-uuid = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
-version = "0.7.7"
 
 [[deps.DataFrameMacros]]
 deps = ["DataFrames"]
@@ -1799,50 +1726,61 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─f5450eab-0f9f-4b7f-9b80-992d3c553ba9
-# ╟─7fadac3a-6b77-11eb-2030-f92648bcef71
-# ╟─549c17f0-6b77-11eb-3cc7-379d1bcfad6f
-# ╟─b56fdf06-54db-4d19-8141-5df17224cf7c
-# ╠═dbe0d58a-4224-4ea2-a5d0-a50165906152
-# ╠═e2d28589-f573-4491-b040-d473692c44f2
-# ╠═5cd12ef6-9535-425c-b47e-ba64a0c51fac
-# ╠═0b59d111-56e3-43ca-b324-bb5d5b1d03e0
-# ╟─fcdbad94-6b78-11eb-1f33-4b35fee6b1b9
-# ╟─2b9592ca-7688-11eb-34c2-3d4f2e4f3159
-# ╠═4b3e320e-6b79-11eb-2336-d57c4c0e784c
-# ╠═f6e061ce-6b7c-11eb-351d-8f890bc5318c
-# ╠═b8290da5-dd07-408d-a8c2-a9fd863f8172
-# ╠═ceeeee84-92e4-484a-ba82-656c1e66895f
-# ╠═4638a13c-2f23-4199-8370-4852ed708017
-# ╠═1f50fc09-3e17-4586-97f2-f566b67a1a2d
-# ╠═0f2e51ad-a0df-441f-9ac1-6caacc955734
-# ╠═a0208167-05b7-4876-b848-86f6c24b485a
-# ╟─ad46fe02-928c-4dd4-85cc-ee52fde6658d
-# ╟─0812b99e-8d80-48fc-a254-7dc960f8cbeb
-# ╠═3935f4fb-ef21-408f-a0bb-9f271827bacd
-# ╟─df5509d8-6b77-11eb-1f61-6d9fe9729e46
-# ╠═14f6fe13-f2d9-46b3-9341-8837f952e5d0
-# ╠═09ba58f9-b345-4fa7-8926-ce6d043098b9
-# ╟─03b47940-6f73-11eb-32d8-818a673be255
-# ╟─0f2f65f0-6f73-11eb-282f-3ff2adc50614
-# ╟─455a7190-6a52-44a7-bbf8-634858198166
-# ╠═155047e2-70c6-49af-b836-80e59fcdea26
-# ╠═a2784f1c-a6c1-457f-aa4a-556e5c6eb663
-# ╠═20d39712-78c6-401a-86cf-819c987535f4
-# ╟─09cabee2-6b78-11eb-29c8-8f616a79d0e5
-# ╠═449a52cc-6b7c-11eb-035a-355b0c334582
-# ╟─43a79cd2-e2c9-43e1-99f9-b5c9c3206335
-# ╠═c4c9f65f-88a0-4682-9097-4ba97fde8e69
-# ╟─5350a65e-6b7c-11eb-3725-d59f6c3cf1a7
-# ╠═07f0bd96-05d6-40a0-b639-825700d76ad8
-# ╠═a2924101-d354-468a-b505-d00761381260
-# ╠═241513b2-adf0-4952-b5f5-ceb102b94e04
-# ╠═19d2ed76-a3b7-4b40-8e2f-3f7c71da6744
-# ╠═7eec46cd-c671-4038-b0a1-0dfef8290d9e
-# ╠═45b113b7-9d9e-4ae0-9db3-f35aced47f9d
-# ╟─034e3d13-e67c-4077-96da-177694dbadd0
-# ╠═6fd26ade-41fe-4556-88bf-0fc4aefd43a2
-# ╠═4d17e266-6db1-46cb-8f02-eedddf8d34b6
-# ╠═15253560-6b78-11eb-12f6-91d27770a192
-# ╠═b1baa0d2-6b7c-11eb-39ec-f393691c37d9
+# ╟─49914c8d-b321-4042-8b8e-acd74bab1021
+# ╟─8b0be852-af27-4347-8981-04c4cb7cfd3e
+# ╟─c2af58e4-3e90-4013-814e-84224aa8575a
+# ╟─75f75a2d-462f-4f69-87c0-830e1d9f88f3
+# ╟─e1fe4d08-d51f-11ec-0b38-31a08767dfd6
+# ╠═9176246a-e134-430d-b112-09047fb1556c
+# ╠═7afded13-d11d-43bc-8dc7-b790d00bd22f
+# ╠═ed0a3c26-ba03-4925-a634-f280a58e8cc2
+# ╠═5f389e7c-e890-4b93-ad13-cebba3e0c2c6
+# ╠═2c81c88d-9b0a-44f7-a61b-2682ee3b980e
+# ╠═1f488ec2-0f6b-4a7c-8891-944b86189608
+# ╠═657815e7-e8b9-477f-8a9d-349b822c5c94
+# ╟─58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
+# ╟─19a2bc1f-41c4-4548-b2fe-e72280b9a842
+# ╠═448fd3c7-3092-40a2-a037-4303222c6424
+# ╟─d404371b-9382-4aca-b7d1-5a4fed0d9849
+# ╟─ad4bbbcd-8856-4533-9b1e-103f36707ebc
+# ╟─dc1680b3-7754-4923-ad93-895a26f676b6
+# ╟─5a18c115-254d-4eeb-993f-42f2772f91f0
+# ╟─6af88c45-7e54-4b32-b943-48064b2b4736
+# ╟─f437f295-4ccf-4d57-b358-51df02e1deae
+# ╟─7266f832-71a0-40bb-92cc-462fd95e546b
+# ╠═a468386a-d300-4665-92b1-5ef7636fdfc0
+# ╠═71df2ab5-b4fa-4ea7-b345-87e7372d3eb9
+# ╠═bbbdb059-4bb9-4964-87b1-57f1c411546e
+# ╠═80d7b8f4-8346-439c-a4c4-f7b7c21c80d7
+# ╟─d59caf31-60d5-411d-abbc-26e2e3131860
+# ╟─895c1fb6-bd6f-4b00-9121-898fc08fb000
+# ╠═fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
+# ╠═ab6a85f4-22f6-4cb6-9e2e-b3b08848f801
+# ╟─fb8dc44d-32a2-4e47-a1d3-a79f48870388
+# ╠═d8f5fa4d-e2e2-4985-bb60-5f7ba2efc268
+# ╠═b2dc724c-bacf-4876-9485-cb0a3977e36a
+# ╠═515d0102-69e3-41a5-9126-b36af0d96468
+# ╠═6ce85450-6b32-4b2b-af25-f8f00d15c004
+# ╠═20cdd9c4-419a-49d1-8701-ba335be8777a
+# ╟─192288e6-30ae-481f-8927-c8794e790ef5
+# ╠═18040182-9592-4fdc-a206-a167d152d475
+# ╠═baea9480-de9e-4619-ae91-0b55b366dfb1
+# ╠═2389faea-94ea-4308-9ce2-f2248c337db6
+# ╟─ac432f89-c103-4268-ae68-d8c668b6cddc
+# ╠═2b083233-a57c-455d-bafd-f54b42d52f6e
+# ╠═65cad8a4-3bc2-4558-a65b-5c50d3d9c99c
+# ╠═d9bcf2cc-a9df-459d-a4d4-06a580263e5a
+# ╠═34938368-a7cd-4eaf-b55a-cfa3365ccd49
+# ╠═f7e7964a-ce7b-41bd-94bc-47af01b8e291
+# ╠═5127223c-7fdf-4585-80fb-f7255b5aff7e
+# ╠═336c19d5-4245-48be-b28e-f7c33fafedca
+# ╠═4c02b6a0-31cf-4212-a70f-d0070772b0dd
+# ╠═6e28e04d-fa36-486f-b0fe-c1beff6e8ca3
+# ╠═9a01c6c8-49df-4a42-8385-5a2bc93ad604
+# ╟─cb582f5c-51ff-48b5-9dbc-fd3f679b3f63
+# ╠═734c2fa3-2f12-4452-b9c0-858f0c85279e
+# ╠═3d1b9683-1e2c-4281-85e5-c100623700c7
+# ╠═fbc167ac-c200-4294-b651-ed1b92ba40da
+# ╠═07315b3f-e958-4358-ba29-7feeed2ec640
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
