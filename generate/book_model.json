@@ -119,5 +119,16 @@
 
             }
         ]
+    },
+    {
+        "title": "Tutorials",
+        "contents": [
+            {
+                "name": "Tutorial 1",
+                "notebook_path": "notebooks/mobility_aiyagari.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
     }
 ]
