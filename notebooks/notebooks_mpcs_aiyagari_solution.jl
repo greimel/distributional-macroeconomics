@@ -4,18 +4,14 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ e2fd4ac1-ad11-4d48-bcf0-d38d32384b0c
+# ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 md"""
-`mpcs_aiyagari.jl` | **Version 1.0** | *last updated: May 10 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`mpcs_aiyagari_solution.jl` | **Version 1.0** | *last updated: May 10 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
 md"""
 # MPCs in the Aiyagari model
-
-**Deadline**: May 17, 23:59
-
-Solutions to the exercises will be discussed in the first tutorial which will take place on May 18, 9:30-11:00 in room 1.01 (TI Amsterdam).
 
 ## Households' problem
 
@@ -43,19 +39,17 @@ $c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w + dx_t$
 md"""
 ## Exercise 1: Motivation (1 point)
 
-👉 Why do economists and policy makers care about the average MPC in the population and about MPC heterogeneity? Give at least 2 reasons. (max. $(limit1) words)
+👉 Why do economists and policy makers care about the average MPC in the population and about MPC heterogeneity? Give at least 2 reasons.
 """
 
 # ╔═╡ f983a093-d397-43fe-8951-4ad1e795df3c
-answer1 = md"""
-Your answer goes here ...
-"""
+md"""
+**Answer**
 
-# ╔═╡ 097d4912-4cc9-427f-8cba-724dcea67186
-begin
-	limit1 = 100
-	show_words_limit(answer1, limit1)
-end
+- Direct transfers to individuals during recessions (such as the Economic Impact Payments in the US) are only an effective stimulus policy if the MPC of these individuals is high.
+- MPCs are important for the effects of wide set of economic policies on consumption and output, e.g. tax reforms, government spending, and monetary policy. MPC heterogeneity matters if these policies affect some households more than others.
+- Different consumption-savings models make very different predictions about the average MPC and MPC heterogeneity. Therefore, empirical evidence can help to distinguish between competing theories.
+"""
 
 # ╔═╡ bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
 md"""
@@ -69,7 +63,7 @@ hh = Household(β = 0.96, u = log)
 r = 0.03
 
 # ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
-prices = (q = 1/(1+r), w = 1.0, Δr = 0.)
+prices = (q = 1/(1+r), w = 1.0)
 
 # ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
 z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
@@ -87,28 +81,32 @@ md"""
 As a first step, let's consider a more simple model without income risk and without the ad-hoc borrowing constraint $k_t\ge 0$. 
 
 👉 Derive an analytical formula for the MPC and plug in the model parameters given above. 
+
+👉 What can you say about the average MPC and MPC heterogeneity in this model?
 """
 
-# ╔═╡ c49e8c46-f825-4b39-8b04-993219ff9d10
+# ╔═╡ 50118426-20c9-43b9-9d13-4e524853f0c9
 md"""
-Your derivation goes here (please write LaTeX equations using the $ symbol)
-"""
+**Answer** 
 
-# ╔═╡ b425a78c-f56c-4626-bd54-9c3f52d50313
-md"""
-👉 What can you say about the average MPC and MPC heterogeneity in this model? (max. $(limit2_b) words)
-"""
+Intertemporal optimization:
 
-# ╔═╡ c9b9315a-4109-4004-9d4b-d8c1aa2e1521
-answer2_b = md"""
-Your answer goes here ...
-"""
+$$\frac{1}{c_t} = \beta(1+r)\frac{1}{c_{t+1}} \implies c_{t+k} = \beta^k (1+r)^k c_t$$
 
-# ╔═╡ af210613-5626-4327-b3bb-97b0a3ba3496
-begin
-	limit2_b = 50
-	show_words_limit(answer2_b, limit2_b)
-end
+Intertemporal budget constraint:
+
+$$\underbrace{(1+r)k_{t-1} + w\sum_{k=0}^{\infty}\frac{y_{t+k}}{(1+r)^k}}_{=W_t} = \sum_{k=0}^{\infty} \frac{c_{t+k}}{(1+r)^k}$$
+
+Combining both equations:
+
+$$W_t = c_t \sum_{k=0}^\infty \beta^k = \frac{1}{1-\beta} c_t \implies c_t = (1-\beta) W_t$$
+
+$$MPC = \frac{dc_t}{dx_t} = \frac{dc_t}{dW_t} = 1-\beta$$
+
+For the value of $\beta$ given in the exercise, the model without income risk implies a very low MPC of $(round((1-hh.β),digits=4)) for all households - regardless of wealth or income.
+
+Note that this result does not require income $w y_t$ to be constant over time or over individuals! The only necessary assumption is that there is no income risk.
+"""
 
 # ╔═╡ 843f658c-0e26-4eed-88dc-3946e97e5f6f
 md"""
@@ -214,11 +212,30 @@ md"""
 
 👉 Use the smoothed consumption policy to compute the MPC at each point of the state space. Save the MPC values in an additional column of the results data frame.
 
-Hint: It is most convenient to consider a transitory income shock of the size $dx = (1+r) \Delta a$ where $\Delta a$ is the distance between two adjacent grid points.
+Hint: It is most convenient to consider a transitory income shock of the size $dx = (1+r) \Delta k$ where $\Delta k$ is the distance between two adjacent grid points.
+"""
+
+# ╔═╡ 19376876-cb3c-4f33-bb08-3c3aa2939d48
+md"""
+**Answer**
 """
 
 # ╔═╡ 0bf278e7-25f8-4830-8162-67e6d1113b3b
-# Your code goes here
+begin
+	results2.mpc = zeros(length(ss.states))
+	results2_z = groupby(results2, :z);
+	for rz in results2_z
+		dc = diff(rz.c_sm)
+		dx = (1 + r) * diff(rz.k)
+		rz.mpc[1:end-1] = dc ./ dx
+	end
+	results_mpc = DataFrame(results2_z)
+end
+
+# ╔═╡ 14e2d2c1-d518-479b-9d17-78a3b3adee00
+md"""
+(The algorithm cannot compute the MPC at the right-most grid point and sets it to zero.)
+"""
 
 # ╔═╡ af81921e-d454-4341-979d-752f5e4540b7
 md"""
@@ -227,8 +244,24 @@ md"""
 👉 What is the average MPC in the Aiyagari model for the given parameters?
 """
 
-# ╔═╡ 19121a39-f18e-409b-b787-154ce2b309a1
-# Your code goes here
+# ╔═╡ ddee439d-df42-44b5-ba9f-0904f6d45eb3
+md"""
+**Answer**
+
+The average MPC in the Aiygari model is $(round(avg_mpc,digits=3)*100)% for the given parameters. The median is $(round(median_mpc,digits=3)*100)%.
+"""
+
+# ╔═╡ c25c5022-fc81-4f77-a061-e3cc8fa5ebb6
+using Statistics: mean, median
+
+# ╔═╡ 15c1f410-5ebe-4871-a69a-a6fe1b53e4df
+using StatsBase: weights
+
+# ╔═╡ ecd8353b-672b-4349-be2b-ba1413f996f2
+avg_mpc = mean(results_mpc.mpc, weights(results_mpc.π))
+
+# ╔═╡ 36a86f5b-0574-43a6-9da4-9f774d55bf06
+median_mpc = median(results_mpc.mpc, weights(results_mpc.π))
 
 # ╔═╡ 300018cf-fdb0-4508-9bb1-347f77076f0c
 md"""
@@ -236,21 +269,46 @@ md"""
 
 👉 Explore MPC heterogeneity in the Aiyagari model graphically. 
 
-👉 How much do MPCs vary in the population? Which households have particularly high MPCs? (max. $(limit3_c) words)
+👉 How much do MPCs vary in the population? Which households have particularly high MPCs?
 """
 
-# ╔═╡ 05f4fd0f-08d6-4c26-b906-94e266d96666
-# Your code goes here
+# ╔═╡ 01fd1ea1-ac40-4db4-a159-72abe83e265f
+md"""
+**Answer** 
 
-# ╔═╡ a61a65db-40a8-41d3-857a-4f3148949240
-answer3_c = md"""
-Your answer goes here ...
+The histogram shows that the majority of households has an MPC of about 0.1. A considerable fraction of households has much higher MPCs close to 1.
 """
 
-# ╔═╡ 6ef350d2-5ded-4127-9590-75c599265a8d
-begin
-	limit3_c = 50
-	show_words_limit(answer3_c, limit3_c)
+# ╔═╡ 2d6af097-9faf-4989-aad9-5ee9ac05fa39
+using Plots
+
+# ╔═╡ 18bbf2cb-034f-42e9-bbc7-5238f0a76258
+Plots.histogram(results_mpc.mpc, weights = results_mpc.π, bins=0:0.025:1.)
+
+# ╔═╡ 213e8d7c-05df-482e-9dad-bf485e0d987a
+md"""
+The figure below shows the MPC as a function of assets and the income state. All high-MPC households are in the low-income state and at or close to the borrowing constraint $k = 0$.
+
+(The wiggles in the MPC for high asset levels $k\ge 2$ indicate that the bandwidth that we used for smoothing out the jumps is too small in this area of the state space. However, this does not matter much for our analysis of MPC heterogeneity because there are barely any households with $k\ge 2$.)
+"""
+
+# ╔═╡ 10cecdaf-9cdc-4529-a598-40dec8508dde
+let
+	resolution = (800, 400)
+	fig = Figure(; resolution)
+	
+	ax1 = Axis(fig[1, 1], title="MPC (using smoothed consumption policy)")
+	ax2 = Axis(fig[1, 2], title="Stationary distribution")
+	
+	plt1 = data(results_mpc) * mapping(:k, :mpc, color = :z => nonnumeric) * 	visual(Lines)
+	plt2 = data(results_mpc) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
+	
+	ag = draw!(ax1, plt1)
+	draw!(ax2, plt2)
+	
+	legend!(fig[2, 1], ag, orientation=:horizontal, tellheight=true)
+
+	fig
 end
 
 # ╔═╡ 42969849-1c6f-4192-8cf9-76a8e2c33bcd
@@ -261,39 +319,39 @@ The empirical literature on MPCs typically finds average annual MPCs in the rang
 
 Models with income risk and a borrowing constraint like the one in Exercise 3 usually generate average annual MPCs lower than 30% if they are calibrated properly.
 
-👉 Why are average MPCs in the data higher than in Aiyagari-type models? Mention and explain at least 3 potential mechanisms that are not present in the model. (max. $(limit4) words)
+👉 Why are average MPCs in the data higher than in Aiyagari-type models? Mention and explain at least 3 potential mechanisms that are not present in the model.
 """
 
 # ╔═╡ 9cc038ec-e359-408f-a42e-68f5d8b7c314
-answer4 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ 160a20cd-1ef5-4169-94c1-774cff8e6c36
-begin
-	limit4 = 200
-	show_words_limit(answer4, limit4)
-end
-
-# ╔═╡ f816cdad-f318-43c2-b6d4-eca6c678fb36
 md"""
-## Before you submit ...
+**Answer**
 
-👉 Make sure you **do not** mention your name in the assignment. The assignments are graded anonymously.
-
-👉 Make sure that that **all group members proofread** your submission.
-
-👉 Make sure all the code is **well-documented**.
-
-👉 Make sure that you are **within the word limit**. Short and concise answers are appreciated. Answers longer than the word limit will lead to deductions.
-
-👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
+- Finite lifetimes can generate high MPCs among old households who do not have a strong bequest motive.
+- A lot of wealth is illiquid, i.e. it can only be accessed if a transaction cost is paid (housing) or not all all (pension wealth for young people). These illiquid assets typically pay higher returns than liquid assets. Therefore, many wealthy households might hold little liquid wealth and behave similarly to households who do not have any wealth at all. ([Kaplan and Violante, 2014](https://onlinelibrary.wiley.com/doi/abs/10.3982/ECTA10528))
+- In the model that we studied above, households end up in the low-asset high-MPC state solely due to bad luck. Preference heterogeneity might be an alternative mechanism since households that are impatient or have a high intertemporal elasticity of substition tend to have higher MPCs and less wealth than their peers. ([Gelman, 2021](https://www.sciencedirect.com/science/article/pii/S0304393220300350); [Aguiar et al., 2021](https://www.nber.org/papers/w26643))
+- Re-computing the optimal consumption path after a small transitory income shock is a difficult task. Households may decide to follow a more simple rule (e.g. spend small windfall gains completely) if the associated utility loss is small compared to the computational cost of smoothing consumption. ([Reis, 2005](https://www.sciencedirect.com/science/article/pii/S0304393206001401); [Kueng, 2018](https://academic.oup.com/qje/article/133/4/1693/5036538?login=true))
+- Hyperbolic discounting is another potential mechanism that can generate a high average MPC, possibly combined with illiquid assets: Since rational households are aware of their present bias, they use the illiquid asset as a commitment technology to guard against over-consumption arising from time-inconsistent preferences. ([Laibson, 1997](https://academic.oup.com/qje/article/112/2/443/1870925?login=true))
 """
 
 # ╔═╡ 2c93d5a7-40bd-4535-9985-420533c12666
 md"""
 # Appendix
+
+## Previous version of assignment
+
+In the original version of this assignment, the budget costraint was implemented in a slightly different way in the ```consumption``` function:
+
+$$c_t + \frac{1}{1+r} k_t = k_{t-1} + y_t \cdot w + dx_t$$
+
+In this notebook, I made sure that the budget constraint in the ```consumption``` function is consistent with the formulation of the households' problem above:
+
+$$c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w + dx_t$$
+
+If you obtained your results with code from the previous version of the assignment, there may be small differences with the numerical results, for example with the average MPC in exercise 3b.
+
 ## Functions from ```aiyagari.jl```
+
+The only difference to ```aiyagari.jl``` is that I made some changes to the ```consumption``` function.
 """
 
 # ╔═╡ 681c557a-3435-485d-a426-f56ed70f1f42
@@ -341,12 +399,9 @@ function setup_Q!(Q, states_indices, policies_indices, z_chain)
 end
 
 # ╔═╡ d60367db-cf92-4c0a-aea4-eddb6552e2c8
-function consumption((; z, k), (; k_next), (; q, w, Δr))
-	if k_next < 0 && Δr > 0
-		r = (1/q - 1) + (k_next < 0) * Δr
-		q = 1/(1+r)
-	end
-	c = w * z + k - q * k_next
+function consumption((; z, k), (; k_next), (; q, w))
+	r = (1/q - 1)
+	c = w * z + (1 + r) * k - k_next
 end
 
 # ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
@@ -409,45 +464,6 @@ function solve_details0(ddp, states, policies; solver = PFI)
 	df
 end
 
-# ╔═╡ 69f2c2bd-f2c7-4d27-b6de-c61f22ad03bc
-md"""
-## Word limit functions
-"""
-
-# ╔═╡ 4e72ba44-44f1-41cb-9d6f-86230e440736
-function wordcount(text)
-	stripped_text = strip(replace(string(text), r"\s" => " "))
-   	words = split(stripped_text, (' ', '-', '.', ',', ':', '_', '"', ';', '!', '\''))
-   	length(filter(!=(""), words))
-end
-
-# ╔═╡ f9df9b18-d70a-4c70-98e9-3ee0a375f554
-show_words(answer) = md"_approximately $(wordcount(answer)) words_"
-
-# ╔═╡ dde6b751-53ca-44fc-b9b6-4e2fb7d3eb35
-function show_words_limit(answer, limit)
-	count = wordcount(answer)
-	if count < 1.02 * limit
-		return show_words(answer)
-	else
-		return almost(md"You are at $count words. Please shorten your text a bit, to get **below $limit words**.")
-	end
-end
-
-# ╔═╡ c0cd1ba5-d21c-4511-a8b9-91057bae4f7f
-begin
-	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
-	hint(text, title="Hint")       = admonition("hint",    title, text)
-	warning(text, title="Warning") = admonition("warning", title, text)
-	danger(text, title="Danger")   = admonition("danger",  title, text)
-	correct(text, title="Correct") = admonition("correct", title, text)
-
-	almost(text) = warning(text, "Almost there!")
-	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
-	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
-	got_it(text=rand(yays)) = correct(text, "Got it!")
-end
-
 # ╔═╡ e099f86b-3b8e-4783-9c80-84733cf174df
 md"""
 ## Imported packages
@@ -486,8 +502,11 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 KernelEstimator = "857edff2-01a9-55ba-8bc9-13e46c0ddbb2"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 AlgebraOfGraphics = "~0.5.2"
@@ -496,8 +515,10 @@ Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 KernelEstimator = "~0.3.3"
+Plots = "~1.29.0"
 PlutoUI = "~0.7.38"
 QuantEcon = "~0.16.2"
+StatsBase = "~0.33.16"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -903,11 +924,29 @@ version = "1.0.10+0"
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
+[[deps.GLFW_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pkg", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll"]
+git-tree-sha1 = "51d2dfe8e590fbd74e7a842cf6d13d8a2f45dc01"
+uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
+version = "3.3.6+0"
+
 [[deps.GLM]]
 deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "StatsModels"]
 git-tree-sha1 = "92b8d38886445d6d06e5f13201e57d018c4ff880"
 uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
 version = "1.7.0"
+
+[[deps.GR]]
+deps = ["Base64", "DelimitedFiles", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Printf", "Random", "RelocatableFolders", "Serialization", "Sockets", "Test", "UUIDs"]
+git-tree-sha1 = "af237c08bda486b74318c8070adb96efa6952530"
+uuid = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
+version = "0.64.2"
+
+[[deps.GR_jll]]
+deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Pkg", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
+git-tree-sha1 = "cd6efcf9dc746b06709df14e462f0a3fe0786b1e"
+uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
+version = "0.64.2+0"
 
 [[deps.GeoInterface]]
 deps = ["RecipesBase"]
@@ -962,6 +1001,12 @@ git-tree-sha1 = "134af3b940d1ca25b19bc9740948157cee7ff8fa"
 uuid = "19dc6840-f33b-545b-b366-655c7e3ffd49"
 version = "1.5.0"
 
+[[deps.HTTP]]
+deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
+git-tree-sha1 = "0fa77022fe4b511826b39c894c90daf5fce3334a"
+uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+version = "0.9.17"
+
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
@@ -1012,6 +1057,11 @@ version = "1.0.0"
 git-tree-sha1 = "f5fc07d4e706b84f72d54eedcc1c13d92fb0871c"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
 version = "0.1.2"
+
+[[deps.IniFile]]
+git-tree-sha1 = "f550e6e32074c939295eb5ea6de31849ac2c9625"
+uuid = "83e8ac13-25f8-5344-8a64-a9f2b223428f"
+version = "0.5.1"
 
 [[deps.InlineStrings]]
 deps = ["Parsers"]
@@ -1096,6 +1146,12 @@ git-tree-sha1 = "3c837543ddb02250ef42f4738347454f95079d4e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
 
+[[deps.JpegTurbo_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "b53380851c6e6664204efb2e62cd24fa5c47e4ba"
+uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
+version = "2.1.2+0"
+
 [[deps.KernelDensity]]
 deps = ["Distributions", "DocStringExtensions", "FFTW", "Interpolations", "StatsBase"]
 git-tree-sha1 = "591e8dc09ad18386189610acafb970032c519707"
@@ -1114,6 +1170,12 @@ git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.1+0"
 
+[[deps.LERC_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "bf36f528eec6634efc60d7ec062008f171071434"
+uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
+version = "3.0.0+1"
+
 [[deps.LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "e5b909bcf985c5e2605737d2ce278ed791b89be6"
@@ -1124,6 +1186,12 @@ version = "2.10.1+0"
 git-tree-sha1 = "f2355693d6778a178ade15952b7ac47a4ff97996"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 version = "1.3.0"
+
+[[deps.Latexify]]
+deps = ["Formatting", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdown", "Printf", "Requires"]
+git-tree-sha1 = "46a39b9c58749eefb5f2dc1178cb8fab5332b1ab"
+uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+version = "0.15.15"
 
 [[deps.LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
@@ -1160,6 +1228,12 @@ git-tree-sha1 = "64613c82a59c120435c067c2b809fc61cf5166ae"
 uuid = "d4300ac3-e22c-5743-9152-c294e39db1e4"
 version = "1.8.7+0"
 
+[[deps.Libglvnd_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll", "Xorg_libXext_jll"]
+git-tree-sha1 = "7739f837d6447403596a75d19ed01fd08d6f56bf"
+uuid = "7e76a0d4-f3c7-5321-8279-8d96eeed0f29"
+version = "1.3.0+3"
+
 [[deps.Libgpg_error_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "c333716e46366857753e273ce6a69ee0945a6db9"
@@ -1177,6 +1251,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "9c30530bf0effd46e15e0fdcf2b8636e78cbbd73"
 uuid = "4b2f31a3-9ecc-558c-b454-b3730dcb73e9"
 version = "2.35.0+0"
+
+[[deps.Libtiff_jll]]
+deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "c9551dd26e31ab17b86cbd00c2ede019c08758eb"
+uuid = "89763e89-9b03-5906-acba-b20f662cd828"
+version = "4.3.0+1"
 
 [[deps.Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1271,9 +1351,20 @@ git-tree-sha1 = "69b565c0ca7bf9dae18498b52431f854147ecbf3"
 uuid = "0a4f8689-d25c-4efe-a92b-7142dfc1aa53"
 version = "0.1.2"
 
+[[deps.MbedTLS]]
+deps = ["Dates", "MbedTLS_jll", "Random", "Sockets"]
+git-tree-sha1 = "1c38e51c3d08ef2278062ebceade0e46cefc96fe"
+uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
+version = "1.0.3"
+
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
+
+[[deps.Measures]]
+git-tree-sha1 = "e498ddeee6f9fdb4551ce855a46f54dbd900245f"
+uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
+version = "0.3.1"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1463,11 +1554,23 @@ git-tree-sha1 = "a7a7e1a88853564e551e4eba8650f8c38df79b37"
 uuid = "eebad327-c553-4316-9ea0-9fa01ccd7688"
 version = "0.1.1"
 
+[[deps.PlotThemes]]
+deps = ["PlotUtils", "Statistics"]
+git-tree-sha1 = "8162b2f8547bc23876edd0c5181b27702ae58dce"
+uuid = "ccf2f8ad-2431-5c83-bf29-c5338b663b6a"
+version = "3.0.0"
+
 [[deps.PlotUtils]]
 deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Statistics"]
 git-tree-sha1 = "bb16469fd5224100e422f0b027d26c5a25de1200"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.2.0"
+
+[[deps.Plots]]
+deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
+git-tree-sha1 = "d457f881ea56bbfa18222642de51e0abf67b9027"
+uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+version = "1.29.0"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
@@ -1530,6 +1633,12 @@ git-tree-sha1 = "d7a7aef8f8f2d537104f170139553b14dfe39fe9"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.7.2"
 
+[[deps.Qt5Base_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
+git-tree-sha1 = "c6c0f690d0cc7caddb74cef7aa847b824a16b256"
+uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
+version = "5.15.3+1"
+
 [[deps.QuadGK]]
 deps = ["DataStructures", "LinearAlgebra"]
 git-tree-sha1 = "78aadffb3efd2155af139781b8a8df1ef279ea39"
@@ -1560,6 +1669,12 @@ version = "0.4.3"
 git-tree-sha1 = "6bf3f380ff52ce0832ddd3a2a7b9538ed1bcca7d"
 uuid = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 version = "1.2.1"
+
+[[deps.RecipesPipeline]]
+deps = ["Dates", "NaNMath", "PlotUtils", "RecipesBase"]
+git-tree-sha1 = "dc1e451e15d90347a7decc4221842a022b011714"
+uuid = "01d81517-befc-4cb6-b9ec-a95719d0359c"
+version = "0.5.2"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -1757,6 +1872,11 @@ git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.6"
 
+[[deps.URIs]]
+git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.3.0"
+
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
@@ -1774,6 +1894,23 @@ deps = ["REPL"]
 git-tree-sha1 = "53915e50200959667e78a92a418594b428dffddf"
 uuid = "1cfade01-22cf-5700-b092-accc4b62d6e1"
 version = "0.4.1"
+
+[[deps.Unzip]]
+git-tree-sha1 = "34db80951901073501137bdbc3d5a8e7bbd06670"
+uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
+version = "0.1.2"
+
+[[deps.Wayland_jll]]
+deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg", "XML2_jll"]
+git-tree-sha1 = "3e61f0b86f90dacb0bc0e73a0c5a83f6a8636e23"
+uuid = "a2964d1f-97da-50d4-b82a-358c7fce9d89"
+version = "1.19.0+0"
+
+[[deps.Wayland_protocols_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "4528479aa01ee1b3b4cd0e6faef0e04cf16466da"
+uuid = "2381bf8a-dfd0-557d-9999-79630e7b1b91"
+version = "1.25.0+0"
 
 [[deps.WoodburyMatrices]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1805,6 +1942,12 @@ git-tree-sha1 = "4e490d5c960c314f33885790ed410ff3a94ce67e"
 uuid = "0c0b7dd1-d40b-584c-a123-a41640f87eec"
 version = "1.0.9+4"
 
+[[deps.Xorg_libXcursor_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXfixes_jll", "Xorg_libXrender_jll"]
+git-tree-sha1 = "12e0eb3bc634fa2080c1c37fccf56f7c22989afd"
+uuid = "935fb764-8cf2-53bf-bb30-45bb1f8bf724"
+version = "1.2.0+4"
+
 [[deps.Xorg_libXdmcp_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "4fe47bd2247248125c428978740e18a681372dd4"
@@ -1816,6 +1959,30 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
 git-tree-sha1 = "b7c0aa8c376b31e4852b360222848637f481f8c3"
 uuid = "1082639a-0dae-5f34-9b06-72781eeb8cb3"
 version = "1.3.4+4"
+
+[[deps.Xorg_libXfixes_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
+git-tree-sha1 = "0e0dc7431e7a0587559f9294aeec269471c991a4"
+uuid = "d091e8ba-531a-589c-9de9-94069b037ed8"
+version = "5.0.3+4"
+
+[[deps.Xorg_libXi_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll", "Xorg_libXfixes_jll"]
+git-tree-sha1 = "89b52bc2160aadc84d707093930ef0bffa641246"
+uuid = "a51aa0fd-4e3c-5386-b890-e753decda492"
+version = "1.7.10+4"
+
+[[deps.Xorg_libXinerama_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll"]
+git-tree-sha1 = "26be8b1c342929259317d8b9f7b53bf2bb73b123"
+uuid = "d1454406-59df-5ea1-beac-c340f2130bc3"
+version = "1.1.4+4"
+
+[[deps.Xorg_libXrandr_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll"]
+git-tree-sha1 = "34cea83cb726fb58f325887bf0612c6b3fb17631"
+uuid = "ec84b674-ba8e-5d96-8ba1-2a689ba10484"
+version = "1.5.2+4"
 
 [[deps.Xorg_libXrender_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
@@ -1835,6 +2002,54 @@ git-tree-sha1 = "daf17f441228e7a3833846cd048892861cff16d6"
 uuid = "c7cfdc94-dc32-55de-ac96-5a1b8d977c5b"
 version = "1.13.0+3"
 
+[[deps.Xorg_libxkbfile_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
+git-tree-sha1 = "926af861744212db0eb001d9e40b5d16292080b2"
+uuid = "cc61e674-0454-545c-8b26-ed2c68acab7a"
+version = "1.1.0+4"
+
+[[deps.Xorg_xcb_util_image_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_xcb_util_jll"]
+git-tree-sha1 = "0fab0a40349ba1cba2c1da699243396ff8e94b97"
+uuid = "12413925-8142-5f55-bb0e-6d7ca50bb09b"
+version = "0.4.0+1"
+
+[[deps.Xorg_xcb_util_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libxcb_jll"]
+git-tree-sha1 = "e7fd7b2881fa2eaa72717420894d3938177862d1"
+uuid = "2def613f-5ad1-5310-b15b-b15d46f528f5"
+version = "0.4.0+1"
+
+[[deps.Xorg_xcb_util_keysyms_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_xcb_util_jll"]
+git-tree-sha1 = "d1151e2c45a544f32441a567d1690e701ec89b00"
+uuid = "975044d2-76e6-5fbe-bf08-97ce7c6574c7"
+version = "0.4.0+1"
+
+[[deps.Xorg_xcb_util_renderutil_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_xcb_util_jll"]
+git-tree-sha1 = "dfd7a8f38d4613b6a575253b3174dd991ca6183e"
+uuid = "0d47668e-0667-5a69-a72c-f761630bfb7e"
+version = "0.3.9+1"
+
+[[deps.Xorg_xcb_util_wm_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_xcb_util_jll"]
+git-tree-sha1 = "e78d10aab01a4a154142c5006ed44fd9e8e31b67"
+uuid = "c22f9ab0-d5fe-5066-847c-f4bb1cd4e361"
+version = "0.4.1+1"
+
+[[deps.Xorg_xkbcomp_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libxkbfile_jll"]
+git-tree-sha1 = "4bcbf660f6c2e714f87e960a171b119d06ee163b"
+uuid = "35661453-b289-5fab-8a00-3d9160c6a3a4"
+version = "1.4.2+4"
+
+[[deps.Xorg_xkeyboard_config_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_xkbcomp_jll"]
+git-tree-sha1 = "5c8424f8a67c3f2209646d4425f3d415fee5931d"
+uuid = "33bec58e-1273-512f-9401-5d533626f822"
+version = "2.27.0+4"
+
 [[deps.Xorg_xtrans_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "79c31e7844f6ecf779705fbc12146eb190b7d845"
@@ -1844,6 +2059,12 @@ version = "1.4.0+3"
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
+
+[[deps.Zstd_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "e45044cd873ded54b6a5bac0eb5c971392cf1927"
+uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
+version = "1.5.2+0"
 
 [[deps.isoband_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1898,15 +2119,20 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "ee567a171cce03570d77ad3a43e90218e38937a9"
 uuid = "dfaa095f-4041-5dcd-9319-2fabd8486b76"
 version = "3.5.0+0"
+
+[[deps.xkbcommon_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Wayland_jll", "Wayland_protocols_jll", "Xorg_libxcb_jll", "Xorg_xkeyboard_config_jll"]
+git-tree-sha1 = "ece2350174195bb31de1a63bea3a41ae1aa593b6"
+uuid = "d8fb68d0-12a3-5cfd-a85a-d49703b185fd"
+version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
 # ╟─f5450eab-0f9f-4b7f-9b80-992d3c553ba9
-# ╟─e2fd4ac1-ad11-4d48-bcf0-d38d32384b0c
+# ╟─93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 # ╟─4aa065ca-d54c-419a-a31a-7063fbb98a33
 # ╟─ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
-# ╠═f983a093-d397-43fe-8951-4ad1e795df3c
-# ╟─097d4912-4cc9-427f-8cba-724dcea67186
+# ╟─f983a093-d397-43fe-8951-4ad1e795df3c
 # ╟─bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
 # ╠═9be81a15-7117-4911-8254-4848df50c059
 # ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
@@ -1915,10 +2141,7 @@ version = "3.5.0+0"
 # ╠═62184229-03f6-40d8-981e-4d39a74c75d7
 # ╠═50029ced-5ab0-4458-ad5a-31b8277b428a
 # ╟─146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
-# ╠═c49e8c46-f825-4b39-8b04-993219ff9d10
-# ╟─b425a78c-f56c-4626-bd54-9c3f52d50313
-# ╠═c9b9315a-4109-4004-9d4b-d8c1aa2e1521
-# ╟─af210613-5626-4327-b3bb-97b0a3ba3496
+# ╟─50118426-20c9-43b9-9d13-4e524853f0c9
 # ╟─843f658c-0e26-4eed-88dc-3946e97e5f6f
 # ╠═0a12f73a-5286-4146-8a20-00ed4aaaec72
 # ╠═0d593683-3b35-4740-a510-517a4dd3e83b
@@ -1931,17 +2154,23 @@ version = "3.5.0+0"
 # ╠═1b3d36ab-adae-40be-a14c-7ea6d9381a31
 # ╟─e7f75845-242f-45c6-9b33-11fd2bacb478
 # ╟─2402fba6-80e1-4fe4-8873-7a62ce6f9427
+# ╟─19376876-cb3c-4f33-bb08-3c3aa2939d48
 # ╠═0bf278e7-25f8-4830-8162-67e6d1113b3b
+# ╟─14e2d2c1-d518-479b-9d17-78a3b3adee00
 # ╟─af81921e-d454-4341-979d-752f5e4540b7
-# ╠═19121a39-f18e-409b-b787-154ce2b309a1
+# ╟─ddee439d-df42-44b5-ba9f-0904f6d45eb3
+# ╠═c25c5022-fc81-4f77-a061-e3cc8fa5ebb6
+# ╠═15c1f410-5ebe-4871-a69a-a6fe1b53e4df
+# ╠═ecd8353b-672b-4349-be2b-ba1413f996f2
+# ╠═36a86f5b-0574-43a6-9da4-9f774d55bf06
 # ╟─300018cf-fdb0-4508-9bb1-347f77076f0c
-# ╠═05f4fd0f-08d6-4c26-b906-94e266d96666
-# ╠═a61a65db-40a8-41d3-857a-4f3148949240
-# ╟─6ef350d2-5ded-4127-9590-75c599265a8d
+# ╟─01fd1ea1-ac40-4db4-a159-72abe83e265f
+# ╠═2d6af097-9faf-4989-aad9-5ee9ac05fa39
+# ╠═18bbf2cb-034f-42e9-bbc7-5238f0a76258
+# ╟─213e8d7c-05df-482e-9dad-bf485e0d987a
+# ╠═10cecdaf-9cdc-4529-a598-40dec8508dde
 # ╟─42969849-1c6f-4192-8cf9-76a8e2c33bcd
-# ╠═9cc038ec-e359-408f-a42e-68f5d8b7c314
-# ╟─160a20cd-1ef5-4169-94c1-774cff8e6c36
-# ╟─f816cdad-f318-43c2-b6d4-eca6c678fb36
+# ╟─9cc038ec-e359-408f-a42e-68f5d8b7c314
 # ╟─2c93d5a7-40bd-4535-9985-420533c12666
 # ╠═681c557a-3435-485d-a426-f56ed70f1f42
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
@@ -1954,11 +2183,6 @@ version = "3.5.0+0"
 # ╠═df975df6-90db-408b-a908-52fb4b0637f6
 # ╠═4fa93659-4a83-4874-8595-ca59c16faa0e
 # ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-# ╟─69f2c2bd-f2c7-4d27-b6de-c61f22ad03bc
-# ╠═4e72ba44-44f1-41cb-9d6f-86230e440736
-# ╠═f9df9b18-d70a-4c70-98e9-3ee0a375f554
-# ╠═dde6b751-53ca-44fc-b9b6-4e2fb7d3eb35
-# ╠═c0cd1ba5-d21c-4511-a8b9-91057bae4f7f
 # ╟─e099f86b-3b8e-4783-9c80-84733cf174df
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3

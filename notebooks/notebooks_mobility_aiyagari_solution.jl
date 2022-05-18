@@ -4,300 +4,104 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ e2fd4ac1-ad11-4d48-bcf0-d38d32384b0c
+# ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 md"""
-`mpcs_aiyagari.jl` | **Version 1.0** | *last updated: May 10 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`mobility_aiyagari_solution.jl` | **Version 1.0** | *last updated: May 18 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
-# ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
+# ╔═╡ 7951ec83-e304-42d6-a1ba-b57e4ab17226
 md"""
-# MPCs in the Aiyagari model
+# An extension of the Aiyagari model
 
-**Deadline**: May 17, 23:59
+## Introduction
 
-Solutions to the exercises will be discussed in the first tutorial which will take place on May 18, 9:30-11:00 in room 1.01 (TI Amsterdam).
+In this notebook, you are supposed to get more familiar with the ```QuantEcon``` framework by implementing and solving a model yourself.
 
-## Households' problem
+For this purpose, we consider an extension to the Aiyagari model in which individuals incur a cost when they accept a job offer with a higher salary - for example because they have to move house.
 
-In this exercise, we have a closer look at the marginal propensity to consume out in a Aiyagari/ Huggett economy. The households' problem is:
+For simplicity consider two types of jobs with salaries $z_1$ and $z_2$ where $z_1 < z_2$. 
 
-```math
-\begin{align}
-&\max_{c_t, k_t} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t) \Bigr) \\
-&\begin{aligned}
-	\text{subject to } 
-		&u(c) = \log(c) \\
-		&k_t \ge 0 \\
-		&c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w\\
-		&y_t \sim \text{some Markov Chain} \\
-		&y_0, k_{-1} \text{ given}
-\end{aligned}
-\end{align}
-```
-To be more precise, we are considering the MPC out of an unexpected transitory shock $dx_t$ that enters the budget constraint like this:
+Agents with $z_2$ get fired and end up with $z_1$ with probability $p_1$.
 
-$c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w + dx_t$
+Agents with $z_1$ receive job offers with the higher salary $z_2$ with probability $p_2$. In order to accept an offer, an agent has to pay a moving cost $\xi$.
+
+In a model without a borrowing constraint, agents will always accept the job with the higher salary if the moving cost $\xi$ is lower than the additional income from accepting the job:
+
+$$\xi < \sum_{t=0}^\infty \left(\frac{1-p_1}{1+r}\right)^t (z_2 - z_1) = \frac{1}{1-\frac{1-p_1}{1+r}}(z_2 - z_1)$$
+
+In particular, if there is no borrowing constraint, the decision whether to accept or not does not depend on wealth. 
+
+But is this also the case in an Aiyagari-type model that features this decision? And how does the stationary distribution look like in the presence of such a moving cost?
 """
 
-# ╔═╡ ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
+# ╔═╡ b01e3545-747b-4905-8cdd-fd4cf2cecb39
 md"""
-## Exercise 1: Motivation (1 point)
+## Model
 
-👉 Why do economists and policy makers care about the average MPC in the population and about MPC heterogeneity? Give at least 2 reasons. (max. $(limit1) words)
+We model the first year of the job with the high salary as a separate state because the moving cost only needs to be paid in the first period and hence we need to keep track of this information.
+
+Moreover, we exploit that paying a cost $\xi$ in the first period of the new job is mathematically equivalent to having a lower salary $z_3 = z_2 - \xi$ in the first period. 
+
+$$V(k, \tilde{z}) = \max_{k', z} u(c) + E[V(k', \tilde{z}'|z)] \text{ subject to}$$
+$$(1+r)\cdot k + z = c + k'$$
+
+where $\tilde{z}$ is the drawn job state and $z$ is the chosen job state. Usually, $z = \tilde{z}$ holds, i.e. the agent accepts the drawn state. The only exception is a job offer $\tilde{z} = z_3$ in which agents also have the option to reject and continue with the low salary $z = z_1$. All other $(\tilde{z}, z)$ combinations are forbidden.
+
+The transition matrix for future draws $\tilde{z}'$ given the current state $z$ is:
+
+|   |$\tilde{z}'=z_1$   |$\tilde{z}'=z_2$   |$\tilde{z}'=z_3$   |
+|---|---|---|---|
+|$z=z_1$   |$1-p_2$   |0   |$p_2$   |
+|$z=z_2$   |$p_1$   |$1-p_1$   |0   |
+|$z=z_3$   |$p_1$   |$1-p_1$   |0   |
+
+(This model formulation is not the most efficient one in terms of computation time because we always include all values of $z$ as possible actions even though many $(\tilde{z}, z)$ combinations are not allowed. However, in this course we do not care much about computational efficiency and it is more important that the model is easy to implement.)
 """
 
-# ╔═╡ f983a093-d397-43fe-8951-4ad1e795df3c
-answer1 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ 097d4912-4cc9-427f-8cba-724dcea67186
-begin
-	limit1 = 100
-	show_words_limit(answer1, limit1)
-end
-
-# ╔═╡ bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
+# ╔═╡ bcc9b308-b2a6-4b85-9f62-d7fd4fde7a0b
 md"""
 ## Model parameters
 """
 
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
+# ╔═╡ 2c93d5a7-40bd-4535-9985-420533c12666
 hh = Household(β = 0.96, u = log)
 
-# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.03
+# ╔═╡ 74cad61c-46dc-4067-8a94-a7b573bd74ea
+prices = (q = 1/(1+0.03), w = 1.0, Δr = 0.)
 
-# ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
-prices = (q = 1/(1+r), w = 1.0, Δr = 0.)
+# ╔═╡ 2fa25d19-3a86-4a7e-8482-5aca1ec0e2b7
+p_1 = 0.2; p_2 = 0.3; z_1 = 1.0; z_2 = 1.2; z_3 = 0.5;
 
-# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
-z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
+# ╔═╡ 2a3c9900-0587-4a39-8037-c33aa4425a06
+z_chain = MarkovChain([1-p_2 0. p_2; p_1 1-p_1 0.; p_1 1-p_1 0.], [z_1, z_2, z_3])
 
-# ╔═╡ 62184229-03f6-40d8-981e-4d39a74c75d7
-k_vals = range(0., 5., length = 500)
+# ╔═╡ 2ddf2a31-588f-4aeb-9e3e-b926f595c182
+ss = statespace(; k_vals = range(0., 2., length = 250), z_chain);
 
-# ╔═╡ 50029ced-5ab0-4458-ad5a-31b8277b428a
-ss = statespace(; k_vals, z_chain);
-
-# ╔═╡ 146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
-md"""
-## Exercise 2: No income risk (2 points)
-
-As a first step, let's consider a more simple model without income risk and without the ad-hoc borrowing constraint $k_t\ge 0$. 
-
-👉 Derive an analytical formula for the MPC and plug in the model parameters given above. 
-"""
-
-# ╔═╡ c49e8c46-f825-4b39-8b04-993219ff9d10
-md"""
-Your derivation goes here (please write LaTeX equations using the $ symbol)
-"""
-
-# ╔═╡ b425a78c-f56c-4626-bd54-9c3f52d50313
-md"""
-👉 What can you say about the average MPC and MPC heterogeneity in this model? (max. $(limit2_b) words)
-"""
-
-# ╔═╡ c9b9315a-4109-4004-9d4b-d8c1aa2e1521
-answer2_b = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ af210613-5626-4327-b3bb-97b0a3ba3496
-begin
-	limit2_b = 50
-	show_words_limit(answer2_b, limit2_b)
-end
-
-# ╔═╡ 843f658c-0e26-4eed-88dc-3946e97e5f6f
-md"""
-## Solution to the households' problem
-
-The case with income risk and the ad-hoc borrowing constraint does not have an analytical solution. Therefore, we solve the households' problem using functions from the ```aiygari.jl``` notebook:
-"""
-
-# ╔═╡ 0a12f73a-5286-4146-8a20-00ed4aaaec72
+# ╔═╡ a1063380-b693-41e9-bf14-56555ce145ec
 ddp = setup_DDP(hh, ss, prices);
 
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-results = solve_details(ddp, ss.states, ss.policies; solver = PFI);
+# ╔═╡ a67e60ae-4685-468f-8d91-3418aa71ead9
+ξ = z_2 - z_3
 
-# ╔═╡ 0e944330-4a7b-4d75-a55e-57d7acce58b2
+# ╔═╡ d708d59d-ea41-4d82-bfb5-82ab5331c73a
+ξ_thresh = 1/(1 - prices.q*(1-p_1))*(z_2 - z_1)
+
+# ╔═╡ c743ea70-b881-423b-80ea-f08c624b66fa
+
 md"""
-The consumption policy that we obtain from the ```QuantEcon``` solver has small jumps. This is not an actual property of the policy function but happens because we have only solved a discretized version of the households' problem. (You can check for yourself that the size of the jumps decreases as you increase the number of grid points.)
+For the given parameters, the threshold value of the moving cost ξ for the case without a borrowing constraint is $(round(ξ_thresh, digits=3)). 
+
+This means that for the value of ```ξ``` = $(round(ξ, digits=3)) that is given above, an agent that does not face a borrowing constraint would always accept the job offer.
 """
 
-# ╔═╡ c769b390-028e-490b-b50d-07c49a550a0a
-let
-	resolution = (800, 400)
-	fig = Figure(; resolution)
-	
-	ax1 = Axis(fig[1, 1], title="Consumption policy function")
-	ax2 = Axis(fig[1, 2], title="Stationary distribution")
-	
-	plt1 = data(results) * mapping(:k, :consumption, color = :z => nonnumeric) * visual(Lines)
-	plt2 = data(results) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
-	
-	ag = draw!(ax1, plt1)
-	draw!(ax2, plt2)
-	
-	legend!(fig[2, 1], ag, orientation=:horizontal, tellheight=true)
-
-	fig
-end
-
-# ╔═╡ 675d57e2-9c6f-4619-aa25-664614bc4bbc
+# ╔═╡ 3db5edd6-ab80-4f76-82f1-0e06b3805b2e
 md"""
-Since we will use the slope of the policy function to analyze the MPC, the jumps are very inconvenient. Therefore, you will work with the smoothed version of the consumption policy which is saved in the ```c_sm``` column of the ```results2``` data frame.
-"""
-
-# ╔═╡ e336fb5d-89ed-4e6c-9480-02d3d5df9216
-using KernelEstimator: npr, localconstant, locallinear, gaussiankernel
-
-# ╔═╡ 788b8a0a-d206-41db-b012-f04205b67445
-begin
-	n_k = length(k_vals)
-	results.c_sm = zeros(length(ss.states))
-	results_z = groupby(results, :z)
-	rz1 = results_z[1]
-	rz1.c_sm = npr(
-		rz1.k, 
-		rz1.consumption, 
-		xeval=rz1.k, 
-		reg=locallinear, 
-		kernel=gaussiankernel, 
-		h=0.08
-	)
-	rz2 = results_z[2]
-	rz2.c_sm[1:n_k÷5] = npr(
-		rz2.k, 
-		rz2.consumption, 
-		xeval=rz2.k[1:n_k÷5], 
-		reg=locallinear, 
-		kernel=gaussiankernel, 
-		h=0.04 
-		# use smaller bandwidth where curvature of consumption function is high
-	)
-	rz2.c_sm[n_k÷5+1:end] = npr(
-		rz2.k, 
-		rz2.consumption, 
-		xeval=rz2.k[n_k÷5+1:end], 
-		reg=locallinear, 
-		kernel=gaussiankernel, 
-		h=0.08
-	)
-	results2 = DataFrame(results_z)
-end;
-
-# ╔═╡ 1734bd7b-8af1-46f3-a4af-1616c0190775
-md"""
-The figure below shows both the raw consumption function and its smoothed version:
-"""
-
-# ╔═╡ 1b3d36ab-adae-40be-a14c-7ea6d9381a31
-	@chain results2 begin
-		data(_) * 
-			mapping(:k, [:consumption, :c_sm], color = :z => nonnumeric) * 
-			visual(Lines)
-		draw
-	end
-
-# ╔═╡ e7f75845-242f-45c6-9b33-11fd2bacb478
-md"""
-## Exercise 3: MPCs in the Aiyagari model
-"""
-
-# ╔═╡ 2402fba6-80e1-4fe4-8873-7a62ce6f9427
-md"""
-### 3a: Compute MPCs (1.5 points)
-
-👉 Use the smoothed consumption policy to compute the MPC at each point of the state space. Save the MPC values in an additional column of the results data frame.
-
-Hint: It is most convenient to consider a transitory income shock of the size $dx = (1+r) \Delta a$ where $\Delta a$ is the distance between two adjacent grid points.
-"""
-
-# ╔═╡ 0bf278e7-25f8-4830-8162-67e6d1113b3b
-# Your code goes here
-
-# ╔═╡ af81921e-d454-4341-979d-752f5e4540b7
-md"""
-### 3b: Average MPC (1 point)
-
-👉 What is the average MPC in the Aiyagari model for the given parameters?
-"""
-
-# ╔═╡ 19121a39-f18e-409b-b787-154ce2b309a1
-# Your code goes here
-
-# ╔═╡ 300018cf-fdb0-4508-9bb1-347f77076f0c
-md"""
-### 3c: MPC heterogeneity (3 points)
-
-👉 Explore MPC heterogeneity in the Aiyagari model graphically. 
-
-👉 How much do MPCs vary in the population? Which households have particularly high MPCs? (max. $(limit3_c) words)
-"""
-
-# ╔═╡ 05f4fd0f-08d6-4c26-b906-94e266d96666
-# Your code goes here
-
-# ╔═╡ a61a65db-40a8-41d3-857a-4f3148949240
-answer3_c = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ 6ef350d2-5ded-4127-9590-75c599265a8d
-begin
-	limit3_c = 50
-	show_words_limit(answer3_c, limit3_c)
-end
-
-# ╔═╡ 42969849-1c6f-4192-8cf9-76a8e2c33bcd
-md"""
-## Exercise 4: Outlook (1.5 points)
-
-The empirical literature on MPCs typically finds average annual MPCs in the range 30 - 50% ([Jappelli and Pistaferri, 2014](https://www.aeaweb.org/articles?id=10.1257/mac.6.4.107); [Fagereng et al., 2021](https://www.aeaweb.org/articles?id=10.1257/mac.20190211); [Commault, 2022](https://www.aeaweb.org/articles?id=10.1257/mac.20190296)). Most empirical papers also find that households with little liquid wealth tend to have higher MPCs than households with a lot of liquid wealth.
-
-Models with income risk and a borrowing constraint like the one in Exercise 3 usually generate average annual MPCs lower than 30% if they are calibrated properly.
-
-👉 Why are average MPCs in the data higher than in Aiyagari-type models? Mention and explain at least 3 potential mechanisms that are not present in the model. (max. $(limit4) words)
-"""
-
-# ╔═╡ 9cc038ec-e359-408f-a42e-68f5d8b7c314
-answer4 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ 160a20cd-1ef5-4169-94c1-774cff8e6c36
-begin
-	limit4 = 200
-	show_words_limit(answer4, limit4)
-end
-
-# ╔═╡ f816cdad-f318-43c2-b6d4-eca6c678fb36
-md"""
-## Before you submit ...
-
-👉 Make sure you **do not** mention your name in the assignment. The assignments are graded anonymously.
-
-👉 Make sure that that **all group members proofread** your submission.
-
-👉 Make sure all the code is **well-documented**.
-
-👉 Make sure that you are **within the word limit**. Short and concise answers are appreciated. Answers longer than the word limit will lead to deductions.
-
-👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
-"""
-
-# ╔═╡ 2c93d5a7-40bd-4535-9985-420533c12666
-md"""
-# Appendix
-## Functions from ```aiyagari.jl```
+## Solving the model
 """
 
 # ╔═╡ 681c557a-3435-485d-a426-f56ed70f1f42
-function Household(; σ = 1.0, β = 0.96,	
+function Household(; σ = 1.0, β = 0.96,
                       u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
 	(; β, u)
 end
@@ -307,17 +111,26 @@ function statespace(;
 			k_vals = range(1e-10, 20.0, length = 200),
 			z_chain
 		)
+
+	n_k = length(k_vals)
+	n_z = length(z_chain.state_values)
+	
 	states = 
-		[(; k, z) for k ∈ k_vals, z ∈ z_chain.state_values] |> vec
+		[(; k, z_draw) for k ∈ k_vals, z_draw ∈ z_chain.state_values] |> vec
 	states_indices = 
-		[(; k_i, z_i) for k_i ∈ 1:length(k_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
+		[(; k_i, z_draw_i) for k_i ∈ 1:n_k, z_draw_i ∈ 1:n_z] |> vec
     policies = 
-	    [(; k_next) for k_next ∈ k_vals] |> vec
+	    [(; k_next, z) for k_next ∈ k_vals, z ∈ z_chain.state_values] |> vec
 	policies_indices = 
-	    [(; k_next_i) for k_next_i ∈ 1:length(k_vals)] |> vec
+	    [(; k_next_i, z_i) for k_next_i ∈ 1:n_k, z_i ∈ 1:n_z] |> vec
 
 	(; states, states_indices, policies, policies_indices, z_chain)
 end
+
+# ╔═╡ a700d776-de0d-4b9f-b027-010077352b1b
+md"""
+In the $n \times m \times n$ array of transition probabilities $Q$, the array element $Q_{ijk}$ states the probability to be in state $s'=s_k$ in the next period given the current state $s=s_i$ and the action $a=a_j$.
+"""
 
 # ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
 function setup_Q(states_indices, policies_indices, z_chain)
@@ -328,11 +141,12 @@ end
 
 # ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
 function setup_Q!(Q, states_indices, policies_indices, z_chain)
-    for (i_next_state, next) ∈ enumerate(states_indices)
-        for (i_policy, (; k_next_i)) ∈ enumerate(policies_indices)
-            for (i_state, (; z_i)) ∈ enumerate(states_indices)
-                if next.k_i == k_next_i
-                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
+    for (i_next_state, next_state) ∈ enumerate(states_indices)
+        for (i_pol, pol) ∈ enumerate(policies_indices)
+            for (i_state, state) ∈ enumerate(states_indices)
+                if next_state.k_i == pol.k_next_i
+                    Q[i_state, i_pol, i_next_state] = 
+						z_chain.p[pol.z_i, next_state.z_draw_i]
                 end
             end
         end
@@ -340,8 +154,39 @@ function setup_Q!(Q, states_indices, policies_indices, z_chain)
     return Q
 end
 
+# ╔═╡ d76524a9-da87-4a0a-b350-3097f31cf2d0
+md"""
+In the $n \times m$ reward array $R$, the element $R_{ij}$ states the reward that is associated with the state $s=s_i$ and the action $a=a_j$.
+
+You can forbid the agent to take certain actions by setting the associated reward to a very large negative number.
+"""
+
+# ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
+function setup_R(states, states_indices, policies, policies_indices, prices, u)
+	R = zeros(length(states), length(policies))
+	setup_R!(R, states, states_indices, policies, policies_indices, prices, u)
+end
+
+# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
+function setup_R!(R, states, states_indices, policies, policies_indices, prices, u)
+    for (p_i, policy) ∈ enumerate(policies)
+		z_i_pol = policies_indices[p_i].z_i
+        for (s_i, state) ∈ enumerate(states)
+			z_i_state = states_indices[s_i].z_draw_i
+			if z_i_state == z_i_pol
+				R[s_i, p_i] = reward(state, policy, prices, u)
+			elseif (z_i_state == 3) && (z_i_pol == 1)
+				R[s_i, p_i] = reward(state, policy, prices, u)
+			else
+				R[s_i, p_i]  = - 100_000
+			end
+        end
+    end
+    return R
+end
+
 # ╔═╡ d60367db-cf92-4c0a-aea4-eddb6552e2c8
-function consumption((; z, k), (; k_next), (; q, w, Δr))
+function consumption((; k), (; k_next, z), (; q, w, Δr))
 	if k_next < 0 && Δr > 0
 		r = (1/q - 1) + (k_next < 0) * Δr
 		q = 1/(1+r)
@@ -359,94 +204,79 @@ function reward(state, policy, prices, u)
 	end
 end
 
-# ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
-function setup_R(states, policies, prices, u)
-	R = zeros(length(states), length(policies))
-	setup_R!(R, states, policies, prices, u)
-end
-
-# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, states, policies, prices, u)
-    for (k_i, policy) ∈ enumerate(policies)
-        for (s_i, state) ∈ enumerate(states)
-            R[s_i, k_i] = reward(state, policy, prices, u)
-        end
-    end
-    return R
-end
-
 # ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
 function setup_DDP(household, statespace, prices)
 	(; β, u) = household
 	(; states, policies, states_indices, policies_indices) = statespace
     
-	R = setup_R(states, policies, prices, u)
+	R = setup_R(states, states_indices, policies, policies_indices, prices, u)
 	Q = setup_Q(states_indices, policies_indices, statespace.z_chain)
 
 	DiscreteDP(R, Q, β)
 end
 
-# ╔═╡ 4fa93659-4a83-4874-8595-ca59c16faa0e
-function solve_details(ddp, states, policies; solver = PFI)
-	df = solve_details0(ddp, states, policies; solver)
+# ╔═╡ e90cdbed-a880-4087-ba6b-b2190f648159
+md"""
+## Analyzing the results
+"""
 
-	@chain df begin
+# ╔═╡ a8f435a6-0f85-4c7f-851c-ff95f5ebc630
+begin
+	results = QuantEcon.solve(ddp, PFI)
+	
+	df = [DataFrame(ss.states) DataFrame(ss.policies[results.sigma])]
+	df.state = ss.states
+	df.policy = ss.policies[results.sigma]
+	df.π = stationary_distributions(results.mc)[:, 1][1]
+
+	df = @chain df begin
 		@transform(:consumption = consumption(:state, :policy, prices))
 		@transform(:saving = :k_next - :k)
 		select!(Not([:state, :policy]))
 	end
-end	
-
-# ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-function solve_details0(ddp, states, policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
-
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-	df.state = states
-	df.policy = policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
-
-	df
+	
 end
 
-# ╔═╡ 69f2c2bd-f2c7-4d27-b6de-c61f22ad03bc
-md"""
-## Word limit functions
-"""
-
-# ╔═╡ 4e72ba44-44f1-41cb-9d6f-86230e440736
-function wordcount(text)
-	stripped_text = strip(replace(string(text), r"\s" => " "))
-   	words = split(stripped_text, (' ', '-', '.', ',', ':', '_', '"', ';', '!', '\''))
-   	length(filter(!=(""), words))
-end
-
-# ╔═╡ f9df9b18-d70a-4c70-98e9-3ee0a375f554
-show_words(answer) = md"_approximately $(wordcount(answer)) words_"
-
-# ╔═╡ dde6b751-53ca-44fc-b9b6-4e2fb7d3eb35
-function show_words_limit(answer, limit)
-	count = wordcount(answer)
-	if count < 1.02 * limit
-		return show_words(answer)
-	else
-		return almost(md"You are at $count words. Please shorten your text a bit, to get **below $limit words**.")
-	end
-end
-
-# ╔═╡ c0cd1ba5-d21c-4511-a8b9-91057bae4f7f
+# ╔═╡ 15c68ced-3db8-4042-bde1-7c7e52ecbde2
 begin
-	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
-	hint(text, title="Hint")       = admonition("hint",    title, text)
-	warning(text, title="Warning") = admonition("warning", title, text)
-	danger(text, title="Danger")   = admonition("danger",  title, text)
-	correct(text, title="Correct") = admonition("correct", title, text)
+	resolution = (800, 900)
+	fig = Figure(; resolution)
+	
+	ax1 = Axis(fig[1, 1], title="Consumption policy")
+	ax2 = Axis(fig[1, 2], title="Savings policy")
+	ax3 = Axis(fig[2, 1], title="Job state policy")
+	ax4 = Axis(fig[2, 2], title="Stationary distribution for z_draw = z_1")
+	ax5 = Axis(fig[3, 1], title="Stationary distribution for z_draw = z_2")
+	ax6 = Axis(fig[3, 2], title="Stationary distribution for z_draw = z_3")
+	
+	plt1 = data(df) * mapping(:k, :consumption, color = :z_draw => nonnumeric) * visual(Lines)
+	plt2 = data(df) * mapping(:k, :saving, color = :z_draw => nonnumeric) * visual(Lines)
+	plt3 = data(df) * mapping(:k, :z, color = :z_draw => nonnumeric) * visual(Lines)
 
-	almost(text) = warning(text, "Almost there!")
-	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
-	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
-	got_it(text=rand(yays)) = correct(text, "Got it!")
+	ag = draw!(ax1, plt1)
+	draw!(ax2, plt2)
+	draw!(ax3, plt3)
+	
+	df_groups = groupby(df, :z_draw)
+	
+	for (ax, df_group) in zip([ax4, ax5, ax6], df_groups)
+		plt = data(df_group) * mapping(:k, :π) * visual(Lines)
+		draw!(ax, plt)
+	end
+	
+	legend!(fig[4, 1], ag, orientation=:horizontal, tellheight=true)
+
+	fig
 end
+
+# ╔═╡ 16601177-9dc0-4a12-b603-b182c8e41996
+md"""
+Let's only focus on ```z_draw``` = $(z_3) , i.e. the case in which the agent receives a good job offer with salary $(z_2) and has to decide whether to accept and pay the moving cost ξ = $(z_2-z_3) or to stay in the bad job with salary $(z_1).
+
+We find that the job acceptance decision depends on wealth: If the agent has very few assets, she rejects the offer because does not want to sacrifice consumption in order to pay the moving cost.
+
+Moreover, we see that agents in the bad job save so that they are able to accept good offers without enduring one period of low consumption.
+"""
 
 # ╔═╡ e099f86b-3b8e-4783-9c80-84733cf174df
 md"""
@@ -485,7 +315,6 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-KernelEstimator = "857edff2-01a9-55ba-8bc9-13e46c0ddbb2"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 
@@ -495,7 +324,6 @@ CairoMakie = "~0.6.4"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
-KernelEstimator = "~0.3.3"
 PlutoUI = "~0.7.38"
 QuantEcon = "~0.16.2"
 """
@@ -674,11 +502,6 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
-
-[[deps.Combinatorics]]
-git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
-uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
-version = "1.0.2"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -956,12 +779,6 @@ git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
 uuid = "42e2da0e-8278-4e71-bc24-59509adca0fe"
 version = "1.0.2"
 
-[[deps.HCubature]]
-deps = ["Combinatorics", "DataStructures", "LinearAlgebra", "QuadGK", "StaticArrays"]
-git-tree-sha1 = "134af3b940d1ca25b19bc9740948157cee7ff8fa"
-uuid = "19dc6840-f33b-545b-b366-655c7e3ffd49"
-version = "1.5.0"
-
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
@@ -1101,12 +918,6 @@ deps = ["Distributions", "DocStringExtensions", "FFTW", "Interpolations", "Stats
 git-tree-sha1 = "591e8dc09ad18386189610acafb970032c519707"
 uuid = "5ab0869b-81aa-558d-bb23-cbf5423bbe9b"
 version = "0.6.3"
-
-[[deps.KernelEstimator]]
-deps = ["Distributions", "HCubature", "Optim", "Random", "SpecialFunctions", "StatsBase", "Test"]
-git-tree-sha1 = "2a6a492264a3d2d6955d0efaf8042fa36aebf77e"
-uuid = "857edff2-01a9-55ba-8bc9-13e46c0ddbb2"
-version = "0.3.3"
 
 [[deps.LAME_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1902,63 +1713,35 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─f5450eab-0f9f-4b7f-9b80-992d3c553ba9
-# ╟─e2fd4ac1-ad11-4d48-bcf0-d38d32384b0c
-# ╟─4aa065ca-d54c-419a-a31a-7063fbb98a33
-# ╟─ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
-# ╠═f983a093-d397-43fe-8951-4ad1e795df3c
-# ╟─097d4912-4cc9-427f-8cba-724dcea67186
-# ╟─bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
-# ╠═9be81a15-7117-4911-8254-4848df50c059
-# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
-# ╠═59d7c6f7-4704-4866-9280-22d37b328499
-# ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
-# ╠═62184229-03f6-40d8-981e-4d39a74c75d7
-# ╠═50029ced-5ab0-4458-ad5a-31b8277b428a
-# ╟─146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
-# ╠═c49e8c46-f825-4b39-8b04-993219ff9d10
-# ╟─b425a78c-f56c-4626-bd54-9c3f52d50313
-# ╠═c9b9315a-4109-4004-9d4b-d8c1aa2e1521
-# ╟─af210613-5626-4327-b3bb-97b0a3ba3496
-# ╟─843f658c-0e26-4eed-88dc-3946e97e5f6f
-# ╠═0a12f73a-5286-4146-8a20-00ed4aaaec72
-# ╠═0d593683-3b35-4740-a510-517a4dd3e83b
-# ╟─0e944330-4a7b-4d75-a55e-57d7acce58b2
-# ╠═c769b390-028e-490b-b50d-07c49a550a0a
-# ╟─675d57e2-9c6f-4619-aa25-664614bc4bbc
-# ╠═e336fb5d-89ed-4e6c-9480-02d3d5df9216
-# ╠═788b8a0a-d206-41db-b012-f04205b67445
-# ╟─1734bd7b-8af1-46f3-a4af-1616c0190775
-# ╠═1b3d36ab-adae-40be-a14c-7ea6d9381a31
-# ╟─e7f75845-242f-45c6-9b33-11fd2bacb478
-# ╟─2402fba6-80e1-4fe4-8873-7a62ce6f9427
-# ╠═0bf278e7-25f8-4830-8162-67e6d1113b3b
-# ╟─af81921e-d454-4341-979d-752f5e4540b7
-# ╠═19121a39-f18e-409b-b787-154ce2b309a1
-# ╟─300018cf-fdb0-4508-9bb1-347f77076f0c
-# ╠═05f4fd0f-08d6-4c26-b906-94e266d96666
-# ╠═a61a65db-40a8-41d3-857a-4f3148949240
-# ╟─6ef350d2-5ded-4127-9590-75c599265a8d
-# ╟─42969849-1c6f-4192-8cf9-76a8e2c33bcd
-# ╠═9cc038ec-e359-408f-a42e-68f5d8b7c314
-# ╟─160a20cd-1ef5-4169-94c1-774cff8e6c36
-# ╟─f816cdad-f318-43c2-b6d4-eca6c678fb36
-# ╟─2c93d5a7-40bd-4535-9985-420533c12666
+# ╟─93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
+# ╟─7951ec83-e304-42d6-a1ba-b57e4ab17226
+# ╟─b01e3545-747b-4905-8cdd-fd4cf2cecb39
+# ╟─bcc9b308-b2a6-4b85-9f62-d7fd4fde7a0b
+# ╠═2c93d5a7-40bd-4535-9985-420533c12666
+# ╠═74cad61c-46dc-4067-8a94-a7b573bd74ea
+# ╠═2fa25d19-3a86-4a7e-8482-5aca1ec0e2b7
+# ╠═2a3c9900-0587-4a39-8037-c33aa4425a06
+# ╠═2ddf2a31-588f-4aeb-9e3e-b926f595c182
+# ╠═a1063380-b693-41e9-bf14-56555ce145ec
+# ╠═a67e60ae-4685-468f-8d91-3418aa71ead9
+# ╠═d708d59d-ea41-4d82-bfb5-82ab5331c73a
+# ╟─c743ea70-b881-423b-80ea-f08c624b66fa
+# ╟─3db5edd6-ab80-4f76-82f1-0e06b3805b2e
 # ╠═681c557a-3435-485d-a426-f56ed70f1f42
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
+# ╟─a700d776-de0d-4b9f-b027-010077352b1b
 # ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
-# ╠═d60367db-cf92-4c0a-aea4-eddb6552e2c8
-# ╠═e3930baf-0560-4994-a637-7cb1923ce33c
+# ╟─d76524a9-da87-4a0a-b350-3097f31cf2d0
 # ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
 # ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
+# ╠═d60367db-cf92-4c0a-aea4-eddb6552e2c8
+# ╠═e3930baf-0560-4994-a637-7cb1923ce33c
 # ╠═df975df6-90db-408b-a908-52fb4b0637f6
-# ╠═4fa93659-4a83-4874-8595-ca59c16faa0e
-# ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-# ╟─69f2c2bd-f2c7-4d27-b6de-c61f22ad03bc
-# ╠═4e72ba44-44f1-41cb-9d6f-86230e440736
-# ╠═f9df9b18-d70a-4c70-98e9-3ee0a375f554
-# ╠═dde6b751-53ca-44fc-b9b6-4e2fb7d3eb35
-# ╠═c0cd1ba5-d21c-4511-a8b9-91057bae4f7f
+# ╟─e90cdbed-a880-4087-ba6b-b2190f648159
+# ╠═a8f435a6-0f85-4c7f-851c-ff95f5ebc630
+# ╟─15c68ced-3db8-4042-bde1-7c7e52ecbde2
+# ╟─16601177-9dc0-4a12-b603-b182c8e41996
 # ╟─e099f86b-3b8e-4783-9c80-84733cf174df
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
