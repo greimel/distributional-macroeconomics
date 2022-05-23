@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.3
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -100,15 +100,15 @@ md"""
 md"""
 * ``\bar L`` $(@bind L̄1 Slider(0.1:0.3:5.0, default=1.0, show_value=true)) available land
 * ``\phi`` $(@bind ϕ1 Slider(0.1:0.1:0.9, default=0.2, show_value=true)) fraction with high human capital
-* ``\tilde h`` $(@bind h̃1 Slider(0.1:0.1:5, default=5, show_value=true)) inelastic supply of high-skilled labor
-* ``\tilde l`` $(@bind l̃1 Slider(0.1:0.1:5, default=5, show_value=true))= 0.7 # inelastic supply of low-skilled labor
-* ``\alpha`` $(@bind α1 Slider(0.1:0.1:0.9, default=0.3, show_value=true)) capital share
-* ``\rho`` $(@bind ρ1 Slider(0.01:0.01:0.2, default=0.01, show_value=true)) ≈ elasticity of substitution between physical and intangible capital
-* ``\eta`` $(@bind η1 Slider(0.01:0.01:0.95, default=0.7, show_value=true)) relative productivity of intangible capital & high-skilled labor
+* ``\tilde h`` $(@bind h̃1 Slider(1:1:100, default=50, show_value=true)) inelastic supply of high-skilled labor
+* ``\tilde l`` $(@bind l̃1 Slider(0.5:0.5:50, default=12.5, show_value=true)) inelastic supply of low-skilled labor
+* ``\alpha`` $(@bind α1 Slider(0.1:0.01:0.9, default=0.33, show_value=true)) capital share
+* ``\rho`` $(@bind ρ1 Slider(0.1:0.1:2.0, default=1.7, show_value=true)) elasticity of substitution between physical and intangible capital
+* ``\eta`` $(@bind η1 Slider(0.01:0.01:0.95, default=0.45, show_value=true)) relative productivity of intangible capital & high-skilled labor
 * ``\varepsilon`` $(@bind ε1 Slider(0.01:0.01:0.2, default=0.05, show_value=true)) share of experts
-* ``\omega`` $(@bind ω1 Slider(0.1:0.1:0.9, default=0.3, show_value=true)) fraction of intangibles that can be "stolen" by innovators
-* ``\psi`` $(@bind ψ1 Slider(0.1:0.1:0.9, default=0.1, show_value=true)) cost for producing intangibles
-* ``A`` $(@bind A1 Slider(1:0.1:5, default=5, show_value=true)) productivity
+* ``\omega`` $(@bind ω1 Slider(0.1:0.05:0.9, default=0.55, show_value=true)) fraction of intangibles that can be "stolen" by innovators
+* ``\psi`` $(@bind ψ1 Slider(0.1:0.1:2.0, default=1., show_value=true)) cost for producing intangibles
+* ``A`` $(@bind A1 Slider(0.1:0.1:5, default=1, show_value=true)) productivity
 """
 
 # ╔═╡ de5d783c-6cd7-4064-8f15-2b60eda61bdb
@@ -1183,9 +1183,9 @@ version = "0.5.1"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
-git-tree-sha1 = "e6c5f47ba51b734a4e264d7183b6750aec459fa0"
+git-tree-sha1 = "aee446d0b3d5764e35289762f6a18e8ea041a592"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.11.1"
+version = "1.11.0"
 
 [[deps.Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1466,9 +1466,9 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[deps.SpecialFunctions]]
 deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "bc40f042cfcc56230f781d92db71f0e21496dffd"
+git-tree-sha1 = "5ba658aeecaaf96923dce0da9e703bd1fe7666f9"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.1.5"
+version = "2.1.4"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]
@@ -1716,7 +1716,7 @@ version = "3.5.0+0"
 # ╠═d312e74b-b9ad-479c-a3c1-7c7d418d183c
 # ╟─ba1ba3f4-1b4a-4158-8b50-2398502e8998
 # ╠═1f00565d-3946-4cb5-95f9-672571b8c170
-# ╟─b5c3c809-4797-434e-a66b-2cefe1f1be36
+# ╠═b5c3c809-4797-434e-a66b-2cefe1f1be36
 # ╠═ff0ddbc0-9d7b-492e-add5-031bc07d0d4a
 # ╠═7fcbbab9-6205-4d6e-962a-e24b02737fef
 # ╠═de5d783c-6cd7-4064-8f15-2b60eda61bdb
@@ -1729,7 +1729,7 @@ version = "3.5.0+0"
 # ╟─999cc543-b87a-4b3c-b39f-4e0c31ff2898
 # ╠═859d0b3a-bcce-4f61-a1f1-d7b45444209a
 # ╟─f9c98149-71e0-423d-b7b0-caeea8168479
-# ╠═fb4bc15c-9ad7-4546-9a8a-06c76a1c4e27
+# ╟─fb4bc15c-9ad7-4546-9a8a-06c76a1c4e27
 # ╟─7a6651d9-7c37-4773-ba02-8db0513e75e7
 # ╠═51526b20-2654-4dec-908f-17b54f738575
 # ╠═0d668039-d550-4f80-a816-1ff788f2ab32
