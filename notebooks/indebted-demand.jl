@@ -49,6 +49,14 @@ md"""
 # ╔═╡ 95275f17-8cbd-4718-b806-64bcbe0919eb
 md"""
 # Indebted demand
+
+This lecture is based on the paper _**Indebted Demand** (Mian, Straub & Sufi; 2021; QJE)_.
+
+## Motivation
+
+We have seen rising inequality, rising debt and falling interest rates. (See the notebook `macroeconomic-trends.jl`.) This paper make the point that wealth inequality is driving down interest rates and driving up household debt **if preferences are non-homothetic**.
+
+
 """
 
 # ╔═╡ e930b3a7-089e-4d1d-9f3e-bcecd98f7d52
@@ -123,7 +131,7 @@ md"""
 """
 
 # ╔═╡ eb43c48b-5edf-4932-87e0-a998def3bcc3
-params_default = IndebtedDemandModel()
+params_default = IndebtedDemandModel(; ωˢ = 0.02)
 
 # ╔═╡ 8df4ff95-3979-440e-8e1b-f1d4039883d2
 let
@@ -134,12 +142,9 @@ let
 	(; r_eq, d_eq)
 end
 
-# ╔═╡ f6207838-55e5-4297-925c-021a6e4b07da
-
-
 # ╔═╡ 52e253da-f335-44ff-a713-c353b97c129e
 md"""
-* ``\omega^S``: $(@bind ωˢ Slider(0.01:0.005:0.07, show_value = true, default = 0.06)) (wealth share of the rich)
+* ``\omega^S``: $(@bind ωˢ Slider(0.01:0.005:0.07, show_value = true, default = 0.02)) (wealth share of the rich)
 * ``\ell`` $(@bind ℓ Slider(0.01:0.005:0.1, show_value = true, default = 0.0248)) (pledgability of real assets)
 """
 
@@ -156,7 +161,7 @@ let
 	df = vcat(df_default, df_slider, source = :parameters => [:default, :slider]) 
 	
 	@chain df begin
-		data(_) * mapping(:d => L"debt level $d$", :r => L"interest rate $r$", color = :variable => "", linestyle = :parameters => " ") * visual(Lines)
+		data(_) * mapping(:d => "debt level", :r => "interest rate", color = :variable => "", linestyle = :parameters => " ") * visual(Lines)
 		draw(legend = (position = :top, titleposition = :left ))
 	end
 end
@@ -1847,7 +1852,6 @@ version = "3.5.0+0"
 # ╟─bf9c4b53-4396-474d-b87f-d6076aba458e
 # ╠═eb43c48b-5edf-4932-87e0-a998def3bcc3
 # ╠═7080e3d1-fc4a-4023-89ca-7bfc1c16d02c
-# ╠═f6207838-55e5-4297-925c-021a6e4b07da
 # ╟─52e253da-f335-44ff-a713-c353b97c129e
 # ╠═c0db2ba2-690d-49b7-954e-79eb7c01ed4d
 # ╠═21ef2d18-5685-4fb5-9e33-568d1da4ad6c
