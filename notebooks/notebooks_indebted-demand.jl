@@ -14,80 +14,87 @@ macro bind(def, element)
     end
 end
 
-# ╔═╡ 9b0d87c3-4a6d-4293-a43f-54597f4e12aa
-danger(
-	md"**This notebook is not ready for public consumption.** Use at your own risk",	
-	"Under construction!"
-)
-
 # ╔═╡ 76b7a87d-af6a-4dcc-a887-198abcc1e857
 md"""
-`indebted-demand.jl` | **Version 0.1** | *last updated: May 4 2022*
-"""
-
-# ╔═╡ eafe7d0c-5da3-4d3b-affc-0afc828fb528
-md"""
-### To dos
-* provide some skeleton code for Huggett
-* try if the assignment works
-* compute MPCs
-* visualize comparative statics exercises
+`indebted-demand.jl` | **Version 1.0** | *last updated: May 24 2022*
 """
 
 # ╔═╡ 95275f17-8cbd-4718-b806-64bcbe0919eb
 md"""
 # Indebted demand
+
+This lecture is based on the paper _**Indebted Demand** (Mian, Straub & Sufi; 2021; QJE)_.
+
+## Motivation
+
+We have seen rising inequality, rising debt and falling interest rates. (See the notebook `macroeconomic-trends.jl`.) This paper make the point that wealth inequality is driving down interest rates and driving up household debt **if preferences are non-homothetic**.
+
+
+"""
+
+# ╔═╡ e930b3a7-089e-4d1d-9f3e-bcecd98f7d52
+md"""
+## Parameters and functional forms
 """
 
 # ╔═╡ c52304d6-625c-42b5-bb1d-6050862a8a18
 Base.@kwdef struct IndebtedDemandModel
-	μˢ = 0.01 # top 1 % of households
-	ωˢ = 0.06
-	ρ = 0.1
-	ℓ = 0.0248
-	δ = 0.025
-	η̃ = 0.87
-	ã = 0.38 # MPC out of wealth of 0.01
+	μˢ = 0.01  # population share of the rich
+	ωˢ = 0.06  # wealth share of the rich
+	ρ = 0.1    # discount factor
+	ℓ = 0.0248 # pledgeability of real assets
+	δ = 0.025  # mortality rate
+	η̃ = 0.87   # bequest parameter 1 (calibrated)
+	ã = 0.38   # bequest parameter 2 (calibrated –match MPC out of wealth of 0.01)
 	λ = 1
 end
-
-# ╔═╡ 7080e3d1-fc4a-4023-89ca-7bfc1c16d02c
-params = IndebtedDemandModel()
-
-# ╔═╡ 9d6ed760-152f-488c-bfb4-b7906ec41190
-d(r, (; ℓ)) = ℓ/r
 
 # ╔═╡ 40210978-c737-4d30-b070-340528839343
 η(a, (; η̃, ã)) = 1 + 1/(η̃ * ã) * log(1 + exp(η̃ * (a - ã)))
 
+# ╔═╡ 7bee6baf-6305-4b95-8248-de197eb1fe99
+md"""
+## Computing the equilibrium
+"""
+
+# ╔═╡ 9d6ed760-152f-488c-bfb4-b7906ec41190
+d(r, (; ℓ)) = ℓ/r
+
 # ╔═╡ 3cc7b523-6500-4ee9-b1fe-5eb91cfa37f3
-@chain begin
-	DataFrame(d = range(-4, 4, 200))
-	@transform(:r_supply = savings_supply(:d, params))
-	@transform(:r_demand = params.ℓ / :d)
-	stack(r"^r_", value_name = :r)
-	@transform(:variable = replace(:variable, "r_" => ""))
-	@subset(0.0 < :r < 0.13)
-	data(_) * mapping(:d => L"debt level $d$", :r => L"interest rate $r$", color = :variable => "") * visual(Lines)
-	draw(legend = (position = :top, titleposition = :left ))
+function equilibrium_df(params)
+	@chain begin
+		DataFrame(d = range(-4, 4, 200))
+		@transform(:r_supply = savings_supply(:d, params))
+		@transform(:r_demand = params.ℓ / :d)
+		stack(r"^r_", value_name = :r)
+		@transform(:variable = replace(:variable, "r_" => ""))
+		@subset(!ismissing(:r))
+		@subset(0.0 < :r < 0.13)
+	end
 end
 
-# ╔═╡ adbbefa2-178f-4be5-af4d-6a7b26cb1871
-function f_equilibrium(r, params)
-	f(r, d(r, params), params)
+# ╔═╡ d5fb733f-8543-4b92-a03b-2ad7c34287ac
+function savings_supply(d, params, bracket=(0.0001, 1.0))
+	try
+		return find_zero(r -> f(r, d, params), bracket)
+	catch
+		@info f(d, bracket[1], params), f(d, bracket[2], params)
+		return missing
+	end
 end
 
 # ╔═╡ 8df4ff95-3979-440e-8e1b-f1d4039883d2
 let
+	params = params_default
 	r_eq = find_zero(r -> f_equilibrium(r, params), (0.001, 0.1))
 	d_eq = d(r_eq, params)
 
 	(; r_eq, d_eq)
 end
 
-# ╔═╡ d5fb733f-8543-4b92-a03b-2ad7c34287ac
-function savings_supply(d, params)
-	find_zero(r -> f(r, d, params), (0.0001, 0.5))
+# ╔═╡ adbbefa2-178f-4be5-af4d-6a7b26cb1871
+function f_equilibrium(r, params)
+	f(r, d(r, params), params)
 end
 
 # ╔═╡ 76d25cd0-901b-4417-bff2-676ca12be6a9
@@ -96,10 +103,41 @@ f(r, d, params) = r - r_rhs(r, d, params)
 # ╔═╡ 316b8469-3730-48f4-85ca-d870f081cf26
 function r_rhs(r, d, params)
 	(; ρ, δ, ωˢ) = params
-	#d = ℓ/r
-	#r - 
+
 	ρ * (1 + δ/ρ)/(1 + δ/ρ * η(ωˢ/r + d, params))
 end
+
+# ╔═╡ bf9c4b53-4396-474d-b87f-d6076aba458e
+md"""
+## Comparative statics: Inequality drives interest rates and household debt
+"""
+
+# ╔═╡ eb43c48b-5edf-4932-87e0-a998def3bcc3
+params_default = IndebtedDemandModel(; ωˢ = 0.02)
+
+# ╔═╡ 7080e3d1-fc4a-4023-89ca-7bfc1c16d02c
+params_slider = IndebtedDemandModel(; ωˢ, ℓ)
+
+# ╔═╡ 52e253da-f335-44ff-a713-c353b97c129e
+md"""
+* ``\omega^S``: $(@bind ωˢ Slider(0.01:0.005:0.07, show_value = true, default = 0.02)) (wealth share of the rich)
+* ``\ell`` $(@bind ℓ Slider(0.01:0.005:0.1, show_value = true, default = 0.0248)) (pledgability of real assets)
+"""
+
+# ╔═╡ c0db2ba2-690d-49b7-954e-79eb7c01ed4d
+let
+	df_slider = equilibrium_df(params_slider)
+
+	df = vcat(df_default, df_slider, source = :parameters => [:default, :slider]) 
+	
+	@chain df begin
+		data(_) * mapping(:d => "debt level", :r => "interest rate", color = :variable => "", linestyle = :parameters => " ") * visual(Lines)
+		draw(legend = (position = :top, titleposition = :left ))
+	end
+end
+
+# ╔═╡ 21ef2d18-5685-4fb5-9e33-568d1da4ad6c
+df_default = equilibrium_df(params_default)
 
 # ╔═╡ 36a97448-6a2f-4ef6-8c4f-92f93708d216
 md"""
@@ -156,7 +194,7 @@ end
 
 # ╔═╡ 37791770-1bee-4c5e-8a8e-be177ed17cfb
 let
-	(; ρ, δ, ℓ, ωˢ) = params
+	(; ρ, δ, ℓ, ωˢ) = params_default
 	r_analytic = ρ + δ - δ/ρ * (ωˢ + ℓ)
 	d_analytic = ℓ / (ρ + δ - δ/ρ * (ωˢ + ℓ))
 end
@@ -168,13 +206,13 @@ using ForwardDiff
 η_prime(a, params) = ForwardDiff.derivative(a -> η(a, params), a)
 
 # ╔═╡ e768b5aa-dea0-4104-b058-d54327e73bac
-η_prime(1.0, params)
+η_prime(1.0, params_default)
 
 # ╔═╡ 96ef5d76-088e-4320-a079-5b21bd880a9b
 ε_η(a, params) = η_prime(a, params) * a / η(a, params)
 
 # ╔═╡ 9d21f357-3611-4b57-ad0f-61b1c8e11c12
-ε_η(3.0, params)
+ε_η(3.0, params_default)
 
 # ╔═╡ cc8734c3-374b-434d-9bdb-0266884f8f5c
 function MPC(a, r, params)
@@ -184,7 +222,7 @@ end
 
 # ╔═╡ ee31611c-dab5-4edc-b1c2-395bc28dbebd
 md"""
-# Assignment: Mian-Straub-Sufi Meet Huggett in Continuous Time
+# [Next year] Assignment: Mian-Straub-Sufi Meet Huggett in Continuous Time
 
 In this assignment we will check if the results from _Mian, Straub & Sufi (2020)_ survive in a _Huggett_ setup.
 """
@@ -305,13 +343,24 @@ md"""
 👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
 """
 
+# ╔═╡ eafe7d0c-5da3-4d3b-affc-0afc828fb528
+md"""
+### Assignment to dos
+* provide some skeleton code for Huggett
+* try if the assignment works
+* compute MPCs
+"""
+
 # ╔═╡ 3cfb90b7-f792-453b-b529-781b2fc26e9f
 md"""
 # Appendix
 """
 
 # ╔═╡ f7f45b4e-cb87-11ec-018a-77eff6a142b4
+# ╠═╡ disabled = true
+#=╠═╡
 using EconPDEs
+  ╠═╡ =#
 
 # ╔═╡ 66e2f2e0-9ec6-4c70-95c8-4e45df05fadc
 using Roots
@@ -1788,20 +1837,25 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─f5450eab-0f9f-4b7f-9b80-992d3c553ba9
-# ╟─9b0d87c3-4a6d-4293-a43f-54597f4e12aa
 # ╟─76b7a87d-af6a-4dcc-a887-198abcc1e857
-# ╠═eafe7d0c-5da3-4d3b-affc-0afc828fb528
 # ╟─95275f17-8cbd-4718-b806-64bcbe0919eb
+# ╟─e930b3a7-089e-4d1d-9f3e-bcecd98f7d52
 # ╠═c52304d6-625c-42b5-bb1d-6050862a8a18
-# ╠═7080e3d1-fc4a-4023-89ca-7bfc1c16d02c
-# ╠═9d6ed760-152f-488c-bfb4-b7906ec41190
 # ╠═40210978-c737-4d30-b070-340528839343
-# ╟─3cc7b523-6500-4ee9-b1fe-5eb91cfa37f3
-# ╠═adbbefa2-178f-4be5-af4d-6a7b26cb1871
-# ╠═8df4ff95-3979-440e-8e1b-f1d4039883d2
+# ╟─7bee6baf-6305-4b95-8248-de197eb1fe99
+# ╠═9d6ed760-152f-488c-bfb4-b7906ec41190
+# ╠═3cc7b523-6500-4ee9-b1fe-5eb91cfa37f3
 # ╠═d5fb733f-8543-4b92-a03b-2ad7c34287ac
+# ╠═8df4ff95-3979-440e-8e1b-f1d4039883d2
+# ╠═adbbefa2-178f-4be5-af4d-6a7b26cb1871
 # ╠═76d25cd0-901b-4417-bff2-676ca12be6a9
 # ╠═316b8469-3730-48f4-85ca-d870f081cf26
+# ╟─bf9c4b53-4396-474d-b87f-d6076aba458e
+# ╠═eb43c48b-5edf-4932-87e0-a998def3bcc3
+# ╠═7080e3d1-fc4a-4023-89ca-7bfc1c16d02c
+# ╟─52e253da-f335-44ff-a713-c353b97c129e
+# ╠═c0db2ba2-690d-49b7-954e-79eb7c01ed4d
+# ╠═21ef2d18-5685-4fb5-9e33-568d1da4ad6c
 # ╟─36a97448-6a2f-4ef6-8c4f-92f93708d216
 # ╟─34f341fa-0edc-4077-b9f5-4494954b2742
 # ╠═5ae7887a-b71a-40b8-ac3a-a8ccc30aed08
@@ -1839,6 +1893,7 @@ version = "3.5.0+0"
 # ╠═f5798861-2141-423d-88cb-8c1659f8b06a
 # ╟─5c32ad1a-2ae6-40ba-94e8-f42a314b77b2
 # ╟─d25d9db3-0cb8-4707-b51c-508bc6f44912
+# ╟─eafe7d0c-5da3-4d3b-affc-0afc828fb528
 # ╟─3cfb90b7-f792-453b-b529-781b2fc26e9f
 # ╠═f7f45b4e-cb87-11ec-018a-77eff6a142b4
 # ╠═66e2f2e0-9ec6-4c70-95c8-4e45df05fadc
