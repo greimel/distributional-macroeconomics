@@ -112,6 +112,12 @@
                 "preview_image_url": ""
             },
             {
+                "name": "Redistributive Growth (different solution methods)",
+                "notebook_path": "notebooks/redistributive-growth-fabian.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "HANK (not working)",
                 "notebook_path": "notebooks/hank-econpdes.jl",
                 "video_id": "",
