@@ -33,23 +33,16 @@ begin
 	default(size = 500 .* (√2, 1), dpi = 150)
 end
 
-# ╔═╡ a8cf4daf-7286-457e-8667-769ae2616702
-md"""
-!!! danger "Under construction!"
-
-	**Please do not start working on this assignment before the final version will be published.**
-"""
-
 # ╔═╡ b5f3a5a5-206d-49ae-9b15-612f22cf3bfe
 md"""
-`redistributive-growth3.jl` | **Version 0.1** | _last updated on May 24, 2022_
+`redistributive-growth.jl` | **Version 1.0** | _last updated on May 25, 2022_
 """
 
 # ╔═╡ 578fba17-11eb-4057-8f18-fb7835e701d6
 md"""
 # Redistributive Growth
 
-In this notebook, we consider the model in Döttling and Perotti (2019) that tries to explain various macroeconomic trends with a technological shift to intangible capital.
+This lecture is based on the paper **Redistributive Growth** (Döttling and Perotti; 2019). This paper tries to explain various macroeconomic trends with a technological shift to intangible capital.
 """
 
 # ╔═╡ 6ce65dbf-fb16-495f-a82a-d61b7ff948cf
@@ -107,7 +100,7 @@ md"""
 
 # ╔═╡ e7200c53-5563-4676-9572-2e944f3a7abe
 md"""
-Note that labor is supplied inelastically in this model so that $l=(1-\phi)\tilde{l}$ and $h=\phi \tilde{h}$, therefore we can write down the production function just as a function of $K$ and $H$:
+Labor is supplied inelastically in this model so that $l=(1-\phi)\tilde{l}$ and $h=\phi \tilde{h}$. Therefore, we can write down the production function as a function of only $K$ and $H$:
 """
 
 # ╔═╡ 26578a88-f4cc-462a-918d-c8362bd2d8c0
@@ -119,7 +112,7 @@ end
 
 # ╔═╡ 31d8ae5e-64ee-409f-b9f6-b3e3335c987c
 md"""
-We can compute the first derivatives of the production function for numerically which correspond to the factor prices:
+We can compute the first derivatives of the production function numerically which correspond to the factor prices:
 - price of physical capital $1+r$
 - price of intangible capital $R_H$
 - wage for manual workers $w$
@@ -182,9 +175,9 @@ $$(1-\alpha)Y = p \bar{L} + f + K$$
 
 # ╔═╡ 633a25b9-54ae-4882-b73a-b1d388d186f7
 md"""
-## Exercise 1 (2 points)
+## Exercise 1 (3 points)
 
-👉 Provide brief derivations for equations 1 and 4 above.
+👉 Provide brief derivations for equation 1 (1 point) and equation 4 (2 points) above.
 """
 
 # ╔═╡ 0f68c9f7-4b5e-40c7-b392-9f8d2dccde0c
@@ -233,7 +226,7 @@ end
 
 # ╔═╡ 90eb2948-ba30-482f-ab04-e633e11c510d
 md"""
-```eq_1``` and ```eq_2``` in the function above should be zero for the steady state values of $K$ and $H$. Obviously, the sum of the squares ```eq_1```² + ```eq_2```² should also be zero in this case. 
+```eq_1``` and ```eq_2``` in the function above should be zero at the steady state values of $K$ and $H$. Consequently, the sum of the squares ```eq_1```² + ```eq_2```² should also be zero in this case. 
 
 This means that we can find the steady state values of $K$ and $H$ by applying a minimization algorithm to ```eq_1```² + ```eq_2```². 
 
@@ -241,7 +234,7 @@ To make sure that the algorithm does not accidentally use negative values for $K
 
 After running the minimization algorithm, we always need to check if the sum of squares is indeed zero (or at least extremely close to zero). 
 
-Other solution algorithms are possible and probably better than this. (To do: Replace the algorithm above with Fabian's algorithm with two nested one-dimensional root-finding steps.)
+Other solution algorithms are possible and probably better than this approach. See [this notebook](https://greimel.github.io/distributional-macroeconomics/notebooks_redistributive-growth-fabian/) with alternative solution methods for the redistributive growth model.
 """
 
 # ╔═╡ bf487895-dca9-4c56-885e-cf62ea4619ed
@@ -272,7 +265,7 @@ end
 
 # ╔═╡ b12bd6fd-e7bc-45d0-a216-aa90a73ca3f9
 md"""
-In the cell below, we apply the minimization algorithm. The objective function is very close to 0 at the minimum that the algorithm found.
+Now we apply the minimization algorithm. The objective function is very close to 0 at the minimum that the algorithm found.
 """
 
 # ╔═╡ 7f0cd31c-1466-4ecc-831f-9e9624b1c41e
@@ -280,7 +273,7 @@ res = optimize(x -> objective_function(x, mod), [log(K_init), log(H_init)])
 
 # ╔═╡ fb1bf1b2-b5c1-44a7-b3f4-3f518fe19f84
 md"""
-Since the arguments of the objective function were $\log(K)$ and $\log(H)$, we need to exponentiate the minimizer to get the steady state values of $K$ and $H$:
+Since the arguments of the objective function are $\log(K)$ and $\log(H)$, we need to exponentiate the minimizer to get the steady state values of $K$ and $H$:
 """
 
 # ╔═╡ d19d64fa-b7e2-4844-94c9-26cd4ce4bc8a
@@ -308,7 +301,7 @@ md"""
 
 The steady state interest rate $r$ = $(round(model_equations_1(K, H, mod).r*100,digits=1))% seems quite big at a first glance. 
 
-👉 Is this result of the model is roughly consistent with the interest rates that we observed in the real world (in 1980)? Provide a brief explanation. (max. 50 words)
+👉 Is the steady state interest rate in the model roughly consistent with interest rates in the real world? Provide a brief explanation. (max. 100 words)
 """
 
 # ╔═╡ e9fcc415-f33e-4dbe-a422-792bf96e5974
@@ -357,7 +350,7 @@ The first row describes the steady state for the baseline value for $\eta$, the 
 
 # ╔═╡ 160a736a-36b6-433a-885c-2e320c736223
 md"""
-Below you can find two helper functions to compute the macroeconomic variables of interest for given steady state values $K$, $H$, and to compare macroeconomic variables acros steady states:
+Below you can find two helper functions to compute the macroeconomic variables of interest for given steady state values $K$, $H$, and to compare macroeconomic variables across steady states:
 """
 
 # ╔═╡ 8e2ef37d-9a68-4a09-a4f1-b137c386ee19
@@ -426,9 +419,9 @@ The following alternative growth drivers are already implemented in the model:
 
 # ╔═╡ e68736e0-52ab-4282-bebf-08f529b214f9
 md"""
-## Exercise 3 (3 points)
+## Exercise 3 (2.5 points)
 
-👉 Pick one of the four alternative growth drivers listed above and conduct a comparison of steady states similar to the $\eta$ $\uparrow$ case. Which of the secular trends can this growth driver explain and which not? Provide a brief explanation for the changes in $\{r, H/(H+K), K/Y, m/Y, p/Y, f/Y, w/q\}$ that are generated by the parameter change that you consider. (max. 200 words?)
+👉 Pick one of the four alternative growth drivers listed above and conduct a comparison of steady states similar to the $\eta$ $\uparrow$ case. Which of the secular trends can this growth driver explain and which not? Provide a brief explanation for the changes in $\{r, H/(H+K), K/Y, m/Y, p/Y, f/Y, w/q\}$ that are generated by the parameter change that you consider. (max. 200 words)
 """
 
 # ╔═╡ 8659bc54-5551-402a-b284-5e74ef6cd9d1
@@ -450,13 +443,13 @@ Your answer goes here ...
 
 # ╔═╡ b5df5021-ef85-49f1-ae28-391a7b55929c
 md"""
-## Exercise 4 (4 points)
+## Exercise 4 (3.5 points)
 
 An alternative growth driver are capital inflows from emerging countries into the developed world ("global savings glut"). These capital inflows can be incorporated into the model by adding an exogenous increase in savings $x$ to the steady state equations:
 
 $$(1-\alpha + x)Y = p \bar{L} + f + K$$
 
-👉 Add the exogenous increase in savings to the model and repeat exercise 3 for this alternative growth driver. (max. 200 words?)
+👉 Add the exogenous increase in savings to the model and repeat exercise 3 for this alternative growth driver. (max. 200 words)
 """
 
 # ╔═╡ cc0e0ddc-26f9-4381-975f-882581808f37
@@ -1629,7 +1622,6 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
-# ╟─a8cf4daf-7286-457e-8667-769ae2616702
 # ╟─b5f3a5a5-206d-49ae-9b15-612f22cf3bfe
 # ╟─578fba17-11eb-4057-8f18-fb7835e701d6
 # ╟─6ce65dbf-fb16-495f-a82a-d61b7ff948cf

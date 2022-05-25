@@ -36,7 +36,7 @@ md"""
 
 # ╔═╡ ce809135-4a0a-4245-93ec-f9bd305ba70c
 md"""
-`redistributive-growth.jl` | **Version 1.0** | _last updated on Mar 22, 2022_ | _Contributed by [Andrea Titton](https://github.com/NoFishLikeIan)_
+`redistributive-growth-andrea.jl` | **Version 1.0** | _last updated on Mar 22, 2022_ | _Contributed by [Andrea Titton](https://github.com/NoFishLikeIan)_
 """
 
 # ╔═╡ 034c3e01-2d20-4e53-8658-00b6ada6e8ff
