@@ -16,7 +16,7 @@ end
 
 # ╔═╡ 49914c8d-b321-4042-8b8e-acd74bab1021
 md"""
-`simple-housing-wealth-effects.jl` | **Version 1.0** | *last updated: May 16 2022*
+`simple-housing-wealth-effects.jl` | **Version 1.1** | *last updated: May 25 2022*
 """
 
 # ╔═╡ 8b0be852-af27-4347-8981-04c4cb7cfd3e
@@ -115,7 +115,7 @@ end
 mod0 = SimpleHousingModel()
 
 # ╔═╡ 657815e7-e8b9-477f-8a9d-349b822c5c94
-PROJ_DIR = joinpath(@__DIR__(), "..", "..") |> normpath
+PROJ_DIR = joinpath(@__DIR__(), "..", "..", "..", "Research", "housing-wealth-effects") |> normpath
 
 # ╔═╡ 58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
 md"""
@@ -124,30 +124,39 @@ md"""
 
 # ╔═╡ 19a2bc1f-41c4-4548-b2fe-e72280b9a842
 md"""
-* ``\beta``: $(@bind β1 Slider(0.8:0.01:1.0, default=1/(1+0.0245), show_value = true))
+* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1/(1+0.0245), show_value = true))
 * ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
-* ``\xi``: $(@bind ξ1 Slider(0.0:0.05:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
+* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
 * ``J``: $(@bind J1 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
 * ``y``: $(@bind y1 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
 * ``d_0``: $(@bind d₀1 Slider(-5:0.5:5, default = 0, show_value=true)) (initial debt; if negative: asset)
 *  $(@bind compare1 CheckBox(default = true)) (compare with defaults)
 """
 
+# ╔═╡ cc894ce1-b63a-4af9-b4f8-6d73e3d33080
+model_statistics
+
+# ╔═╡ 0ba27a96-1c07-4ea6-949a-34a60009b79f
+data_statistics
+
 # ╔═╡ 448fd3c7-3092-40a2-a037-4303222c6424
 policies0 = solve_tractable(mod0, 1.0).df;
 
-# ╔═╡ d404371b-9382-4aca-b7d1-5a4fed0d9849
-let
+# ╔═╡ 4317bfa1-ed6e-4e00-995b-f64f09413882
+policies_slider = let
 	mod1 = SimpleHousingModel(; β=β1, δ=δ1, J=J1, ξ=ξ1, y=y1, d₀=d₀1)
 	
 	p = 1.0
 
 	df = solve_tractable(mod1, p).df
+end
 
+# ╔═╡ d404371b-9382-4aca-b7d1-5a4fed0d9849
+let
 	if compare1
-		df = vcat(df, policies0, source = :parameters => ["sliders", "default"])
+		df = vcat(policies_slider, policies0, source = :parameters => ["sliders", "default"])
 	else
-		@transform!(df, :parameters = "sliders")
+		df = @transform!(policies_slider, :parameters = "sliders")
 	end
 
 	@chain df begin
@@ -163,6 +172,11 @@ md"""
 # Housing Wealth Effects
 """
 
+# ╔═╡ ca06bc4b-85ca-4f16-96ff-5956c3ad72cd
+md"""
+``\frac{p_1}{p_0}`` $(@bind q_by_p Slider(0.5:0.1:1.5, default=0.9, show_value=true)) (size of shock)
+"""
+
 # ╔═╡ dc1680b3-7754-4923-ad93-895a26f676b6
 md"""
 ## An unexpected house price shock
@@ -170,14 +184,14 @@ md"""
 
 # ╔═╡ 5a18c115-254d-4eeb-993f-42f2772f91f0
 md"""
-``j_\text{shock}`` $(@bind j_shock Slider(0:mod0.J-1, default=10, show_value=true))
+``j_\text{shock}`` $(@bind j_shock Slider(0:mod0.J-1, default=10, show_value=true)) (age at which the shock hits)
 """
 
 # ╔═╡ 6af88c45-7e54-4b32-b943-48064b2b4736
 let
 	mod0
 	p₀ = 1
-	p₁ = 0.5
+	p₁ = q_by_p * p₀
 	(; J, β, d₀, δ) = mod0
 	r = rate(β)
 
@@ -220,7 +234,7 @@ md"""
 let
 	mod2 = SimpleHousingModel(; β=β2, δ=δ2, J=J2, ξ=ξ2, y=y2)
 	
-	df = consumption_response(mod2)
+	df = consumption_response(mod2, q_by_p)
 
 	if compare2
 		df = vcat(df, cres_df, source = :parameters => ["sliders", "default"])
@@ -232,11 +246,9 @@ let
 end
 
 # ╔═╡ 71df2ab5-b4fa-4ea7-b345-87e7372d3eb9
-function consumption_response((; J, δ, β, ξ))
+function consumption_response((; J, δ, β, ξ), q_by_p)
 	r = rate(β)
 	
-	q_by_p = 0.9
-
 	κ₃ = (1 - β * (1-δ)) * (1-ξ)/ξ
 	Ω = κ₃
 
@@ -251,7 +263,7 @@ function consumption_response((; J, δ, β, ξ))
 end
 
 # ╔═╡ bbbdb059-4bb9-4964-87b1-57f1c411546e
-cres_df = consumption_response(mod0)
+cres_df = consumption_response(mod0, q_by_p)
 
 # ╔═╡ 80d7b8f4-8346-439c-a4c4-f7b7c21c80d7
 ages = cres_df.age
@@ -265,9 +277,11 @@ In this assignment we will explore how demographic change is affecting the aggre
 
 # ╔═╡ 895c1fb6-bd6f-4b00-9121-898fc08fb000
 md"""
-## Exercise 1: Bla (1 point)
+## Exercise 1: Calibration (4 points)
 
-👉 Why do . (max. $(limit1) words)
+👉 Choose ``n \geq 1`` statistics that can be computed in the model and in the Survey of Consumer Finances. Choose ``n`` parameters from the model. Set the parameter values so that the statistics in the model match those in the data.
+
+👉 Discuss your choice _(max. $(limit1) words)._
 """
 
 # ╔═╡ fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
@@ -281,63 +295,103 @@ begin
 	show_words_limit(answer1, limit1)
 end
 
-# ╔═╡ fb8dc44d-32a2-4e47-a1d3-a79f48870388
+# ╔═╡ 0f3a0c2a-f6bd-4844-92c6-43bddb120ad7
+data_raw = @chain get_scf(2019) begin
+	stack([:INCOME, :NETWORTH, :ASSET, :DEBT, :NH_MORT, :HOUSES], [:WGT])
+	@groupby(:variable)
+	@combine(:value = mean(:value, weights(:WGT)))
+	NamedTuple{tuple(Symbol.(_.variable)...)}(tuple(_.value...))
+end
+
+# ╔═╡ 780e8d5a-e523-4c25-bd28-75a37985e3f5
+data_statistics = (; ph = data_raw.HOUSES)
+
+# ╔═╡ 77de36ca-8556-409d-b249-12639c79f832
+model_raw = @chain policies_slider begin
+	stack([:d, :c, :ph, :h, :y], :π)
+	@groupby(:variable)
+	@combine(:value = mean(:value, weights(:π)))
+	NamedTuple{tuple(Symbol.(_.variable)...)}(tuple(_.value...))	
+end
+
+# ╔═╡ 74d54e68-8568-49e8-879c-68cba67aa71f
+model_statistics = (; ph = model_raw.ph)
+
+# ╔═╡ 88149f5e-81eb-40db-9893-60bf734a4659
 md"""
-## Demographic change in the USA
+## Exercise 2: Housing Wealth Effects in an Aging Society (6 points)
+
+Across many countries the demographic structure is changing. The figure below shows historical and forecast age structures for the USA. One notable feature of this figure is the _hump_ that moves from left to right over time. This _hump_ represents the generation of _baby boomers_.
+
+Given that age is an important determinant of housing wealth effects we want to ask the question: How do aggregate housing wealth effects change as the society ages?
 """
 
-# ╔═╡ d8f5fa4d-e2e2-4985-bb60-5f7ba2efc268
-import HTTP
-
-# ╔═╡ b2dc724c-bacf-4876-9485-cb0a3977e36a
-url = "https://www2.census.gov/programs-surveys/popproj/datasets/2017/2017-popproj/np2017_d1_mid.csv"
-
-# ╔═╡ 515d0102-69e3-41a5-9126-b36af0d96468
-df_pop = DataFrame(CSV.File(HTTP.get(url).body))
-
-# ╔═╡ 6ce85450-6b32-4b2b-af25-f8f00d15c004
-names(df_pop)
-
-# ╔═╡ 20cdd9c4-419a-49d1-8701-ba335be8777a
-age_df = CSV.File(joinpath(PROJ_DIR, "julia/tables/age.csv")) |> DataFrame
-
-# ╔═╡ 192288e6-30ae-481f-8927-c8794e790ef5
+# ╔═╡ f23da3a5-d494-4a51-b31f-0237681c0bed
 @chain age_df begin
-	@transform(:age_bin = (:from + :to)/2)
-	@subset(:year ∈ 1980:20:2060)
-	data(_) * mapping(:age_bin, :share, color = :year => nonnumeric) * visual(Lines)
-	draw(axis = (; title = "The age distribution over time"))
+	@subset(:year ∈ 1980:20:2040)
+	@groupby(:year)
+	@combine(:age, :pmf = :share, :cdf = cumsum(:share))
+	@transform(:inverse_cdf = 1 - :cdf)
+	stack([:pmf, :inverse_cdf], [:age, :year])
+	data(_) * mapping(:age, :value => "", row = :variable, color = :year => nonnumeric) * visual(Lines)
+	draw(facet = (; linkyaxes = false))
+	@aside Label(_.figure[0,1], "The age distribution over time", tellwidth=false)
 end
+
+# ╔═╡ 0c41a7bc-aecd-4980-bb88-62fafb469750
+md"""
+👉 **Aggregate response** (3 points) | Compute the aggregate consumption response to a 10% reduction in house prices for varying age structures. You can use `cres_df` and `age_weights`.
+"""
 
 # ╔═╡ 18040182-9592-4fdc-a206-a167d152d475
 age_weights = @chain age_df begin
 	@subset(:year ∈ 1980:10:2040)
-	@transform(:age_range = :from:(:to))
-	@select(:age_range, :share = :share / length(:age_range), :year)
-	flatten(:age_range)
-	rename(:age_range => :age)
 	@subset(:age ∈ ages)
 	@aside wgts80 = sum(@subset(_, :year == 1980).share)
-	@transform(:share = :share / wgts80)
-end
-
-# ╔═╡ baea9480-de9e-4619-ae91-0b55b366dfb1
-agg_res = @chain age_weights begin
-	leftjoin(cres_df, on = :age)
-	@groupby(:year)
-	@combine(:agg = sum(:c_res, weights(:share)))
+	@transform(:raw_share = :share, :share = :share / wgts80)
 end
 
 # ╔═╡ 2389faea-94ea-4308-9ce2-f2248c337db6
-let # responses_simple
-	fig = Figure()
-	ax1 = Axis(fig[1,1], xlabel="age", ylabel="%", title="individual response")
- 	ax2 = Axis(fig[2,1], xlabel="age distribution", ylabel="%", title="aggregate response")
+# your
 
-	lines!(ax1, cres_df.age, 100* cres_df.c_res, color=:black)
-	scatterlines!(ax2, agg_res.year, 100 * agg_res.agg, color=:black)
+# ╔═╡ 55456f24-650a-474b-abd4-77e0d017521e
+# analysis
 
-	fig	
+# ╔═╡ 1891872d-40f0-47df-80b5-cf9dd36f6bfd
+# goes
+
+# ╔═╡ 92837431-1eec-4318-9db9-04ce9e244dbc
+# here
+
+# ╔═╡ 0bb919c0-a71a-4acd-9bf1-d5af4096112e
+md"""
+👉 **External validity** (3 points) | A politician asks you to forecast the consumption response to house price shock in 2030. Would you use the given model? Discuss some aspects of the real world that are missing from the model. The figure below provides two hints that you may pick up or ignore. _(max. $(limit2) words)_
+"""
+
+
+# ╔═╡ 109bb399-d9ae-4ba4-a393-66cf5ce89365
+answer2 = md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ d3f8729a-f656-45ee-9606-8b28410ff265
+begin
+	limit2 = 200
+	show_words_limit(answer2, limit2)
+end
+
+# ╔═╡ 4fcbf785-3df6-464e-94fd-54208c8306a9
+@chain get_scf(2019) begin
+	@transform(:age_bin = @c cut(:AGE, weights(:WGT), 20))
+	@transform(:age_bin = Meta.parse(get(:age_bin)))
+	@groupby(:age_bin)
+	@combine("house value" = mean(:HOUSES, weights(:WGT)),
+			"ownership rate" = mean(:HOUSES .> 0, weights(:WGT)),
+			:age = mean(:AGE, weights(:WGT))
+	)
+	stack(["house value", "ownership rate"], [:age])
+	data(_) * mapping(:age, :value => "", row = :variable) * visual(ScatterLines)
+	draw(facet = (; linkyaxes = false))
 end
 
 # ╔═╡ ac432f89-c103-4268-ae68-d8c668b6cddc
@@ -374,6 +428,107 @@ using PlutoUI: Slider
 
 # ╔═╡ 9a01c6c8-49df-4a42-8385-5a2bc93ad604
 TableOfContents()
+
+# ╔═╡ 09304bab-5161-4db7-94d6-084be9b81ddc
+begin
+	using StatsBase: StatsBase, AbstractWeights
+	using CategoricalArrays
+	formatter(from, to, i; kwargs...) = "$i"
+	function CategoricalArrays.cut(x::AbstractArray, w::AbstractWeights,
+		ngroups::Integer; labels=formatter)
+  		cut(x, StatsBase.quantile(x, w, (1:ngroups-1)/ngroups); extend=true, labels)
+	end
+end
+
+# ╔═╡ 98652659-d7d1-43af-b43d-5a8218c10b6a
+md"""
+## Data
+"""
+
+# ╔═╡ 02eb765e-afeb-45aa-9af3-00ce09f445f7
+md"""
+### SCF
+"""
+
+# ╔═╡ d37d8a0b-812a-4e2b-866f-f9bb48461e92
+scf_checksums = Dict(
+	1989 => "3600d39fa908f2b6b32a63518fe38d2b7ca7d9c8047e947b054ea2e7d36f7b9e",
+	1992 => "d86da7dc07819adb1f08683d7b04f782d2fb1c135ea94880ce4b6550db3c0ccd",
+	1995 => "c28169ca73855a1b1f22a999655ea573fc5391b11884b9272c9cf2bf1ee5c442",
+	1998 => "69fda43abc88df203f03b9a9e8cf5bf5bc0a626da4b99d44f2fd11dee2c0b11e",
+	2001 => "28f5548f91d5f851ad643d9c172e00ecfeb1d6fe47126fb2496af5b980f75ffd",
+	2004 => "bb08a6122a25348f6507fcd9377511820972108e8642d6ec1ab3ddf262c21071",
+	2007 => "85324789b2ab6f5e5dfc05a8de294e4fd837f7e2174f41e5be5e146435a68aa9",
+	2010 => "a85ee57748ec28b3366a4f0b9446ec8b0c34710f14097b6a6e03089c9ad8823a",
+	2013 => "f13ed12756798c7e696dbf56ec26438cc2e0c46de4c3343afd3fd05ddfb9e6e8",
+	2016 => "11e92c267f333fe10678c9cbb9752c10290085c35abd7c52f7f21c8df45dc468",
+	2019 => "87766da9024f7b6742d277c955234cf6bee439248fbc5f689c81d91880fd1b05",
+)
+
+# ╔═╡ fca8f32c-856a-444e-a17d-732f62306d3a
+begin
+	using DataDeps; ENV["DATADEPS_ALWAYS_ACCEPT"] = true
+
+	for year in SCF_YEARS
+		register(DataDep(
+    		"SCF$(year)",
+    		"",
+    		"https://www.federalreserve.gov/econres/files/scfp$(year)excel.zip",
+   			scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
+    		post_fetch_method=unpack
+		))
+	end
+end
+
+# ╔═╡ 9517799e-aea4-4efe-b18f-4da2416a49e5
+const SCF_YEARS = 1989:3:2019
+
+# ╔═╡ 1c3db754-1081-4e1c-90e8-8389368343e7
+function get_scf(year)
+	@assert year ∈ SCF_YEARS
+
+	str = "SCF$(year)"
+	path = @datadep_str str
+
+	CSV.File(joinpath(path, "SCFP$(year).csv")) |> DataFrame
+end
+
+# ╔═╡ fb8dc44d-32a2-4e47-a1d3-a79f48870388
+md"""
+### Demographics
+
+TODO for 2023: reproducibly compile the data in the notebook
+"""
+
+# ╔═╡ d8f5fa4d-e2e2-4985-bb60-5f7ba2efc268
+import HTTP
+
+# ╔═╡ b2dc724c-bacf-4876-9485-cb0a3977e36a
+# ╠═╡ disabled = true
+#=╠═╡
+url = "https://www2.census.gov/programs-surveys/popproj/datasets/2017/2017-popproj/np2017_d1_mid.csv"
+  ╠═╡ =#
+
+# ╔═╡ 515d0102-69e3-41a5-9126-b36af0d96468
+df_pop = DataFrame(CSV.File(HTTP.get(url).body))
+
+# ╔═╡ 6ce85450-6b32-4b2b-af25-f8f00d15c004
+names(df_pop)
+
+# ╔═╡ c67760b5-5bc6-4cf5-aebe-bb1d6a5c28e1
+ages_url = "https://greimel.github.io/distributional-macroeconomics/assets/datasets/age.csv"
+
+# ╔═╡ 20cdd9c4-419a-49d1-8701-ba335be8777a
+age_df0 = CSV.File(HTTP.get(ages_url).body) |> DataFrame
+
+# ╔═╡ e7d49ef1-7bc2-461d-b944-0af28b77f3b0
+age_df = @chain age_df0 begin
+	#@subset(:year ∈ 1980:10:2040)
+	@transform(:age_range = :from:(:to))
+	@select(:age_range, :share = :share / length(:age_range), :year)
+	flatten(:age_range)
+	rename(:age_range => :age)
+end
 
 # ╔═╡ cb582f5c-51ff-48b5-9dbc-fd3f679b3f63
 md"""
@@ -420,7 +575,9 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
@@ -433,7 +590,9 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 AlgebraOfGraphics = "~0.6.7"
 CSV = "~0.10.4"
 CairoMakie = "~0.8.1"
+CategoricalArrays = "~0.10.5"
 Chain = "~0.4.10"
+DataDeps = "~0.7.7"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 HTTP = "~0.9.17"
@@ -505,6 +664,12 @@ version = "1.0.1"
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[deps.BinaryProvider]]
+deps = ["Libdl", "Logging", "SHA"]
+git-tree-sha1 = "ecdec412a9abc8db54c0efc5548c64dfce072058"
+uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
+version = "0.5.10"
+
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "19a35467a82e236ff51bc17a3a44b69ef35185a2"
@@ -539,6 +704,12 @@ deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
+
+[[deps.CategoricalArrays]]
+deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
+git-tree-sha1 = "109664d3a6f2202b1225478335ea8fea3cd8706b"
+uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+version = "0.10.5"
 
 [[deps.Chain]]
 git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
@@ -618,6 +789,12 @@ version = "4.1.1"
 git-tree-sha1 = "fb5f5316dd3fd4c5e7c30a24d50643b73e37cd40"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.10.0"
+
+[[deps.DataDeps]]
+deps = ["BinaryProvider", "HTTP", "Libdl", "Reexport", "SHA", "p7zip_jll"]
+git-tree-sha1 = "4f0e41ff461d42cfc62ff0de4f1cd44c6e6b3771"
+uuid = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
+version = "0.7.7"
 
 [[deps.DataFrameMacros]]
 deps = ["DataFrames"]
@@ -1740,32 +1917,42 @@ version = "3.5.0+0"
 # ╠═657815e7-e8b9-477f-8a9d-349b822c5c94
 # ╟─58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
 # ╟─19a2bc1f-41c4-4548-b2fe-e72280b9a842
+# ╠═cc894ce1-b63a-4af9-b4f8-6d73e3d33080
+# ╠═0ba27a96-1c07-4ea6-949a-34a60009b79f
 # ╠═448fd3c7-3092-40a2-a037-4303222c6424
+# ╠═4317bfa1-ed6e-4e00-995b-f64f09413882
 # ╟─d404371b-9382-4aca-b7d1-5a4fed0d9849
 # ╟─ad4bbbcd-8856-4533-9b1e-103f36707ebc
+# ╟─ca06bc4b-85ca-4f16-96ff-5956c3ad72cd
 # ╟─dc1680b3-7754-4923-ad93-895a26f676b6
 # ╟─5a18c115-254d-4eeb-993f-42f2772f91f0
 # ╟─6af88c45-7e54-4b32-b943-48064b2b4736
 # ╟─f437f295-4ccf-4d57-b358-51df02e1deae
 # ╟─7266f832-71a0-40bb-92cc-462fd95e546b
-# ╠═a468386a-d300-4665-92b1-5ef7636fdfc0
+# ╟─a468386a-d300-4665-92b1-5ef7636fdfc0
 # ╠═71df2ab5-b4fa-4ea7-b345-87e7372d3eb9
 # ╠═bbbdb059-4bb9-4964-87b1-57f1c411546e
 # ╠═80d7b8f4-8346-439c-a4c4-f7b7c21c80d7
 # ╟─d59caf31-60d5-411d-abbc-26e2e3131860
 # ╟─895c1fb6-bd6f-4b00-9121-898fc08fb000
 # ╠═fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
-# ╠═ab6a85f4-22f6-4cb6-9e2e-b3b08848f801
-# ╟─fb8dc44d-32a2-4e47-a1d3-a79f48870388
-# ╠═d8f5fa4d-e2e2-4985-bb60-5f7ba2efc268
-# ╠═b2dc724c-bacf-4876-9485-cb0a3977e36a
-# ╠═515d0102-69e3-41a5-9126-b36af0d96468
-# ╠═6ce85450-6b32-4b2b-af25-f8f00d15c004
-# ╠═20cdd9c4-419a-49d1-8701-ba335be8777a
-# ╟─192288e6-30ae-481f-8927-c8794e790ef5
+# ╟─ab6a85f4-22f6-4cb6-9e2e-b3b08848f801
+# ╠═0f3a0c2a-f6bd-4844-92c6-43bddb120ad7
+# ╠═780e8d5a-e523-4c25-bd28-75a37985e3f5
+# ╠═77de36ca-8556-409d-b249-12639c79f832
+# ╠═74d54e68-8568-49e8-879c-68cba67aa71f
+# ╟─88149f5e-81eb-40db-9893-60bf734a4659
+# ╟─f23da3a5-d494-4a51-b31f-0237681c0bed
+# ╟─0c41a7bc-aecd-4980-bb88-62fafb469750
 # ╠═18040182-9592-4fdc-a206-a167d152d475
-# ╠═baea9480-de9e-4619-ae91-0b55b366dfb1
 # ╠═2389faea-94ea-4308-9ce2-f2248c337db6
+# ╠═55456f24-650a-474b-abd4-77e0d017521e
+# ╠═1891872d-40f0-47df-80b5-cf9dd36f6bfd
+# ╠═92837431-1eec-4318-9db9-04ce9e244dbc
+# ╟─0bb919c0-a71a-4acd-9bf1-d5af4096112e
+# ╠═109bb399-d9ae-4ba4-a393-66cf5ce89365
+# ╟─d3f8729a-f656-45ee-9606-8b28410ff265
+# ╟─4fcbf785-3df6-464e-94fd-54208c8306a9
 # ╟─ac432f89-c103-4268-ae68-d8c668b6cddc
 # ╠═2b083233-a57c-455d-bafd-f54b42d52f6e
 # ╠═65cad8a4-3bc2-4558-a65b-5c50d3d9c99c
@@ -1777,6 +1964,21 @@ version = "3.5.0+0"
 # ╠═4c02b6a0-31cf-4212-a70f-d0070772b0dd
 # ╠═6e28e04d-fa36-486f-b0fe-c1beff6e8ca3
 # ╠═9a01c6c8-49df-4a42-8385-5a2bc93ad604
+# ╠═09304bab-5161-4db7-94d6-084be9b81ddc
+# ╟─98652659-d7d1-43af-b43d-5a8218c10b6a
+# ╟─02eb765e-afeb-45aa-9af3-00ce09f445f7
+# ╠═d37d8a0b-812a-4e2b-866f-f9bb48461e92
+# ╠═fca8f32c-856a-444e-a17d-732f62306d3a
+# ╠═9517799e-aea4-4efe-b18f-4da2416a49e5
+# ╠═1c3db754-1081-4e1c-90e8-8389368343e7
+# ╟─fb8dc44d-32a2-4e47-a1d3-a79f48870388
+# ╠═d8f5fa4d-e2e2-4985-bb60-5f7ba2efc268
+# ╠═b2dc724c-bacf-4876-9485-cb0a3977e36a
+# ╠═515d0102-69e3-41a5-9126-b36af0d96468
+# ╠═6ce85450-6b32-4b2b-af25-f8f00d15c004
+# ╠═c67760b5-5bc6-4cf5-aebe-bb1d6a5c28e1
+# ╠═20cdd9c4-419a-49d1-8701-ba335be8777a
+# ╠═e7d49ef1-7bc2-461d-b944-0af28b77f3b0
 # ╟─cb582f5c-51ff-48b5-9dbc-fd3f679b3f63
 # ╠═734c2fa3-2f12-4452-b9c0-858f0c85279e
 # ╠═3d1b9683-1e2c-4281-85e5-c100623700c7
