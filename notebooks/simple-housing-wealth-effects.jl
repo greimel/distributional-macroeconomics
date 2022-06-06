@@ -339,7 +339,7 @@ md"""
 
 # ╔═╡ 109bb399-d9ae-4ba4-a393-66cf5ce89365
 answer2 = md"""
-Your answer goes here ...
+Missing: e.g. own vs rent, rich vs poor ``y``, heterogenity in preferences ``\xi``
 """
 
 # ╔═╡ ac432f89-c103-4268-ae68-d8c668b6cddc
