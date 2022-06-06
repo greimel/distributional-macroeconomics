@@ -644,10 +644,21 @@ let
 	fig = Figure(; resolution)
 	ax = Axis(fig[1,1], xlabel = "k")
 	df_groups   = groupby(df, :z)
-	lines!(ax, df_groups[1].k, df_groups[1].π, color = :red, label="π(k,y=y¹)")
-	lines!(ax, df_groups[2].k, df_groups[2].π, color = :blue, label="π(k,y=y²)")
+	lines!(ax, df_groups[1].k, df_groups[1].π, label="π(k,y=y¹)")
+	lines!(ax, df_groups[2].k, df_groups[2].π, label="π(k,y=y²)")
 	Legend(fig[1, 2], ax)
 	fig
+end
+
+# ╔═╡ 7ca1d382-eba3-4b1d-a4f9-f1b7040a9df4
+let
+	# Alternative implementation of above figure.
+	figure = (; resolution = (600, 300))
+
+	@chain df begin
+		data(_) * mapping(:k, :π, color = :z => nonnumeric => "income") * visual(Lines)
+		draw(; figure)
+	end
 end
 
 # ╔═╡ c8192e26-5215-4bbb-b1a7-da9df02b7e62
@@ -821,6 +832,22 @@ let
 	lines!(ax, df_eq_groups[2].k, df_eq_groups[2].Δ, color=:blue, label="Δ_GE(k,y²)")
 	Legend(fig[1,2], ax)
 	fig
+end
+
+# ╔═╡ 4ba891ae-89ea-49a0-805b-a0cb1fec39fa
+let
+	# Here is an alternative implementation of the above plot.
+	figure = (; resolution = (600, 300))
+	
+	df_big = vcat(df, df_eq, source = :type => ["PE", "GE"])
+	@chain df_big begin
+		data(_) * mapping(
+			:k, :Δ,
+			linestyle=:type => "equilibrium",
+			color=:z => nonnumeric => "income"
+		) * visual(Lines)
+		draw(; figure)
+	end
 end
 
 # ╔═╡ e099f86b-3b8e-4783-9c80-84733cf174df
@@ -2325,6 +2352,7 @@ version = "3.5.0+0"
 # ╠═4eff64c0-16f1-48b0-87ec-d9f49599d0b0
 # ╠═5fe8f4ff-068b-4e3c-a0d9-45fa8206e988
 # ╟─4bdd9050-87f7-4551-88d5-5c2cca569bb8
+# ╠═7ca1d382-eba3-4b1d-a4f9-f1b7040a9df4
 # ╟─fc6e8503-08bd-4df3-987e-2d926504ba34
 # ╟─ef3ab9ee-ae95-4482-b17f-48c50c0fdcb9
 # ╠═03439979-79cd-492d-a04e-bee96d67a9cb
@@ -2381,6 +2409,7 @@ version = "3.5.0+0"
 # ╠═dadd5f1a-3746-4fa9-87e4-00ed7e029a23
 # ╠═26a7e487-193f-475a-8127-270d66d8b031
 # ╟─dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
+# ╠═4ba891ae-89ea-49a0-805b-a0cb1fec39fa
 # ╟─23695e8e-9e3a-4519-bcef-82094833dcd9
 # ╟─8cde58db-b774-4348-9ae1-25791a20a997
 # ╠═18b470fa-d747-4ac2-a5aa-01f7671499a8
