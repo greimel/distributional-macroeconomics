@@ -159,9 +159,9 @@ md"""
 
 # ╔═╡ 19a2bc1f-41c4-4548-b2fe-e72280b9a842
 md"""
-* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1/(1+0.0245), show_value = true))
+* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1, show_value = true))
 * ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
-* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
+* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 0.044, show_value=true)) (utility weight of housing)
 * ``J``: $(@bind J1 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
 * ``y``: $(@bind y1 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
 * ``d_0``: $(@bind d₀1 Slider(-5:0.5:5, default = 0, show_value=true)) (initial debt; if negative: asset)
