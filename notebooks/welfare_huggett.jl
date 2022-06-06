@@ -642,13 +642,11 @@ df.π = stationary_distribution(Q_star, hh.m, π₀);
 let
 	resolution = (600, 300)
 	fig = Figure(; resolution)
-	Axis(fig[1,1], xlabel = "k")
+	ax = Axis(fig[1,1], xlabel = "k")
 	df_groups   = groupby(df, :z)
-	lin1 = lines!(df_groups[1].k, df_groups[1].π, color = :red)
-	lin2 = lines!(df_groups[2].k, df_groups[2].π, color = :blue)
-	Legend(fig[1, 2],
-    [lin1, lin2],
-    ["π(k,y=y¹)", "π(k,y=y²)"])
+	lines!(ax, df_groups[1].k, df_groups[1].π, color = :red, label="π(k,y=y¹)")
+	lines!(ax, df_groups[2].k, df_groups[2].π, color = :blue, label="π(k,y=y²)")
+	Legend(fig[1, 2], ax)
 	fig
 end
 
@@ -675,35 +673,29 @@ end;
 let
 	resolution = (600, 300)
 	fig = Figure(; resolution)
-	Axis(fig[1,1], xlabel = "k")
+	ax = Axis(fig[1,1], xlabel = "k")
 	df_groups   = groupby(df, :z)
 	df_groups_τ = groupby(df_τ, :z)
-	lin1 = lines!(df_groups[1].k, df_groups[1].value, linestyle = :dash, color = :red)
-	lin2 = lines!(df_groups[2].k, df_groups[2].value, linestyle = :dash, color = :blue)
-	lin3 = lines!(df_groups_τ[1].k, df_groups_τ[1].value, color = :red)
-	lin4 = lines!(df_groups_τ[2].k, df_groups_τ[2].value, color = :blue)
-	Legend(fig[1, 2],
-    [lin1, lin2, lin3, lin4],
-    ["V(k,y¹)", "V(k,y²)", "V(k,y¹+τ)", "V(k,y²-τ)"])
+	lines!(ax, df_groups[1].k, df_groups[1].value, linestyle=:dash, color=:red, label="V(k,y¹)")
+	lines!(ax, df_groups[2].k, df_groups[2].value, linestyle=:dash, color=:blue, label="V(k,y²)")
+	lines!(ax, df_groups_τ[1].k, df_groups_τ[1].value, color=:red, label="V(k,y¹+τ)")
+	lines!(ax, df_groups_τ[2].k, df_groups_τ[2].value, color=:blue, label="V(k,y²-τ)")
+	Legend(fig[1, 2], ax)
 	fig
 end
 
 # ╔═╡ 3520454b-ab40-4521-aeb5-463345d4422c
 let
-
 	df.Δ = Δ_CRRA(df_τ[!,:value], df[!,:value], σ);
 	
 	resolution = (600, 300)
 	fig = Figure(; resolution)
-	Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
-	df_groups   = groupby(df, :z)
-	lin1 = lines!(df_groups[1].k, df_groups[1].Δ, color = :red)
-	lin2 = lines!(df_groups[2].k, df_groups[2].Δ, color = :blue)
-	Legend(fig[1, 2],
-    [lin1, lin2],
-    ["Δ(k,y=y¹)", "Δ(k,y=y²)"])
-	fig
-	
+	ax = Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
+	df_groups = groupby(df, :z)
+	lines!(ax, df_groups[1].k, df_groups[1].Δ, color=:red, label="Δ(k,y=y¹)")
+	lines!(ax, df_groups[2].k, df_groups[2].Δ, color=:blue, label="Δ(k,y=y²)")
+	Legend(fig[1, 2], ax)
+	fig	
 end
 
 # ╔═╡ 385b7e3e-83c1-4257-a35f-5d7b2b77ee73
@@ -762,18 +754,15 @@ let
 	# plot conditional welfare changes
 	resolution = (600, 300)
 	fig = Figure(; resolution)
-	Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
+	ax = Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
 	df_groups    = groupby(df,    :z)
 	df_sl_groups = groupby(df_sl, :z)
-	lin1 = lines!(df_groups[1].k, df_groups[1].Δ, linestyle = :dash, color = :red)
-	lin2 = lines!(df_groups[2].k, df_groups[2].Δ, linestyle = :dash, color = :blue)
-	lin3 = lines!(df_sl_groups[1].k, df_sl_groups[1].Δ, color = :red)
-	lin4 = lines!(df_sl_groups[2].k, df_sl_groups[2].Δ, color = :blue)
-	Legend(fig[1, 2],
-    [lin1, lin2, lin3, lin4],
-    ["Δ₀(k,y¹)", "Δ₀(k,y²)", "Δ(k,y¹)", "Δ(k,y²)"])
+	lines!(ax, df_groups[1].k, df_groups[1].Δ, linestyle=:dash, color=:red, label="Δ₀(k,y¹)")
+	lines!(ax, df_groups[2].k, df_groups[2].Δ, linestyle=:dash, color=:blue, label="Δ₀(k,y²)")
+	lines!(ax, df_sl_groups[1].k, df_sl_groups[1].Δ, color=:red, label="Δ(k,y¹)")
+	lines!(ax, df_sl_groups[2].k, df_sl_groups[2].Δ, color=:blue, label="Δ(k,y²)")
+	Legend(fig[1, 2], ax)
 	fig
-	
 end
 
 # ╔═╡ c1f51283-f9e4-4169-a150-96423057618a
@@ -823,16 +812,14 @@ df_eq.Δ = Δ_CRRA(df_τ_eq[!,:value], df_eq[!,:value], σ)
 let
 	resolution = (600, 300)
 	fig = Figure(; resolution)
-	Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
+	ax = Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
 	df_groups    = groupby(df,    :z)
 	df_eq_groups = groupby(df_eq, :z)
-	lin1 = lines!(df_groups[1].k, df_groups[1].Δ, linestyle = :dash, color = :red)
-	lin2 = lines!(df_groups[2].k, df_groups[2].Δ, linestyle = :dash, color = :blue)
-	lin3 = lines!(df_eq_groups[1].k, df_eq_groups[1].Δ, color = :red)
-	lin4 = lines!(df_eq_groups[2].k, df_eq_groups[2].Δ, color = :blue)
-	Legend(fig[1, 2],
-	[lin1, lin2, lin3, lin4],
-	["Δ_PE(k,y¹)", "Δ_PE(k,y²)", "Δ_GE(k,y¹)", "Δ_GE(k,y²)"])
+	lines!(ax, df_groups[1].k, df_groups[1].Δ, linestyle=:dash, color=:red, label="Δ_PE(k,y¹)")
+	lines!(ax, df_groups[2].k, df_groups[2].Δ, linestyle=:dash, color=:blue, label="Δ_PE(k,y²)")
+	lines!(ax, df_eq_groups[1].k, df_eq_groups[1].Δ, color=:red, label="Δ_GE(k,y¹)")
+	lines!(ax, df_eq_groups[2].k, df_eq_groups[2].Δ, color=:blue, label="Δ_GE(k,y²)")
+	Legend(fig[1,2], ax)
 	fig
 end
 
