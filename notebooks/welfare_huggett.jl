@@ -49,7 +49,7 @@ using QuantEcon
 
 # ╔═╡ 1b5abb2b-5dc7-433c-9c83-6cfd06c8eadf
 md"""
-`welfare_huggett.jl` | **Version 1.0** | *last updated: June 6, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`welfare_huggett.jl` | **Version 1.0** | *last updated: June 7, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ a0825503-c132-4c12-93e2-60537d0f6085
@@ -105,7 +105,7 @@ function Household(; σ = 1.0, β = 0.96,	m = 1/50,
 end
 
 # ╔═╡ 3965321e-baaa-484d-a722-854201085e58
-function uniform_distribution(n_k, n_z, i_max = n_k)
+function uniform_distribution(n_k, n_z; i_max = n_k)
 	π₀ = zeros(n_k * n_z)
 	π₀[1:i_max]         .= 0.5/i_max
 	π₀[n_k+1:n_k+i_max] .= 0.5/i_max
@@ -252,7 +252,7 @@ The plot of the value functions above shows that agents who are born into the lo
 
 # ╔═╡ 0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
 md"""
-Your answer goes here
+..
 """
 
 # ╔═╡ 02d23829-b7f8-415d-aca1-b71992b72bdb
@@ -332,7 +332,7 @@ Hint: Try to express $W(k,y; \Delta)$ in terms of $V(k,y)$.
 
 # ╔═╡ a453a9dc-0345-4630-8a75-e26a0de10e66
 md"""
-Your answer goes here
+...
 """
 
 # ╔═╡ 3e5158e4-146e-4b68-a20a-9b315de51de3
@@ -342,11 +342,8 @@ md"""
 
 # ╔═╡ f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 function Δ_CRRA(v_τ, v, σ)
-	
 	# replace the code below
-	
-	0 .* v
-	
+	0 * v
 end
 
 # ╔═╡ 849308de-b2e9-4f97-a948-60341863e7f8
@@ -398,6 +395,11 @@ md"""
 It is even possible to compute welfare changes conditional on the income state $y$ but to integrate over the asset space:
 """
 
+# ╔═╡ fcafcc6c-cc23-4ae1-8ff3-5bebd4e1ec13
+md"""
+---
+"""
+
 # ╔═╡ 1f192db7-0c79-42e9-b433-8d6f78bafee4
 md"""
 ### Exercise 3: Comparative statics
@@ -414,7 +416,7 @@ Explore the conditional and the unconditional welfare changes using the sliders 
 
 # ╔═╡ bb48a69b-72bd-4b50-848a-1b438555164c
 md"""
-Your answer goes here
+...
 """
 
 # ╔═╡ 143aa896-fc61-450c-843d-88546e129abd
@@ -424,7 +426,7 @@ md"""
 
 # ╔═╡ 24e51342-df5d-448a-a76f-18375af543aa
 md"""
-Your answer goes here
+...
 """
 
 # ╔═╡ 8252bc6d-7303-4c67-9daa-f536b173cfde
@@ -439,6 +441,11 @@ md"""
 Risk aversion $\sigma$
 
 $(@bind σ_sl Slider(1.25:0.25:3., show_value = true, default = σ))
+"""
+
+# ╔═╡ 6e641df2-8b5b-49d8-88fc-36fa4b44b6e5
+md"""
+---
 """
 
 # ╔═╡ d83a55d6-2901-4539-9ebb-3b16ecb02a3d
@@ -475,7 +482,7 @@ md"""
 
 # ╔═╡ 54887913-20f4-48c8-ae1a-8ae623ee44ee
 md"""
-Your answer goes here
+...
 """
 
 # ╔═╡ 281fca35-1d20-417a-8928-ddd81c32b305
@@ -502,7 +509,7 @@ md"""
 
 # ╔═╡ 18b470fa-d747-4ac2-a5aa-01f7671499a8
 md"""
-Your answer goes here
+...
 """
 
 # ╔═╡ cbcf8f08-0330-4458-ba7d-eb35f0d6b120
@@ -623,44 +630,6 @@ function results_to_df(results, states, policies, prices)
 
 end	
 
-# ╔═╡ b16d6fab-6bd1-4a39-a654-0fcb4ad868ee
-begin
-	ss      = statespace(; k_vals, z_chain=y_chain)
-	ddp     = setup_DDP(hh, ss, prices)
-	results = QuantEcon.solve(ddp, PFI)
-	df      = results_to_df(results, ss.states, ss.policies, prices)
-	df.π₀   = π₀'
-end;
-
-# ╔═╡ 6acfa402-9c7c-4b95-b6b7-d5d33dd927f7
-_, Q_star   = RQ_sigma(ddp,   results.sigma);
-
-# ╔═╡ 5fe8f4ff-068b-4e3c-a0d9-45fa8206e988
-df.π = stationary_distribution(Q_star, hh.m, π₀);
-
-# ╔═╡ 4bdd9050-87f7-4551-88d5-5c2cca569bb8
-let
-	resolution = (600, 300)
-	fig = Figure(; resolution)
-	ax = Axis(fig[1,1], xlabel = "k")
-	df_groups   = groupby(df, :z)
-	lines!(ax, df_groups[1].k, df_groups[1].π, label="π(k,y=y¹)")
-	lines!(ax, df_groups[2].k, df_groups[2].π, label="π(k,y=y²)")
-	Legend(fig[1, 2], ax)
-	fig
-end
-
-# ╔═╡ 7ca1d382-eba3-4b1d-a4f9-f1b7040a9df4
-let
-	# Alternative implementation of above figure.
-	figure = (; resolution = (600, 300))
-
-	@chain df begin
-		data(_) * mapping(:k, :π, color = :z => nonnumeric => "income") * visual(Lines)
-		draw(; figure)
-	end
-end
-
 # ╔═╡ c8192e26-5215-4bbb-b1a7-da9df02b7e62
 function solve_PE(hh, ss, prices, π₀)
 	
@@ -670,8 +639,25 @@ function solve_PE(hh, ss, prices, π₀)
 	df.π₀     = π₀'
 	_, Q_star = RQ_sigma(ddp, results.sigma)
 	df.π      = stationary_distribution(Q_star, hh.m, π₀)
+	df.iz     = ifelse.(df.z .== ss.z_chain.state_values[1], "low", "high")
 	
 	df
+end
+
+# ╔═╡ b16d6fab-6bd1-4a39-a654-0fcb4ad868ee
+begin
+	ss = statespace(; k_vals, z_chain=y_chain)
+	df = solve_PE(hh, ss, prices, π₀)
+end;
+
+# ╔═╡ 4bdd9050-87f7-4551-88d5-5c2cca569bb8
+let
+	figure = (; resolution = (600, 300))
+
+	@chain df begin
+		data(_) * mapping(:k, :π, color = :iz => nonnumeric => "income") * visual(Lines)
+		draw(; figure)
+	end
 end
 
 # ╔═╡ 548005d3-e608-4e9f-af60-909394c8e67c
@@ -682,31 +668,29 @@ end;
 
 # ╔═╡ 7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
 let
-	resolution = (600, 300)
-	fig = Figure(; resolution)
-	ax = Axis(fig[1,1], xlabel = "k")
-	df_groups   = groupby(df, :z)
-	df_groups_τ = groupby(df_τ, :z)
-	lines!(ax, df_groups[1].k, df_groups[1].value, linestyle=:dash, color=:red, label="V(k,y¹)")
-	lines!(ax, df_groups[2].k, df_groups[2].value, linestyle=:dash, color=:blue, label="V(k,y²)")
-	lines!(ax, df_groups_τ[1].k, df_groups_τ[1].value, color=:red, label="V(k,y¹+τ)")
-	lines!(ax, df_groups_τ[2].k, df_groups_τ[2].value, color=:blue, label="V(k,y²-τ)")
-	Legend(fig[1, 2], ax)
-	fig
+	figure = (; resolution = (600, 300))
+	
+	df_big = vcat(df, df_τ, source = :type => ["no", "yes"])
+	@chain df_big begin
+		data(_) * mapping(
+			:k, :value,
+			linestyle=:type => "tax reform",
+			color=:iz => nonnumeric => "income"
+		) * visual(Lines)
+		draw(; figure)
+	end
 end
 
 # ╔═╡ 3520454b-ab40-4521-aeb5-463345d4422c
 let
 	df.Δ = Δ_CRRA(df_τ[!,:value], df[!,:value], σ);
 	
-	resolution = (600, 300)
-	fig = Figure(; resolution)
-	ax = Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
-	df_groups = groupby(df, :z)
-	lines!(ax, df_groups[1].k, df_groups[1].Δ, color=:red, label="Δ(k,y=y¹)")
-	lines!(ax, df_groups[2].k, df_groups[2].Δ, color=:blue, label="Δ(k,y=y²)")
-	Legend(fig[1, 2], ax)
-	fig	
+	figure = (; resolution = (600, 300))
+
+	@chain df begin
+		data(_) * mapping(:k, :Δ, color = :iz => nonnumeric => "income") * visual(Lines)
+		draw(; figure)
+	end
 end
 
 # ╔═╡ 385b7e3e-83c1-4257-a35f-5d7b2b77ee73
@@ -763,17 +747,17 @@ let
 	print("Δ  = ",  round(Δ_sl*100, digits=2), "%")
 
 	# plot conditional welfare changes
-	resolution = (600, 300)
-	fig = Figure(; resolution)
-	ax = Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
-	df_groups    = groupby(df,    :z)
-	df_sl_groups = groupby(df_sl, :z)
-	lines!(ax, df_groups[1].k, df_groups[1].Δ, linestyle=:dash, color=:red, label="Δ₀(k,y¹)")
-	lines!(ax, df_groups[2].k, df_groups[2].Δ, linestyle=:dash, color=:blue, label="Δ₀(k,y²)")
-	lines!(ax, df_sl_groups[1].k, df_sl_groups[1].Δ, color=:red, label="Δ(k,y¹)")
-	lines!(ax, df_sl_groups[2].k, df_sl_groups[2].Δ, color=:blue, label="Δ(k,y²)")
-	Legend(fig[1, 2], ax)
-	fig
+	figure = (; resolution = (600, 300))
+
+	df_big = vcat(df, df_sl, source = :type => ["default", "sliders"])
+	@chain df_big begin
+		data(_) * mapping(
+			:k, :Δ,
+			linestyle=:type => "parameters",
+			color=:iz => nonnumeric => "income"
+		) * visual(Lines)
+		draw(; figure)
+	end
 end
 
 # ╔═╡ c1f51283-f9e4-4169-a150-96423057618a
@@ -807,6 +791,8 @@ begin
 	df_eq   = solve_PE(hh, ss,   prices_eq, π₀)
 	df_τ_eq = solve_PE(hh, ss_τ, prices_τ_eq, π₀)
 
+	df_eq.Δ = Δ_CRRA(df_τ_eq[!,:value], df_eq[!,:value], σ)
+
 end;
 
 # ╔═╡ dadd5f1a-3746-4fa9-87e4-00ed7e029a23
@@ -816,35 +802,16 @@ let
 	Δ_CRRA(value_τ, value, σ)
 end
 
-# ╔═╡ 26a7e487-193f-475a-8127-270d66d8b031
-df_eq.Δ = Δ_CRRA(df_τ_eq[!,:value], df_eq[!,:value], σ)
-
 # ╔═╡ dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
 let
-	resolution = (600, 300)
-	fig = Figure(; resolution)
-	ax = Axis(fig[1,1], xlabel = "k", ylabel = "Δ")
-	df_groups    = groupby(df,    :z)
-	df_eq_groups = groupby(df_eq, :z)
-	lines!(ax, df_groups[1].k, df_groups[1].Δ, linestyle=:dash, color=:red, label="Δ_PE(k,y¹)")
-	lines!(ax, df_groups[2].k, df_groups[2].Δ, linestyle=:dash, color=:blue, label="Δ_PE(k,y²)")
-	lines!(ax, df_eq_groups[1].k, df_eq_groups[1].Δ, color=:red, label="Δ_GE(k,y¹)")
-	lines!(ax, df_eq_groups[2].k, df_eq_groups[2].Δ, color=:blue, label="Δ_GE(k,y²)")
-	Legend(fig[1,2], ax)
-	fig
-end
-
-# ╔═╡ 4ba891ae-89ea-49a0-805b-a0cb1fec39fa
-let
-	# Here is an alternative implementation of the above plot.
 	figure = (; resolution = (600, 300))
-	
+
 	df_big = vcat(df, df_eq, source = :type => ["PE", "GE"])
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :Δ,
 			linestyle=:type => "equilibrium",
-			color=:z => nonnumeric => "income"
+			color=:iz => nonnumeric => "income"
 		) * visual(Lines)
 		draw(; figure)
 	end
@@ -1061,9 +1028,9 @@ uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
 [[deps.CommonSolve]]
-git-tree-sha1 = "332a332c97c7071600984b3c31d9067e1a4e6e25"
+git-tree-sha1 = "68a0743f578349ada8bc911a5cbd5a2ef6ed6d1f"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.1"
+version = "0.2.0"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -1447,9 +1414,9 @@ version = "0.6.2"
 
 [[deps.InverseFunctions]]
 deps = ["Test"]
-git-tree-sha1 = "c6cf981474e7094ce044168d329274d797843467"
+git-tree-sha1 = "336cc738f03e069ef2cac55a104eb823455dca75"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
-version = "0.1.6"
+version = "0.1.4"
 
 [[deps.InvertedIndices]]
 git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
@@ -1742,9 +1709,9 @@ version = "0.5.1"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
-git-tree-sha1 = "8694b777fe710111c65879fcc1184f8422b6d910"
+git-tree-sha1 = "e7fa2526bf068ad5cbfe9ba7e8a9bbd227b3211b"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.12.3"
+version = "1.12.1"
 
 [[deps.Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2093,9 +2060,9 @@ version = "0.1.1"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "383a578bdf6e6721f480e749d503ebc8405a0b22"
+git-tree-sha1 = "8e981101b5c246b8325dbb3b294b0c67b9c69a0a"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.4.6"
+version = "1.4.5"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -2345,25 +2312,22 @@ version = "3.5.0+0"
 # ╟─a7e67216-2bca-45d7-859b-b9e0328c4875
 # ╟─a56f8765-cae6-40f4-aebf-900673ed9710
 # ╠═23e83dbd-ad68-4b86-80a3-34c65ca420d1
+# ╠═c8192e26-5215-4bbb-b1a7-da9df02b7e62
 # ╠═b16d6fab-6bd1-4a39-a654-0fcb4ad868ee
 # ╟─b40c8fdb-6d4b-4880-8e7c-523bdb95a847
 # ╟─9c1e3401-5646-4b6e-a703-0b0d877bcd6b
-# ╠═6acfa402-9c7c-4b95-b6b7-d5d33dd927f7
 # ╠═4eff64c0-16f1-48b0-87ec-d9f49599d0b0
-# ╠═5fe8f4ff-068b-4e3c-a0d9-45fa8206e988
-# ╟─4bdd9050-87f7-4551-88d5-5c2cca569bb8
-# ╠═7ca1d382-eba3-4b1d-a4f9-f1b7040a9df4
+# ╠═4bdd9050-87f7-4551-88d5-5c2cca569bb8
 # ╟─fc6e8503-08bd-4df3-987e-2d926504ba34
 # ╟─ef3ab9ee-ae95-4482-b17f-48c50c0fdcb9
 # ╠═03439979-79cd-492d-a04e-bee96d67a9cb
 # ╟─31a30781-59c9-4a56-be71-dd12626ae9ec
 # ╠═d7b1e1a4-3153-4fb7-9908-55ce65d7fa2f
 # ╟─a2030a1e-6da9-4f5f-a367-03cd98530d7c
-# ╠═c8192e26-5215-4bbb-b1a7-da9df02b7e62
 # ╠═548005d3-e608-4e9f-af60-909394c8e67c
 # ╟─c5cb959f-8c66-4084-9a53-4cf422cdf762
 # ╟─b8ab52fc-07f2-4512-b477-df1e294d91a7
-# ╟─7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
+# ╠═7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
 # ╟─9c1efccf-1235-472d-b395-10dc5494d114
 # ╟─69004cfb-29ea-4757-8eb6-3e905da0b2cb
 # ╠═0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
@@ -2384,6 +2348,7 @@ version = "3.5.0+0"
 # ╠═385b7e3e-83c1-4257-a35f-5d7b2b77ee73
 # ╟─7af904d0-fc43-4986-a17a-2bc12d7913f6
 # ╠═a6245b74-2ceb-468c-b8a0-623d4b8abe36
+# ╟─fcafcc6c-cc23-4ae1-8ff3-5bebd4e1ec13
 # ╟─1f192db7-0c79-42e9-b433-8d6f78bafee4
 # ╟─8382365c-99a0-4c29-9917-3a1f5f0b5af4
 # ╠═bb48a69b-72bd-4b50-848a-1b438555164c
@@ -2392,6 +2357,7 @@ version = "3.5.0+0"
 # ╟─8252bc6d-7303-4c67-9daa-f536b173cfde
 # ╟─28762c0a-76a3-44e8-8a48-dbc57dec4282
 # ╟─f54c97f9-bd22-4e81-966e-b68ef9e71efe
+# ╟─6e641df2-8b5b-49d8-88fc-36fa4b44b6e5
 # ╟─d83a55d6-2901-4539-9ebb-3b16ecb02a3d
 # ╟─d748feac-e583-4028-b3aa-6d1ac692255b
 # ╟─5be45b08-726c-453b-b025-cf7f69f941ff
@@ -2407,9 +2373,7 @@ version = "3.5.0+0"
 # ╠═b8bf3582-d6a0-4a23-b080-a9b777893205
 # ╟─d379a396-0735-4fc9-aa6c-190d69a00fb0
 # ╠═dadd5f1a-3746-4fa9-87e4-00ed7e029a23
-# ╠═26a7e487-193f-475a-8127-270d66d8b031
-# ╟─dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
-# ╠═4ba891ae-89ea-49a0-805b-a0cb1fec39fa
+# ╠═dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
 # ╟─23695e8e-9e3a-4519-bcef-82094833dcd9
 # ╟─8cde58db-b774-4348-9ae1-25791a20a997
 # ╠═18b470fa-d747-4ac2-a5aa-01f7671499a8
