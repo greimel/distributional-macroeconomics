@@ -154,6 +154,12 @@
                 "preview_image_url": ""
             },
             {
+                "name": "Assignment 2 Solution (Growth)",
+                "notebook_path": "notebooks/redistributive-growth_solution.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "Tutorial 2",
                 "notebook_path": "notebooks/welfare_huggett.jl",
                 "video_id": "",
