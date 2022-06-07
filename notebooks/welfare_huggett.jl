@@ -252,7 +252,7 @@ The plot of the value functions above shows that agents who are born into the lo
 
 # ╔═╡ 0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
 md"""
-..
+...
 """
 
 # ╔═╡ 02d23829-b7f8-415d-aca1-b71992b72bdb
@@ -337,13 +337,12 @@ md"""
 
 # ╔═╡ 3e5158e4-146e-4b68-a20a-9b315de51de3
 md"""
-👉 Write a Julia function ```Δ_CRRA``` that computes $\Delta$ for given vectors ```v_τ``` and ```v``` and a given risk aversion coefficient $\Delta$.
+👉 Write a Julia function ```Δ_CRRA``` that computes $\Delta$ for given values ```v_τ``` and ```v``` and a given risk aversion coefficient $\Delta$.
 """
 
 # ╔═╡ f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 function Δ_CRRA(v_τ, v, σ)
-	# replace the code below
-	0 * v
+	0. # replace this with your formula
 end
 
 # ╔═╡ 849308de-b2e9-4f97-a948-60341863e7f8
@@ -416,7 +415,7 @@ Explore the conditional and the unconditional welfare changes using the sliders 
 
 # ╔═╡ bb48a69b-72bd-4b50-848a-1b438555164c
 md"""
-...
+Agents in the high income state are worse off with the reform if the persistence parameter $\rho$ is sufficiently high (e.g. $\rho = 0.95$).
 """
 
 # ╔═╡ 143aa896-fc61-450c-843d-88546e129abd
@@ -627,7 +626,6 @@ function results_to_df(results, states, policies, prices)
 	end
 
 	df
-
 end	
 
 # ╔═╡ c8192e26-5215-4bbb-b1a7-da9df02b7e62
@@ -639,7 +637,7 @@ function solve_PE(hh, ss, prices, π₀)
 	df.π₀     = π₀'
 	_, Q_star = RQ_sigma(ddp, results.sigma)
 	df.π      = stationary_distribution(Q_star, hh.m, π₀)
-	df.iz     = ifelse.(df.z .== ss.z_chain.state_values[1], "low", "high")
+	df.income = ifelse.(df.z .== ss.z_chain.state_values[1], "low", "high")
 	
 	df
 end
@@ -655,7 +653,7 @@ let
 	figure = (; resolution = (600, 300))
 
 	@chain df begin
-		data(_) * mapping(:k, :π, color = :iz => nonnumeric => "income") * visual(Lines)
+		data(_) * mapping(:k, :π, color = :income) * visual(Lines)
 		draw(; figure)
 	end
 end
@@ -670,25 +668,30 @@ end;
 let
 	figure = (; resolution = (600, 300))
 	
-	df_big = vcat(df, df_τ, source = :type => ["no", "yes"])
+	df_big = vcat(df, df_τ, source = "tax reform" => ["no", "yes"])
+	
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :value,
-			linestyle=:type => "tax reform",
-			color=:iz => nonnumeric => "income"
+			linestyle="tax reform",
+			color=:income
 		) * visual(Lines)
 		draw(; figure)
 	end
 end
 
+# ╔═╡ 04f6babd-4db0-45e9-8cc8-a09ce281e1bd
+begin
+	dfΔ = copy(df)
+	dfΔ.Δ = Δ_CRRA.(df_τ.value, df.value, σ)
+end;
+
 # ╔═╡ 3520454b-ab40-4521-aeb5-463345d4422c
 let
-	df.Δ = Δ_CRRA(df_τ[!,:value], df[!,:value], σ);
-	
 	figure = (; resolution = (600, 300))
 
-	@chain df begin
-		data(_) * mapping(:k, :Δ, color = :iz => nonnumeric => "income") * visual(Lines)
+	@chain dfΔ begin
+		data(_) * mapping(:k, :Δ, color=:income) * visual(Lines)
 		draw(; figure)
 	end
 end
@@ -733,15 +736,15 @@ let
 	df_τ_sl = solve_PE(hh_sl, ss_τ_sl, prices, π₀)
 
 	# compute conditional and unconditional welfare changes
-	df_sl.Δ = Δ_CRRA(df_τ_sl[!,:value], df_sl[!,:value], σ_sl)
+	df_sl.Δ = Δ_CRRA.(df_τ_sl.value, df_sl.value, σ_sl)
 
 	value   = mean(df.value,   weights(df.π₀))
 	value_τ = mean(df_τ.value, weights(df_τ.π₀))
-	Δ = Δ_CRRA(value_τ, value, σ)
+	Δ = Δ_CRRA.(value_τ, value, σ)
 
 	value_sl   = mean(df_sl.value,   weights(df_sl.π₀))
 	value_τ_sl = mean(df_τ_sl.value, weights(df_τ_sl.π₀))
-	Δ_sl = Δ_CRRA(value_τ_sl, value_sl, σ_sl)
+	Δ_sl = Δ_CRRA.(value_τ_sl, value_sl, σ_sl)
 	
 	print("Δ₀ = ", round(Δ*100, digits=2), "%\n")
 	print("Δ  = ",  round(Δ_sl*100, digits=2), "%")
@@ -749,12 +752,12 @@ let
 	# plot conditional welfare changes
 	figure = (; resolution = (600, 300))
 
-	df_big = vcat(df, df_sl, source = :type => ["default", "sliders"])
+	df_big = vcat(dfΔ, df_sl, source=:parameters => ["default", "sliders"])
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :Δ,
-			linestyle=:type => "parameters",
-			color=:iz => nonnumeric => "income"
+			linestyle=:parameters => "parameters",
+			color=:income => nonnumeric => "income"
 		) * visual(Lines)
 		draw(; figure)
 	end
@@ -791,7 +794,7 @@ begin
 	df_eq   = solve_PE(hh, ss,   prices_eq, π₀)
 	df_τ_eq = solve_PE(hh, ss_τ, prices_τ_eq, π₀)
 
-	df_eq.Δ = Δ_CRRA(df_τ_eq[!,:value], df_eq[!,:value], σ)
+	df_eq.Δ = Δ_CRRA.(df_τ_eq.value, df_eq.value, σ)
 
 end;
 
@@ -806,12 +809,12 @@ end
 let
 	figure = (; resolution = (600, 300))
 
-	df_big = vcat(df, df_eq, source = :type => ["PE", "GE"])
+	df_big = vcat(dfΔ, df_eq, source = :equilibrium => ["PE", "GE"])
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :Δ,
-			linestyle=:type => "equilibrium",
-			color=:iz => nonnumeric => "income"
+			linestyle=:equilibrium,
+			color=:income
 		) * visual(Lines)
 		draw(; figure)
 	end
@@ -2340,7 +2343,8 @@ version = "3.5.0+0"
 # ╠═f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 # ╟─849308de-b2e9-4f97-a948-60341863e7f8
 # ╟─c7ca1ce9-8621-4ae1-ab4a-c924d90745d6
-# ╠═3520454b-ab40-4521-aeb5-463345d4422c
+# ╠═04f6babd-4db0-45e9-8cc8-a09ce281e1bd
+# ╟─3520454b-ab40-4521-aeb5-463345d4422c
 # ╟─4f1fd4c1-1369-4e33-8e49-7ec51d33051c
 # ╟─f91d1b23-5670-4de4-81f4-cd72c0deb085
 # ╟─db24325c-49d8-45f7-805c-65b58a85889a
@@ -2351,12 +2355,12 @@ version = "3.5.0+0"
 # ╟─fcafcc6c-cc23-4ae1-8ff3-5bebd4e1ec13
 # ╟─1f192db7-0c79-42e9-b433-8d6f78bafee4
 # ╟─8382365c-99a0-4c29-9917-3a1f5f0b5af4
-# ╠═bb48a69b-72bd-4b50-848a-1b438555164c
+# ╟─bb48a69b-72bd-4b50-848a-1b438555164c
 # ╟─143aa896-fc61-450c-843d-88546e129abd
 # ╠═24e51342-df5d-448a-a76f-18375af543aa
 # ╟─8252bc6d-7303-4c67-9daa-f536b173cfde
 # ╟─28762c0a-76a3-44e8-8a48-dbc57dec4282
-# ╟─f54c97f9-bd22-4e81-966e-b68ef9e71efe
+# ╠═f54c97f9-bd22-4e81-966e-b68ef9e71efe
 # ╟─6e641df2-8b5b-49d8-88fc-36fa4b44b6e5
 # ╟─d83a55d6-2901-4539-9ebb-3b16ecb02a3d
 # ╟─d748feac-e583-4028-b3aa-6d1ac692255b

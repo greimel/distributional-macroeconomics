@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.8
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -355,7 +355,7 @@ V_\tau(k,y) &= W(k,y; \Delta)\\
 
 # ╔═╡ 3e5158e4-146e-4b68-a20a-9b315de51de3
 md"""
-👉 Write a Julia function ```Δ_CRRA``` that computes $\Delta$ for given vectors ```v_τ``` and ```v``` and a given risk aversion coefficient $\Delta$.
+👉 Write a Julia function ```Δ_CRRA``` that computes $\Delta$ for given values ```v_τ``` and ```v``` and a given risk aversion coefficient $\Delta$.
 """
 
 # ╔═╡ f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
@@ -546,7 +546,7 @@ md"""
 ---
 """
 
-# ╔═╡ 2c93d5a7-40bd-4535-9985-420533c12666
+# ╔═╡ a7130a4b-fb28-420e-b3a2-b0fd57532ce8
 md"""
 # Appendix
 ## Functions from ```aiyagari.jl```
@@ -1061,9 +1061,9 @@ uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
 [[deps.CommonSolve]]
-git-tree-sha1 = "332a332c97c7071600984b3c31d9067e1a4e6e25"
+git-tree-sha1 = "68a0743f578349ada8bc911a5cbd5a2ef6ed6d1f"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.1"
+version = "0.2.0"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -1447,9 +1447,9 @@ version = "0.6.2"
 
 [[deps.InverseFunctions]]
 deps = ["Test"]
-git-tree-sha1 = "c6cf981474e7094ce044168d329274d797843467"
+git-tree-sha1 = "336cc738f03e069ef2cac55a104eb823455dca75"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
-version = "0.1.6"
+version = "0.1.4"
 
 [[deps.InvertedIndices]]
 git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
@@ -1699,9 +1699,9 @@ uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 
 [[deps.MutableArithmetics]]
 deps = ["LinearAlgebra", "SparseArrays", "Test"]
-git-tree-sha1 = "3f419c608647de2afb8c05a1b1911f45b35418e2"
+git-tree-sha1 = "4050cd02756970414dab13b55d55ae1826b19008"
 uuid = "d8a4904e-b15c-11e9-3269-09a3773c0cb0"
-version = "1.0.3"
+version = "1.0.2"
 
 [[deps.NLSolversBase]]
 deps = ["DiffResults", "Distributed", "FiniteDiff", "ForwardDiff"]
@@ -1742,9 +1742,9 @@ version = "0.5.1"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
-git-tree-sha1 = "b4975062de00106132d0b01b5962c09f7db7d880"
+git-tree-sha1 = "e7fa2526bf068ad5cbfe9ba7e8a9bbd227b3211b"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.12.5"
+version = "1.12.1"
 
 [[deps.Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2093,9 +2093,9 @@ version = "0.1.1"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "383a578bdf6e6721f480e749d503ebc8405a0b22"
+git-tree-sha1 = "8e981101b5c246b8325dbb3b294b0c67b9c69a0a"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.4.6"
+version = "1.4.5"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -2103,9 +2103,9 @@ uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[deps.StatsAPI]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "2c11d7290036fe7aac9038ff312d3b3a2a5bf89e"
+git-tree-sha1 = "c82aaa13b44ea00134f8c9c89819477bd3986ecd"
 uuid = "82ae8749-77ed-4fe6-ae5f-f523153014b0"
-version = "1.4.0"
+version = "1.3.0"
 
 [[deps.StatsBase]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "LogExpFunctions", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
@@ -2412,7 +2412,7 @@ version = "3.5.0+0"
 # ╟─8cde58db-b774-4348-9ae1-25791a20a997
 # ╟─18b470fa-d747-4ac2-a5aa-01f7671499a8
 # ╟─cbcf8f08-0330-4458-ba7d-eb35f0d6b120
-# ╟─2c93d5a7-40bd-4535-9985-420533c12666
+# ╟─a7130a4b-fb28-420e-b3a2-b0fd57532ce8
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
 # ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
