@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.4
+# v0.19.8
 
 using Markdown
 using InteractiveUtils
@@ -360,7 +360,7 @@ md"""
 
 # ╔═╡ f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 function Δ_CRRA(v_τ, v, σ)
-	(v_τ ./ v) .^ (1/(1-σ)) .- 1
+	(v_τ / v) ^ (1/(1-σ)) - 1
 end
 
 # ╔═╡ 849308de-b2e9-4f97-a948-60341863e7f8
@@ -656,7 +656,6 @@ function results_to_df(results, states, policies, prices)
 	end
 
 	df
-
 end	
 
 # ╔═╡ c8192e26-5215-4bbb-b1a7-da9df02b7e62
@@ -668,7 +667,7 @@ function solve_PE(hh, ss, prices, π₀)
 	df.π₀     = π₀'
 	_, Q_star = RQ_sigma(ddp, results.sigma)
 	df.π      = stationary_distribution(Q_star, hh.m, π₀)
-	df.iz     = ifelse.(df.z .== ss.z_chain.state_values[1], "low", "high")
+	df.income = ifelse.(df.z .== ss.z_chain.state_values[1], "low", "high")
 	
 	df
 end
@@ -684,7 +683,7 @@ let
 	figure = (; resolution = (600, 300))
 
 	@chain df begin
-		data(_) * mapping(:k, :π, color = :iz => nonnumeric => "income") * visual(Lines)
+		data(_) * mapping(:k, :π, color = :income) * visual(Lines)
 		draw(; figure)
 	end
 end
@@ -699,25 +698,30 @@ end;
 let
 	figure = (; resolution = (600, 300))
 	
-	df_big = vcat(df, df_τ, source = :type => ["no", "yes"])
+	df_big = vcat(df, df_τ, source = "tax reform" => ["no", "yes"])
+	
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :value,
-			linestyle=:type => "tax reform",
-			color=:iz => nonnumeric => "income"
+			linestyle="tax reform",
+			color=:income
 		) * visual(Lines)
 		draw(; figure)
 	end
 end
 
+# ╔═╡ 04f6babd-4db0-45e9-8cc8-a09ce281e1bd
+begin
+	dfΔ = copy(df)
+	dfΔ.Δ = Δ_CRRA.(df_τ.value, df.value, σ)
+end;
+
 # ╔═╡ 3520454b-ab40-4521-aeb5-463345d4422c
 let
-	df.Δ = Δ_CRRA(df_τ[!,:value], df[!,:value], σ);
-	
 	figure = (; resolution = (600, 300))
 
-	@chain df begin
-		data(_) * mapping(:k, :Δ, color = :iz => nonnumeric => "income") * visual(Lines)
+	@chain dfΔ begin
+		data(_) * mapping(:k, :Δ, color=:income) * visual(Lines)
 		draw(; figure)
 	end
 end
@@ -762,15 +766,15 @@ let
 	df_τ_sl = solve_PE(hh_sl, ss_τ_sl, prices, π₀)
 
 	# compute conditional and unconditional welfare changes
-	df_sl.Δ = Δ_CRRA(df_τ_sl[!,:value], df_sl[!,:value], σ_sl)
+	df_sl.Δ = Δ_CRRA.(df_τ_sl.value, df_sl.value, σ_sl)
 
 	value   = mean(df.value,   weights(df.π₀))
 	value_τ = mean(df_τ.value, weights(df_τ.π₀))
-	Δ = Δ_CRRA(value_τ, value, σ)
+	Δ = Δ_CRRA.(value_τ, value, σ)
 
 	value_sl   = mean(df_sl.value,   weights(df_sl.π₀))
 	value_τ_sl = mean(df_τ_sl.value, weights(df_τ_sl.π₀))
-	Δ_sl = Δ_CRRA(value_τ_sl, value_sl, σ_sl)
+	Δ_sl = Δ_CRRA.(value_τ_sl, value_sl, σ_sl)
 	
 	print("Δ₀ = ", round(Δ*100, digits=2), "%\n")
 	print("Δ  = ",  round(Δ_sl*100, digits=2), "%")
@@ -778,12 +782,12 @@ let
 	# plot conditional welfare changes
 	figure = (; resolution = (600, 300))
 
-	df_big = vcat(df, df_sl, source = :type => ["default", "sliders"])
+	df_big = vcat(dfΔ, df_sl, source=:parameters => ["default", "sliders"])
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :Δ,
-			linestyle=:type => "parameters",
-			color=:iz => nonnumeric => "income"
+			linestyle=:parameters => "parameters",
+			color=:income => nonnumeric => "income"
 		) * visual(Lines)
 		draw(; figure)
 	end
@@ -820,7 +824,7 @@ begin
 	df_eq   = solve_PE(hh, ss,   prices_eq, π₀)
 	df_τ_eq = solve_PE(hh, ss_τ, prices_τ_eq, π₀)
 
-	df_eq.Δ = Δ_CRRA(df_τ_eq[!,:value], df_eq[!,:value], σ)
+	df_eq.Δ = Δ_CRRA.(df_τ_eq.value, df_eq.value, σ)
 
 end;
 
@@ -835,12 +839,12 @@ end
 let
 	figure = (; resolution = (600, 300))
 
-	df_big = vcat(df, df_eq, source = :type => ["PE", "GE"])
+	df_big = vcat(dfΔ, df_eq, source = :equilibrium => ["PE", "GE"])
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :Δ,
-			linestyle=:type => "equilibrium",
-			color=:iz => nonnumeric => "income"
+			linestyle=:equilibrium,
+			color=:income
 		) * visual(Lines)
 		draw(; figure)
 	end
@@ -1057,9 +1061,9 @@ uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
 [[deps.CommonSolve]]
-git-tree-sha1 = "68a0743f578349ada8bc911a5cbd5a2ef6ed6d1f"
+git-tree-sha1 = "332a332c97c7071600984b3c31d9067e1a4e6e25"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.0"
+version = "0.2.1"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -1443,9 +1447,9 @@ version = "0.6.2"
 
 [[deps.InverseFunctions]]
 deps = ["Test"]
-git-tree-sha1 = "336cc738f03e069ef2cac55a104eb823455dca75"
+git-tree-sha1 = "c6cf981474e7094ce044168d329274d797843467"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
-version = "0.1.4"
+version = "0.1.6"
 
 [[deps.InvertedIndices]]
 git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
@@ -1695,9 +1699,9 @@ uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 
 [[deps.MutableArithmetics]]
 deps = ["LinearAlgebra", "SparseArrays", "Test"]
-git-tree-sha1 = "4050cd02756970414dab13b55d55ae1826b19008"
+git-tree-sha1 = "3f419c608647de2afb8c05a1b1911f45b35418e2"
 uuid = "d8a4904e-b15c-11e9-3269-09a3773c0cb0"
-version = "1.0.2"
+version = "1.0.3"
 
 [[deps.NLSolversBase]]
 deps = ["DiffResults", "Distributed", "FiniteDiff", "ForwardDiff"]
@@ -1738,9 +1742,9 @@ version = "0.5.1"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
-git-tree-sha1 = "e7fa2526bf068ad5cbfe9ba7e8a9bbd227b3211b"
+git-tree-sha1 = "b4975062de00106132d0b01b5962c09f7db7d880"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.12.1"
+version = "1.12.5"
 
 [[deps.Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2089,9 +2093,9 @@ version = "0.1.1"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "8e981101b5c246b8325dbb3b294b0c67b9c69a0a"
+git-tree-sha1 = "383a578bdf6e6721f480e749d503ebc8405a0b22"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.4.5"
+version = "1.4.6"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -2099,9 +2103,9 @@ uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[deps.StatsAPI]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "c82aaa13b44ea00134f8c9c89819477bd3986ecd"
+git-tree-sha1 = "2c11d7290036fe7aac9038ff312d3b3a2a5bf89e"
 uuid = "82ae8749-77ed-4fe6-ae5f-f523153014b0"
-version = "1.3.0"
+version = "1.4.0"
 
 [[deps.StatsBase]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "LogExpFunctions", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
@@ -2369,7 +2373,8 @@ version = "3.5.0+0"
 # ╠═f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 # ╟─849308de-b2e9-4f97-a948-60341863e7f8
 # ╟─c7ca1ce9-8621-4ae1-ab4a-c924d90745d6
-# ╠═3520454b-ab40-4521-aeb5-463345d4422c
+# ╠═04f6babd-4db0-45e9-8cc8-a09ce281e1bd
+# ╟─3520454b-ab40-4521-aeb5-463345d4422c
 # ╟─4f1fd4c1-1369-4e33-8e49-7ec51d33051c
 # ╟─f91d1b23-5670-4de4-81f4-cd72c0deb085
 # ╟─db24325c-49d8-45f7-805c-65b58a85889a
@@ -2385,7 +2390,7 @@ version = "3.5.0+0"
 # ╟─24e51342-df5d-448a-a76f-18375af543aa
 # ╟─8252bc6d-7303-4c67-9daa-f536b173cfde
 # ╟─28762c0a-76a3-44e8-8a48-dbc57dec4282
-# ╟─f54c97f9-bd22-4e81-966e-b68ef9e71efe
+# ╠═f54c97f9-bd22-4e81-966e-b68ef9e71efe
 # ╟─6e641df2-8b5b-49d8-88fc-36fa4b44b6e5
 # ╟─d83a55d6-2901-4539-9ebb-3b16ecb02a3d
 # ╟─d748feac-e583-4028-b3aa-6d1ac692255b
