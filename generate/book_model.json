@@ -152,6 +152,12 @@
                 "notebook_path": "notebooks/mobility_aiyagari_solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Tutorial 2",
+                "notebook_path": "notebooks/welfare_huggett.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     }
