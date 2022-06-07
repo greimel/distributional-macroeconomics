@@ -159,9 +159,9 @@ md"""
 
 # ╔═╡ 19a2bc1f-41c4-4548-b2fe-e72280b9a842
 md"""
-* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1, show_value = true))
+* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1/(1+0.0245), show_value = true))
 * ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
-* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 0.044, show_value=true)) (utility weight of housing)
+* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
 * ``J``: $(@bind J1 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
 * ``y``: $(@bind y1 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
 * ``d_0``: $(@bind d₀1 Slider(-5:0.5:5, default = 0, show_value=true)) (initial debt; if negative: asset)
@@ -318,7 +318,7 @@ model_raw = @chain policies_slider begin
 end
 
 # ╔═╡ 74d54e68-8568-49e8-879c-68cba67aa71f
-model_statistics = (; ph2y = model_raw.ph / model_raw.y, d2ph = model_raw.d / model_raw.ph)
+model_statistics = (; ph = model_raw.ph)
 
 # ╔═╡ cc894ce1-b63a-4af9-b4f8-6d73e3d33080
 model_statistics
@@ -337,9 +337,21 @@ md"""
 👉 **Aggregate response** (3 points) | Compute the aggregate consumption response to a 10% reduction in house prices for varying age structures. You can use `cres_df` and `age_weights`.
 """
 
+# ╔═╡ 2389faea-94ea-4308-9ce2-f2248c337db6
+# your
+
+# ╔═╡ 55456f24-650a-474b-abd4-77e0d017521e
+# analysis
+
+# ╔═╡ 1891872d-40f0-47df-80b5-cf9dd36f6bfd
+# goes
+
+# ╔═╡ 92837431-1eec-4318-9db9-04ce9e244dbc
+# here
+
 # ╔═╡ 109bb399-d9ae-4ba4-a393-66cf5ce89365
 answer2 = md"""
-Missing: e.g. own vs rent, rich vs poor ``y``, heterogenity in preferences ``\xi``
+Your answer goes here ...
 """
 
 # ╔═╡ ac432f89-c103-4268-ae68-d8c668b6cddc
@@ -415,7 +427,7 @@ data_raw = @chain get_scf(2019) begin
 end
 
 # ╔═╡ 780e8d5a-e523-4c25-bd28-75a37985e3f5
-data_statistics = (; ph2y = data_raw.HOUSES / data_raw.INCOME, d2ph = data_raw.DEBT / data_raw.HOUSES )
+data_statistics = (; ph = data_raw.HOUSES)
 
 # ╔═╡ 0ba27a96-1c07-4ea6-949a-34a60009b79f
 data_statistics
@@ -494,17 +506,6 @@ age_weights = @chain age_df begin
 	@aside wgts80 = sum(@subset(_, :year == 1980).share)
 	@transform(:raw_share = :share, :share = :share / wgts80)
 end
-
-# ╔═╡ baea9480-de9e-4619-ae91-0b55b366dfb1
-agg_res = @chain age_weights begin
-#	@subset(:year == 1980)
-	leftjoin(cres_df, on = :age)
-	@groupby(:year)
-	@combine(:agg = sum(:c_res, weights(:share)))
-end
-
-# ╔═╡ 2389faea-94ea-4308-9ce2-f2248c337db6
-scatterlines(agg_res.year, 100 * agg_res.agg, axis = (xlabel="age distribution", ylabel="%", title="The Aggregate Response Given Demographic Change"))
 
 # ╔═╡ cb582f5c-51ff-48b5-9dbc-fd3f679b3f63
 md"""
@@ -2133,8 +2134,10 @@ version = "3.5.0+0"
 # ╟─f23da3a5-d494-4a51-b31f-0237681c0bed
 # ╟─0c41a7bc-aecd-4980-bb88-62fafb469750
 # ╠═18040182-9592-4fdc-a206-a167d152d475
-# ╠═baea9480-de9e-4619-ae91-0b55b366dfb1
 # ╠═2389faea-94ea-4308-9ce2-f2248c337db6
+# ╠═55456f24-650a-474b-abd4-77e0d017521e
+# ╠═1891872d-40f0-47df-80b5-cf9dd36f6bfd
+# ╠═92837431-1eec-4318-9db9-04ce9e244dbc
 # ╟─0bb919c0-a71a-4acd-9bf1-d5af4096112e
 # ╠═109bb399-d9ae-4ba4-a393-66cf5ce89365
 # ╟─d3f8729a-f656-45ee-9606-8b28410ff265
