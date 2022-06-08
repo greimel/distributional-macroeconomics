@@ -92,8 +92,14 @@
         ]
     },
         {
-        "title": "Heterogeneity and Economic Shocks",
+        "title": "Heterogenous Agents in Continuous Time",
         "contents": [
+            {
+                "name": "Continuous time processes",
+                "notebook_path": "notebooks/continuous-time-processes.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
             {
                 "name": "Continuous time",
                 "notebook_path": "notebooks/continuous-time.jl",
