@@ -102,7 +102,7 @@
             },
             {
                 "name": "Continuous time",
-                "notebook_path": "notebooks/continuous-time.jl",
+                "notebook_path": "notebooks/continuous-time-new.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
@@ -122,6 +122,19 @@
                 "notebook_path": "notebooks/redistributive-growth-fabian.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "More continuous time (partially redundant)",
+                "notebook_path": "notebooks/continuous-time.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "More continuous time (not working)",
+                "notebook_path": "notebooks/more-ct.jl",
+                "video_id": "",
+                "preview_image_url": ""
+
             },
             {
                 "name": "HANK (not working)",
