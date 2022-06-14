@@ -1,8 +1,20 @@
 ### A Pluto.jl notebook ###
-# v0.19.3
+# v0.19.8
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ aa8593ef-3f6f-4b0c-8046-f88aef680918
+using GADM, GeoTables
+
+# ╔═╡ c28f291b-e805-4629-9bb4-3e5c7c5436bc
+using MeshViz
+
+# ╔═╡ 1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
+using GeoTables.Meshes
+
+# ╔═╡ 301662e7-2d65-4b3b-9128-c415918e0058
+using AlgebraOfGraphics.Makie.GeometryBasics
 
 # ╔═╡ 2357bd9e-93e2-468e-8bd4-7720f07eed5e
 using FixedEffectModels
@@ -31,8 +43,114 @@ using StatsBase: weights
 # ╔═╡ 93c33060-d39f-4ece-ab2c-c929cc249a5b
 using PlutoUI
 
-# ╔═╡ 550295bd-ae15-404c-810a-f2f2561fcf5f
-hmda_df0 = RData.load("/Users/fabiangreimel/Data/hmda/data-processed/hmda_big.RData")["hmda_big"]
+# ╔═╡ 94686899-25fd-4d28-9894-5dcdc2650efe
+shapes0 = GeoTables.gadm("USA", depth=2);
+
+# ╔═╡ c868737f-5bf4-4705-8b75-154390774e17
+Meshes.centroid(shapes0.geometry[1])
+
+# ╔═╡ e8183f41-5921-4bfc-a262-6ac6b165870c
+shapes_df = @chain shapes0 begin
+	DataFrame
+	@subset(:NAME_1 ∉ ["Alaska", "Hawaii"])
+	@transform(_, :number = @c 1:size(_, 1))
+	@transform(:geometry = multi_to_multi(:geometry))
+	@select!(:state_name = :NAME_1, :county_name = :NAME_2,
+		:number, :geometry, :GID_2, :TYPE_2, :ENGTYPE_2)
+	transform!(:GID_2 => ByRow(GID2_to_fips) => AsTable)
+	@transform!(:county_matching = clean_county_name_for_matching(:county_name))
+	@subset!(:TYPE_2 ∉ ["Water body"])
+	@select!(:county_matching, :geometry, :state_name)
+end
+
+# ╔═╡ 85768c95-3f0c-43ad-9e37-c479c9bb6a5b
+@chain pop_df begin
+	@select(:fips, :population2010, :state_name, :county_name,
+		:county_matching = clean_county_name_for_matching(:county_name)
+	)
+	innerjoin(shapes_df, on = [:state_name, :county_matching], makeunique=true)
+end
+
+# ╔═╡ edf2ff0d-ab91-47ff-ae03-cee7507601a1
+function clean_county_name_for_matching(county)
+	county_match = county
+	
+	repl = [
+		" County"      => "",
+		" Parish"      => "",
+		" City"        => "", " city"    => "",
+		" and Borough" => "", " Borough" => "",
+		" Census Area" => "",
+		" Municipality"=> "",
+		"\xf1"         => "n", # ñ => n
+		"St."          => "Saint",
+		"Ste."         => "Sainte",
+		"Oglala Lakota"=> "Shannon",
+		" " => ""
+	]
+		
+	for r in repl
+		county_match = replace(county_match, r)
+	end
+		
+	county_match = lowercase(county_match)
+end
+
+# ╔═╡ 9efde0b5-48dd-4766-bc66-10a69702a565
+
+
+# ╔═╡ 18f3c795-82f6-49f4-8a0b-3345e1893e32
+state_df
+
+# ╔═╡ c9f03768-f6bd-4b52-b18f-a4b6698b23ca
+function GID2_to_fips(code)
+	_, state, county_x = split(code, ".")
+	county, _ = split(county_x, "_")
+
+	fips = state * lpad(county, 3, '0')
+	(; state = parse(Int, state), county = parse(Int, county), fips = parse(Int, fips))
+end
+
+# ╔═╡ ac0699ba-d578-45e9-996a-a7c88111aa4a
+begin
+	function point_to_point(point)
+		point |> collect |> GeometryBasics.Point
+	end
+	
+	function chain_to_polygon(chain)
+		chain |> Meshes.vertices .|> Meshes.coordinates .|> point_to_point |> GeometryBasics.Polygon
+	end
+
+	function multi_to_multi(multi_polygon)
+		multi_polygon |> Meshes.chains .|> chain_to_polygon |> GeometryBasics.MultiPolygon
+	end
+end
+
+# ╔═╡ 58df19fa-9f1b-49db-9302-b8003ff8244e
+@chain states_df begin
+	data(_) * mapping(:geometry, color = :county) * visual(Poly)
+	draw
+end
+
+# ╔═╡ ddd7b231-ceac-4209-8499-cdf76ed3617a
+md"""
+# Social Connectedness and the Housing Market
+
+In this notebook we want to ask if social networks play a role in housing markets (house prices and mortgage debt). In particular, we are interested if friends' experiences matter for economic decisions in the housing market.
+
+Let counties be indexed by ``c`` and time ``t`` run from 1997 to 2016.
+
+#### 1. Do friends' house price experiences drive mortgage choices?
+
+```math
+\begin{align}
+\text{originations}_{ct} &= \alpha \cdot \Delta\log(\text{hpi}_{ct}) + \beta \cdot \Delta\log(\text{hpi}^{\text{friends}}_{ct}) + \delta_c + \delta_t + \varepsilon_{ct} \\
+\Delta \log(\text{amount}_{ct}) &= \alpha \cdot \Delta\log(\text{hpi}_{ct}) + \beta \cdot \Delta\log(\text{hpi}^{\text{friends}}_{ct}) + \delta_c + \delta_t + \varepsilon_{ct}
+\end{align}
+```
+
+
+"""
 
 # ╔═╡ fefa0c22-b554-49d5-a024-2f5307f13b31
 hmda_df = @chain hmda_df0 begin
@@ -42,6 +160,76 @@ hmda_df = @chain hmda_df0 begin
 	@subset(!isnothing(:county))
 end
 
+# ╔═╡ 0411bfbb-8790-4fab-9f7d-e1b2abe55aaa
+zillow_sub = @chain zillow_with_friends begin
+	@subset(:variable == "lhpi_D2")
+end
+
+# ╔═╡ 81fe46fa-3b6c-47f4-997c-1b1a3e292541
+df_joined = @chain hmda_df begin
+	innerjoin(zillow_df_annual, on = [:state, :county, :year])
+	leftjoin(pop_df, on = [:state, :county])
+	@transform(:originations_per_capita = :count / :population2010)
+	innerjoin(zillow_sub, on = [:state, :county, :fips, :year])
+end
+
+# ╔═╡ 674087cc-b493-4428-9b89-9996345bfa00
+md"""
+# Some regressions
+
+
+* originations per capita
+* lhphi_D1 is the log difference in the price index relative to the previous period
+* lhphi_D2 is the log difference in the price index relative to two periods before
+"""
+
+# ╔═╡ 5f07e878-cfc1-49b5-a9c9-be7b254fab1a
+reg(df_joined, @formula(originations_per_capita ~ lhpi_D1 + lhpi_D2 + lhpi_D3  + log(income) + fe(year)), weights = :county)
+
+# ╔═╡ cbe5d7ba-da24-4ed5-a762-48d4e6aadb2a
+reg(
+	df_joined,
+	@formula(originations_per_capita ~ lhpi_D1 + friends_value500 + fe(year) + fe(county)), weights = :county, Vcov.cluster(:county))
+
+# ╔═╡ 69eb0012-68d9-4b0f-b141-51c2f20edbab
+reg(df_joined, @formula(originations_per_capita ~ lhpi_D2 + friends_value500 + log(income) + fe(year)), weights = :county)
+
+# ╔═╡ 7902b275-2440-4297-8f8d-2715d43bbc62
+reg(df_joined, @formula(log(amount) ~ lhpi_D2 + (friends_value0 ~ friends_value500) + log(income) + fe(year)), weights = :county)
+
+# ╔═╡ 7eaf948a-b4e3-45df-a765-d61df175e54b
+reg(df_joined, @formula(log(amount) ~ lhpi_D1 + lhpi_D2 + lhpi_D3 + log(income) + fe(year)), weights = :county)
+
+# ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
+zillow_df = @chain zillow_df0 begin
+	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
+	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
+	@transform(:date = Date(:date))
+	@select(:year = year(:date), :month = month(:date), Not(:date))
+end
+
+# ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
+zillow_df_annual = @chain zillow_df begin
+	@groupby(:state, :county, :year)
+	@combine(:hpi = mean(:hpi))
+	@transform(:lhpi = log(:hpi))
+	@groupby(:state, :county)
+	@transform(
+		:lhpi_D1 = @c(:lhpi - lag(:lhpi)),
+		:lhpi_D2 = @c(:lhpi - lag(:lhpi, 2)),
+		:lhpi_D3 = @c(:lhpi - lag(:lhpi, 3))
+	)
+end
+
+# ╔═╡ 7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
+zillow_df_annual_stacked = @chain zillow_df_annual begin
+	stack(Not([:state, :county, :year]))
+	@subset(!ismissing(:value))
+end
+
+# ╔═╡ 550295bd-ae15-404c-810a-f2f2561fcf5f
+hmda_df0 = RData.load("/Users/fabiangreimel/Data/hmda/data-processed/hmda_big.RData")["hmda_big"]
+
 # ╔═╡ 445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
 md"""
 # Friends' house price experiences
@@ -50,11 +238,91 @@ md"""
 # ╔═╡ f273a4f6-efcb-4005-bfe3-059bc62f8917
 add0_infty(from, to, dist) = from == to ? 0.0 : ismissing(dist) ? 500 : dist
 
+# ╔═╡ c18a3695-6768-4eb4-aa15-47c5dcef27f9
+df_c = @chain county_df begin		
+	# add distances
+	leftjoin(_, county_dist_data("500mi"), on=[:user_loc => :county1, :fr_loc => :county2])
+	# set distance to infinity if there are no data
+	@transform!(:distance = add0_infty(:user_loc, :fr_loc, :mi_to_county))
+	# add population
+	leftjoin(_, pop_df, on = :fr_loc => :fips)
+	@subset!(!ismissing(:population2010))
+	disallowmissing!(:population2010)
+	rename!(:population2010 => :fr_population, :user_loc => :user_fips, :fr_loc => :fr_fips, :state => :fr_state, :county => :fr_county)
+	#leftjoin(_, df_regions, on = :state => :State)
+	#disallowmissing!([:Region, :Division])
+	#@transform(
+	#	:user_state = :user_loc ÷ 1000,
+	#	:fr_state = :fr_loc ÷ 1000
+	#)
+	#@aside states = _.user_state ∩ _.fr_state
+	#@subset(:user_state ∈ states)
+end
+
+# ╔═╡ a685f091-c2a3-4198-bf83-811e85dde740
+# ╠═╡ disabled = true
+#=╠═╡
+df_friends = @chain df_c begin
+	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
+	#@subset(:fr_fips ≠ :user_fips)
+	@subset(:distance ≥ 500)
+	#@subset(:user_fips ∈ [1001, 1002, 1003])
+	@groupby(:user_fips)
+	combine(_) do subdf
+		@chain subdf begin
+			innerjoin(
+				zillow_df_annual_stacked,
+				on = [:fr_state => :state, :fr_county => :county]
+			)
+			@groupby(:year, :variable)
+			@combine(
+				:friends_value = mean(:value, weights(:scaled_number_links_capita))
+			)
+		end
+	end
+end
+  ╠═╡ =#
+
 # ╔═╡ 4a7781a2-93f3-43c7-8a41-c136316029bd
 # 134s
 
+# ╔═╡ da73a540-77dc-416e-ae39-480d9e1456d1
+# ╠═╡ disabled = true
+#=╠═╡
+df_friends0 = @chain df_c begin
+	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
+	@subset(:fr_fips ≠ :user_fips)
+	#@subset(:distance ≥ 000)
+	#@subset(:user_fips ∈ [1001, 1002, 1003])
+	@groupby(:user_fips)
+	combine(_) do subdf
+		@chain subdf begin
+			innerjoin(
+				zillow_df_annual_stacked,
+				on = [:fr_state => :state, :fr_county => :county]
+			)
+			@groupby(:year, :variable)
+			@combine(
+				:friends_value = mean(:value, weights(:scaled_number_links_capita))
+			)
+		end
+	end
+end
+  ╠═╡ =#
+
 # ╔═╡ 9aad2e32-6d16-464a-b96e-6bd51b52b2fa
 # 170s
+
+# ╔═╡ 49ef5550-a71b-4aa0-88da-510b100fc2bf
+zillow_with_friends = @chain zillow_df_annual_stacked begin
+	@transform(:fips = string(:state) * lpad(:county, 3, '0'))
+	@transform(:fips = Meta.parse(:fips))
+	select(:fips, :)# Not([:state, :county]))
+	leftjoin(df_friends0, on = [:year, :variable, :fips => :user_fips])
+	rename!(:friends_value => :friends_value0)
+	leftjoin(df_friends, on = [:year, :variable, :fips => :user_fips])
+	rename!(:friends_value => :friends_value500)
+end
 
 # ╔═╡ b298a227-9381-4c07-854e-97e5229b25c2
 
@@ -124,13 +392,70 @@ end
 # ╔═╡ cc203ba7-ab85-452f-b9c2-34dc0c0d937e
 import CSV
 
+# ╔═╡ 48cc091a-afab-446a-a0dc-22b4f5572162
+function county_dist_data(id)
+	urls = dist_urls
+	id = string(id)
+	files = urls_to_files(urls)
+	valid_ids = first.(urls)
+	if id ∉ valid_ids
+		ArgumentError("provide one of $valid_ids") |> throw
+	end
+	path = joinpath(@datadep_str("county_dist_$id"), files[id])
+	
+	CSV.File(path) |> DataFrame
+end
+
+# ╔═╡ f3fbc391-0dea-4637-8911-126e9a52b913
+function SCI_data(id)
+	urls = sci_urls
+	id = Symbol(id)
+	files = urls_to_files(urls)
+	valid_ids = first.(urls)
+	if id ∉ valid_ids
+		ArgumentError("provide one of $valid_ids") |> throw
+	end
+	if id == :US_counties
+		path = joinpath(@datadep_str("SCI_$id"), "county_county.tsv")
+	else
+		path = joinpath(@datadep_str("SCI_$id"), files[id])
+	end
+	
+	CSV.File(path) |> DataFrame
+end
+
+# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
+county_df = SCI_data(:US_counties)
+
 # ╔═╡ 89e50510-636b-47ae-8f4a-7ef18317c284
 md"""
 ### Population data
 """
 
+# ╔═╡ fa730aed-a6f6-4a4a-94b2-76633eb8551b
+function get_pop(args...; kwargs...)
+	file = joinpath(datadep"county_pop", "co-est2019-alldata.csv")
+	df = CSV.File(file, args...; kwargs...) |> DataFrame
+end
+
 # ╔═╡ 8fb93eef-88c0-43b9-b193-4a8911ec8f15
 pop_url = "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv"
+
+# ╔═╡ 0176205f-b123-4b1d-b38a-d871b1c6bbe4
+pop_df = @chain begin
+	get_pop(select = [:REGION, :DIVISION, :STATE, :COUNTY, :STNAME, :CTYNAME, :CENSUS2010POP])
+	@transform(:fips = string(:STATE) * lpad(string(:COUNTY), 3, '0'))
+	@select(
+		:fips = Meta.parse(:fips),
+		:state_name = :STNAME, :county_name = :CTYNAME,
+		:state = :STATE, :county = :COUNTY,
+		:population2010 = :CENSUS2010POP,
+	#	#:divisor = :STNAME * " " * :CTYNAME
+
+	)
+	#@transform(:county_match = clean_county_name_for_matching(:county))
+	@subset(:county != 0)
+end
 
 # ╔═╡ 7993c318-b6ac-407d-a63c-be4dbeba268f
 
@@ -192,193 +517,11 @@ begin
 	))
 end
 
-# ╔═╡ 48cc091a-afab-446a-a0dc-22b4f5572162
-function county_dist_data(id)
-	urls = dist_urls
-	id = string(id)
-	files = urls_to_files(urls)
-	valid_ids = first.(urls)
-	if id ∉ valid_ids
-		ArgumentError("provide one of $valid_ids") |> throw
-	end
-	path = joinpath(@datadep_str("county_dist_$id"), files[id])
-	
-	CSV.File(path) |> DataFrame
-end
-
-# ╔═╡ f3fbc391-0dea-4637-8911-126e9a52b913
-function SCI_data(id)
-	urls = sci_urls
-	id = Symbol(id)
-	files = urls_to_files(urls)
-	valid_ids = first.(urls)
-	if id ∉ valid_ids
-		ArgumentError("provide one of $valid_ids") |> throw
-	end
-	if id == :US_counties
-		path = joinpath(@datadep_str("SCI_$id"), "county_county.tsv")
-	else
-		path = joinpath(@datadep_str("SCI_$id"), files[id])
-	end
-	
-	CSV.File(path) |> DataFrame
-end
-
-# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
-county_df = SCI_data(:US_counties)
-
-# ╔═╡ fa730aed-a6f6-4a4a-94b2-76633eb8551b
-function get_pop(args...; kwargs...)
-	file = joinpath(datadep"county_pop", "co-est2019-alldata.csv")
-	df = CSV.File(file, args...; kwargs...) |> DataFrame
-end
-
-# ╔═╡ 0176205f-b123-4b1d-b38a-d871b1c6bbe4
-pop_df = @chain begin
-	get_pop(select = [:REGION, :DIVISION, :STATE, :COUNTY, :STNAME, :CTYNAME, :CENSUS2010POP])
-	@transform(:fips = string(:STATE) * lpad(string(:COUNTY), 3, '0'))
-	@select(
-		:fips = Meta.parse(:fips),
-	#	:state_name = :STNAME, :county_name = :CTYNAME,
-		:state = :STATE, :county = :COUNTY,
-		:population2010 = :CENSUS2010POP,
-	#	#:divisor = :STNAME * " " * :CTYNAME
-	)
-	#@transform(:county_match = clean_county_name_for_matching(:county))
-	@subset(:county != 0)
-end
-
-# ╔═╡ c18a3695-6768-4eb4-aa15-47c5dcef27f9
-df_c = @chain county_df begin		
-	# add distances
-	leftjoin(_, county_dist_data("500mi"), on=[:user_loc => :county1, :fr_loc => :county2])
-	# set distance to infinity if there are no data
-	@transform!(:distance = add0_infty(:user_loc, :fr_loc, :mi_to_county))
-	# add population
-	leftjoin(_, pop_df, on = :fr_loc => :fips)
-	@subset!(!ismissing(:population2010))
-	disallowmissing!(:population2010)
-	rename!(:population2010 => :fr_population, :user_loc => :user_fips, :fr_loc => :fr_fips, :state => :fr_state, :county => :fr_county)
-	#leftjoin(_, df_regions, on = :state => :State)
-	#disallowmissing!([:Region, :Division])
-	#@transform(
-	#	:user_state = :user_loc ÷ 1000,
-	#	:fr_state = :fr_loc ÷ 1000
-	#)
-	#@aside states = _.user_state ∩ _.fr_state
-	#@subset(:user_state ∈ states)
-end
-
 # ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
 import HTTP
 
 # ╔═╡ d6e02e8c-5783-4be7-aedc-7605f843d011
 zillow_df0 = joinpath(datadep"zillow", "County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv") |> CSV.File |> DataFrame
-
-# ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
-zillow_df = @chain zillow_df0 begin
-	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
-	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
-	@transform(:date = Date(:date))
-	@select(:year = year(:date), :month = month(:date), Not(:date))
-end
-
-# ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
-zillow_df_annual = @chain zillow_df begin
-	@groupby(:state, :county, :year)
-	@combine(:hpi = mean(:hpi))
-	@transform(:lhpi = log(:hpi))
-	@groupby(:state, :county)
-	@transform(
-		:lhpi_D1 = @c(:lhpi - lag(:lhpi)),
-		:lhpi_D2 = @c(:lhpi - lag(:lhpi, 2)),
-		:lhpi_D3 = @c(:lhpi - lag(:lhpi, 3))
-	)
-end
-
-# ╔═╡ 7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
-zillow_df_annual_stacked = @chain zillow_df_annual begin
-	stack(Not([:state, :county, :year]))
-	@subset(!ismissing(:value))
-end
-
-# ╔═╡ a685f091-c2a3-4198-bf83-811e85dde740
-df_friends = @chain df_c begin
-	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
-	#@subset(:fr_fips ≠ :user_fips)
-	@subset(:distance ≥ 500)
-	#@subset(:user_fips ∈ [1001, 1002, 1003])
-	@groupby(:user_fips)
-	combine(_) do subdf
-		@chain subdf begin
-			innerjoin(
-				zillow_df_annual_stacked,
-				on = [:fr_state => :state, :fr_county => :county]
-			)
-			@groupby(:year, :variable)
-			@combine(
-				:friends_value = mean(:value, weights(:scaled_number_links_capita))
-			)
-		end
-	end
-end
-
-# ╔═╡ da73a540-77dc-416e-ae39-480d9e1456d1
-df_friends0 = @chain df_c begin
-	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
-	@subset(:fr_fips ≠ :user_fips)
-	#@subset(:distance ≥ 000)
-	#@subset(:user_fips ∈ [1001, 1002, 1003])
-	@groupby(:user_fips)
-	combine(_) do subdf
-		@chain subdf begin
-			innerjoin(
-				zillow_df_annual_stacked,
-				on = [:fr_state => :state, :fr_county => :county]
-			)
-			@groupby(:year, :variable)
-			@combine(
-				:friends_value = mean(:value, weights(:scaled_number_links_capita))
-			)
-		end
-	end
-end
-
-# ╔═╡ 49ef5550-a71b-4aa0-88da-510b100fc2bf
-zillow_with_friends = @chain zillow_df_annual_stacked begin
-	@transform(:fips = string(:state) * lpad(:county, 3, '0'))
-	@transform(:fips = Meta.parse(:fips))
-	select(:fips, :)# Not([:state, :county]))
-	leftjoin(df_friends0, on = [:year, :variable, :fips => :user_fips])
-	rename!(:friends_value => :friends_value0)
-	leftjoin(df_friends, on = [:year, :variable, :fips => :user_fips])
-	rename!(:friends_value => :friends_value500)
-end
-
-# ╔═╡ 0411bfbb-8790-4fab-9f7d-e1b2abe55aaa
-zillow_sub = @chain zillow_with_friends begin
-	@subset(:variable == "lhpi_D2")
-end
-
-# ╔═╡ 81fe46fa-3b6c-47f4-997c-1b1a3e292541
-df_joined = @chain hmda_df begin
-	innerjoin(zillow_df_annual, on = [:state, :county, :year])
-	leftjoin(pop_df, on = [:state, :county])
-	@transform(:originations_per_capita = :count / :population2010)
-	innerjoin(zillow_sub, on = [:state, :county, :fips, :year])
-end
-
-# ╔═╡ 5f07e878-cfc1-49b5-a9c9-be7b254fab1a
-reg(df_joined, @formula(originations_per_capita ~ lhpi_D1 + lhpi_D2 + lhpi_D3  + log(income) + fe(year)), weights = :county)
-
-# ╔═╡ 69eb0012-68d9-4b0f-b141-51c2f20edbab
-reg(df_joined, @formula(originations_per_capita ~ lhpi_D2 + friends_value500 + log(income) + fe(year)), weights = :county)
-
-# ╔═╡ 7902b275-2440-4297-8f8d-2715d43bbc62
-reg(df_joined, @formula(log(amount) ~ lhpi_D2 + (friends_value0 ~ friends_value500) + log(income) + fe(year)), weights = :county)
-
-# ╔═╡ 7eaf948a-b4e3-45df-a765-d61df175e54b
-reg(df_joined, @formula(log(amount) ~ lhpi_D1 + lhpi_D2 + lhpi_D3 + log(income) + fe(year)), weights = :county)
 
 # ╔═╡ b4035cfa-d421-4677-bc8c-93fa721383f5
 CSV.File("/Users/fabiangreimel/Data/hmda/data-processed/hmda_inc_hpi_ineq.csv") |> DataFrame
@@ -398,7 +541,10 @@ DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
+GADM = "a8dd9ffe-31dc-4cf5-a379-ea69100a8233"
+GeoTables = "e502b557-6362-48c1-8219-d30d308dcdb0"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+MeshViz = "9ecf9c4f-6e5a-4b5e-83ae-06f2c7a661d8"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 RData = "df47a6cb-8c03-5eed-afd8-b6050d6c41da"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
@@ -406,16 +552,19 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
-AlgebraOfGraphics = "~0.6.6"
+AlgebraOfGraphics = "~0.6.7"
 CSV = "~0.10.4"
-CairoMakie = "~0.7.5"
+CairoMakie = "~0.8.5"
 Chain = "~0.4.10"
-DataDeps = "~0.7.7"
+DataDeps = "~0.7.8"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
-FixedEffectModels = "~1.6.5"
+FixedEffectModels = "~1.6.6"
+GADM = "~0.4.1"
+GeoTables = "~0.4.0"
 HTTP = "~0.9.17"
-PlutoUI = "~0.7.38"
+MeshViz = "~0.4.5"
+PlutoUI = "~0.7.39"
 RData = "~0.8.3"
 ShiftedArrays = "~1.0.0"
 StatsBase = "~0.33.16"
@@ -427,6 +576,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.7.2"
 manifest_format = "2.0"
+project_hash = "bbb4519dbc3ae745081d2f5b4840dabe2f75673a"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -453,9 +603,11 @@ version = "3.3.3"
 
 [[deps.AlgebraOfGraphics]]
 deps = ["Colors", "Dates", "Dictionaries", "FileIO", "GLM", "GeoInterface", "GeometryBasics", "GridLayoutBase", "KernelDensity", "Loess", "Makie", "PlotUtils", "PooledArrays", "RelocatableFolders", "StatsBase", "StructArrays", "Tables"]
-git-tree-sha1 = "f47c39e2a2d08a6e221dfc639791c6b5c08a9f7a"
+git-tree-sha1 = "4c245508a6c1f05c42b507c8fc85f3a17bf88206"
+repo-rev = "master"
+repo-url = "https://github.com/JuliaPlots/AlgebraOfGraphics.jl.git"
 uuid = "cbdf2221-f076-402e-a563-3d30da359d67"
-version = "0.6.6"
+version = "0.6.7"
 
 [[deps.Animations]]
 deps = ["Colors"]
@@ -463,14 +615,14 @@ git-tree-sha1 = "e81c509d2c8e49592413bfb0bb3b08150056c79d"
 uuid = "27a7e980-b3e6-11e9-2bcd-0b925532e340"
 version = "0.4.1"
 
+[[deps.ArchGDAL]]
+deps = ["CEnum", "ColorTypes", "Dates", "DiskArrays", "Extents", "GDAL", "GeoFormatTypes", "GeoInterface", "GeoInterfaceRecipes", "ImageCore", "Tables"]
+git-tree-sha1 = "f5592638035b4709a42a9b27e31c13309be80eb9"
+uuid = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
+version = "0.9.0"
+
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
-
-[[deps.ArrayInterface]]
-deps = ["Compat", "IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
-git-tree-sha1 = "81f0cb60dc994ca17f68d9fb7c942a5ae70d9ee4"
-uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "5.0.8"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -520,10 +672,10 @@ uuid = "159f3aea-2a34-519c-b102-8c37f9878175"
 version = "1.0.5"
 
 [[deps.CairoMakie]]
-deps = ["Base64", "Cairo", "Colors", "FFTW", "FileIO", "FreeType", "GeometryBasics", "LinearAlgebra", "Makie", "SHA", "StaticArrays"]
-git-tree-sha1 = "4a0de4f5aa2d5d27a1efa293aeabb1a081e46b2b"
+deps = ["Base64", "Cairo", "Colors", "FFTW", "FileIO", "FreeType", "GeometryBasics", "LinearAlgebra", "Makie", "SHA"]
+git-tree-sha1 = "e65431fdcee9883cfac2ea2fd388fe6e4372fa56"
 uuid = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-version = "0.7.5"
+version = "0.8.5"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
@@ -531,11 +683,17 @@ git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
 
+[[deps.Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.1"
+
 [[deps.CategoricalArrays]]
 deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
-git-tree-sha1 = "109664d3a6f2202b1225478335ea8fea3cd8706b"
+git-tree-sha1 = "5f5a975d996026a8dd877c35fe26a7b8179c02ba"
 uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
-version = "0.10.5"
+version = "0.10.6"
 
 [[deps.Chain]]
 git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
@@ -544,15 +702,21 @@ version = "0.4.10"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "9950387274246d08af38f6eef8cb5480862a435f"
+git-tree-sha1 = "9489214b993cd42d17f44c36e359bf6a7c919abf"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "1.14.0"
+version = "1.15.0"
 
 [[deps.ChangesOfVariables]]
 deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
 git-tree-sha1 = "1e315e3f4b0b7ce40feded39c73049692126cf53"
 uuid = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
 version = "0.1.3"
+
+[[deps.CircularArrays]]
+deps = ["OffsetArrays"]
+git-tree-sha1 = "3587fdbecba8c44f7e7285a1957182711b95f580"
+uuid = "7a955b69-7140-5f4e-a0ed-f168c5e2e749"
+version = "1.3.1"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -574,15 +738,15 @@ version = "3.18.0"
 
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
-git-tree-sha1 = "024fe24d83e4a5bf5fc80501a314ce0d1aa35597"
+git-tree-sha1 = "eb7f0f8307f71fac7c606984ea5fb2817275d6e4"
 uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
-version = "0.11.0"
+version = "0.11.4"
 
 [[deps.ColorVectorSpace]]
 deps = ["ColorTypes", "FixedPointNumbers", "LinearAlgebra", "SpecialFunctions", "Statistics", "TensorCore"]
-git-tree-sha1 = "3f1f500312161f1ae067abe07d13b40f78f32e07"
+git-tree-sha1 = "d08c20eef1f2cbc6e60fd3612ac4340b89fea322"
 uuid = "c3611d14-8923-5661-9e6a-0046d554d3a4"
-version = "0.9.8"
+version = "0.9.9"
 
 [[deps.Colors]]
 deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
@@ -597,9 +761,9 @@ version = "1.0.2"
 
 [[deps.Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "b153278a25dd42c65abbf4e62344f9d22e59191b"
+git-tree-sha1 = "9be8be1d8a6f44b96482c8af52238ea7987da3e3"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "3.43.0"
+version = "3.45.0"
 
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -616,6 +780,12 @@ git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
 uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 version = "4.1.1"
 
+[[deps.DBFTables]]
+deps = ["Printf", "Tables", "WeakRefStrings"]
+git-tree-sha1 = "f5b78d021b90307fb7170c4b013f350e6abe8fed"
+uuid = "75c7ada1-017a-5fb6-b8c7-2125ff2d6c93"
+version = "1.0.0"
+
 [[deps.DataAPI]]
 git-tree-sha1 = "fb5f5316dd3fd4c5e7c30a24d50643b73e37cd40"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
@@ -623,9 +793,9 @@ version = "1.10.0"
 
 [[deps.DataDeps]]
 deps = ["BinaryProvider", "HTTP", "Libdl", "Reexport", "SHA", "p7zip_jll"]
-git-tree-sha1 = "4f0e41ff461d42cfc62ff0de4f1cd44c6e6b3771"
+git-tree-sha1 = "e299d8267135ef2f9c941a764006697082c1e7e8"
 uuid = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
-version = "0.7.7"
+version = "0.7.8"
 
 [[deps.DataFrameMacros]]
 deps = ["DataFrames"]
@@ -641,9 +811,9 @@ version = "1.3.4"
 
 [[deps.DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
-git-tree-sha1 = "cc1a8e22627f33c789ab60b36a9132ac050bbf75"
+git-tree-sha1 = "d1fff3a548102f48987a52a2e0d114fa97d730f0"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.18.12"
+version = "0.18.13"
 
 [[deps.DataValueInterfaces]]
 git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
@@ -666,9 +836,15 @@ version = "0.4.0"
 
 [[deps.Dictionaries]]
 deps = ["Indexing", "Random"]
-git-tree-sha1 = "0340cee29e3456a7de968736ceeb705d591875a2"
+git-tree-sha1 = "7669d53b75e9f9e2fa32d5215cb2af348b2c13e2"
 uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
-version = "0.3.20"
+version = "0.3.21"
+
+[[deps.DiskArrays]]
+deps = ["OffsetArrays"]
+git-tree-sha1 = "230d999fc78652ea070312373ed1bfe2489e4fe5"
+uuid = "3c3547ce-8d99-4f5e-a174-61eb10b00ae3"
+version = "0.3.6"
 
 [[deps.Distances]]
 deps = ["LinearAlgebra", "SparseArrays", "Statistics", "StatsAPI"]
@@ -682,9 +858,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "8a6b49396a4058771c5c072239b2e0a76e2e898c"
+git-tree-sha1 = "0ec161f87bf4ab164ff96dfacf4be8ffff2375fd"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.58"
+version = "0.25.62"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -696,17 +872,17 @@ version = "0.8.6"
 deps = ["ArgTools", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
+[[deps.DualNumbers]]
+deps = ["Calculus", "NaNMath", "SpecialFunctions"]
+git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
+uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
+version = "0.6.8"
+
 [[deps.EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "3f3a2501fa7236e9b911e0f7a588c657e822bb6d"
 uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
 version = "2.2.3+0"
-
-[[deps.EllipsisNotation]]
-deps = ["ArrayInterface"]
-git-tree-sha1 = "d064b0340db45d48893e7604ec95e7a2dc9da904"
-uuid = "da5c29d0-fa7d-589e-88eb-ea29b0a81949"
-version = "1.5.0"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -718,6 +894,11 @@ version = "2.4.8+0"
 git-tree-sha1 = "56559bbef6ca5ea0c0818fa5c90320398a6fbf8d"
 uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
 version = "0.1.8"
+
+[[deps.Extents]]
+git-tree-sha1 = "a087a23129ac079d43ba6b534c6350325fcd41c9"
+uuid = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
+version = "0.1.0"
 
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -763,15 +944,15 @@ version = "0.13.2"
 
 [[deps.FixedEffectModels]]
 deps = ["DataFrames", "FixedEffects", "LinearAlgebra", "Printf", "Reexport", "Statistics", "StatsBase", "StatsFuns", "StatsModels", "Tables", "Vcov"]
-git-tree-sha1 = "bd741fd9b058179064ede5adaef9424d6ebbf946"
+git-tree-sha1 = "f6bd6f55724d239abcb833678183da20ff4f2c54"
 uuid = "9d5cd8c9-2029-5cab-9928-427838db53e3"
-version = "1.6.5"
+version = "1.6.6"
 
 [[deps.FixedEffects]]
 deps = ["GroupedArrays", "LinearAlgebra", "Printf", "Requires", "StatsBase"]
-git-tree-sha1 = "63fdaffe29fdd3dc7c96de87ce890d4398ec7661"
+git-tree-sha1 = "06c114eaad4566df6287c5d303c194309f923efb"
 uuid = "c8885935-8500-56a7-9867-7708b20db0eb"
-version = "2.1.0"
+version = "2.1.1"
 
 [[deps.FixedPointNumbers]]
 deps = ["Statistics"]
@@ -819,17 +1000,58 @@ version = "1.0.10+0"
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
+[[deps.GADM]]
+deps = ["ArchGDAL", "DataDeps", "GeoInterface", "Logging", "Tables"]
+git-tree-sha1 = "5c7b6420512082cbfad419641ea68c151bda0526"
+uuid = "a8dd9ffe-31dc-4cf5-a379-ea69100a8233"
+version = "0.4.1"
+
+[[deps.GDAL]]
+deps = ["CEnum", "GDAL_jll", "NetworkOptions", "PROJ_jll"]
+git-tree-sha1 = "9ce70502472a9f23f8889f0f9e2be8451413fe7b"
+uuid = "add2ef01-049f-52c4-9ee2-e494f65e021a"
+version = "1.4.0"
+
+[[deps.GDAL_jll]]
+deps = ["Artifacts", "Expat_jll", "GEOS_jll", "JLLWrappers", "LibCURL_jll", "Libdl", "Libtiff_jll", "OpenJpeg_jll", "PROJ_jll", "Pkg", "SQLite_jll", "Zlib_jll", "Zstd_jll", "libgeotiff_jll"]
+git-tree-sha1 = "756a15a73ded80cf194e7458abeb6f559d5070e2"
+uuid = "a7073274-a066-55f0-b90d-d619367d196c"
+version = "300.500.0+1"
+
+[[deps.GEOS_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "4ceb4cdae127931b852ced4d3782bb51ab5e2632"
+uuid = "d604d12d-fa86-5845-992e-78dc15976526"
+version = "3.10.2+0"
+
 [[deps.GLM]]
 deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "StatsModels"]
-git-tree-sha1 = "92b8d38886445d6d06e5f13201e57d018c4ff880"
+git-tree-sha1 = "039118892476c2bf045a43b88fcb75ed566000ff"
 uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
-version = "1.7.0"
+version = "1.8.0"
+
+[[deps.GeoFormatTypes]]
+git-tree-sha1 = "434166198434a5c2fcc0a1a59d22c3b0ad460889"
+uuid = "68eda718-8dee-11e9-39e7-89f7f65f511f"
+version = "0.4.1"
 
 [[deps.GeoInterface]]
-deps = ["RecipesBase"]
-git-tree-sha1 = "6b1a29c757f56e0ae01a35918a2c39260e2c4b98"
+deps = ["Extents"]
+git-tree-sha1 = "de6980e052d67c0da1872dfdb2c49fb7d3f56b07"
 uuid = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
-version = "0.5.7"
+version = "1.0.0"
+
+[[deps.GeoInterfaceRecipes]]
+deps = ["GeoInterface", "RecipesBase"]
+git-tree-sha1 = "29e1ec25cfb6762f503a19495aec347acf867a9e"
+uuid = "0329782f-3d07-4b52-b9f6-d3137cf03c7a"
+version = "1.0.0"
+
+[[deps.GeoTables]]
+deps = ["ArchGDAL", "GADM", "GeoInterface", "Meshes", "Shapefile", "Tables"]
+git-tree-sha1 = "47b68dd4c3d1214b8c489846547512817dcde9a7"
+uuid = "e502b557-6362-48c1-8219-d30d308dcdb0"
+version = "0.4.0"
 
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
@@ -851,9 +1073,9 @@ version = "2.68.3+2"
 
 [[deps.Graphics]]
 deps = ["Colors", "LinearAlgebra", "NaNMath"]
-git-tree-sha1 = "1c5a84319923bea76fa145d49e93aa4394c73fc2"
+git-tree-sha1 = "d61890399bc535850c4bf08e4e0d3a7ad0f21cbd"
 uuid = "a2bd30eb-e257-5431-a919-1863eab51364"
-version = "1.1.1"
+version = "1.1.2"
 
 [[deps.Graphite2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -863,9 +1085,9 @@ version = "1.3.14+0"
 
 [[deps.GridLayoutBase]]
 deps = ["GeometryBasics", "InteractiveUtils", "Observables"]
-git-tree-sha1 = "169c3dc5acae08835a573a8a3e25c62f689f8b5c"
+git-tree-sha1 = "d778af2dcb083169807d43aa9d15f9f7e3909d4c"
 uuid = "3955a311-db13-416c-9275-1d80ed98e5e9"
-version = "0.6.5"
+version = "0.7.7"
 
 [[deps.Grisu]]
 git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
@@ -874,9 +1096,9 @@ version = "1.0.2"
 
 [[deps.GroupedArrays]]
 deps = ["DataAPI", "Missings"]
-git-tree-sha1 = "93e21548d0a4b8ac793fea1aa1d720f5c9eaf11a"
+git-tree-sha1 = "44c812379b629eea08b6d25a196010f1f4b001e3"
 uuid = "6407cd72-fade-4a84-8a1e-56e431fc1533"
-version = "0.3.1"
+version = "0.3.3"
 
 [[deps.HTTP]]
 deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
@@ -890,6 +1112,12 @@ git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
 
+[[deps.HypergeometricFunctions]]
+deps = ["DualNumbers", "LinearAlgebra", "SpecialFunctions", "Test"]
+git-tree-sha1 = "cb7099a0109939f16a4d3b572ba8396b1f6c7c31"
+uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
+version = "0.3.10"
+
 [[deps.Hyperscript]]
 deps = ["Test"]
 git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
@@ -897,20 +1125,16 @@ uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
 version = "0.0.4"
 
 [[deps.HypertextLiteral]]
-git-tree-sha1 = "2b078b5a615c6c0396c77810d92ee8c6f470d238"
+deps = ["Tricks"]
+git-tree-sha1 = "c47c5fa4c5308f27ccaac35504858d8914e102f9"
 uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
-version = "0.9.3"
+version = "0.9.4"
 
 [[deps.IOCapture]]
 deps = ["Logging", "Random"]
 git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
 uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
 version = "0.2.2"
-
-[[deps.IfElse]]
-git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
-uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
-version = "0.1.1"
 
 [[deps.ImageCore]]
 deps = ["AbstractFFTs", "ColorVectorSpace", "Colors", "FixedPointNumbers", "Graphics", "MappedArrays", "MosaicViews", "OffsetArrays", "PaddedViews", "Reexport"]
@@ -919,10 +1143,10 @@ uuid = "a09fc81d-aa75-5fe9-8630-4744c3626534"
 version = "0.9.3"
 
 [[deps.ImageIO]]
-deps = ["FileIO", "IndirectArrays", "JpegTurbo", "Netpbm", "OpenEXR", "PNGFiles", "QOI", "Sixel", "TiffImages", "UUIDs"]
-git-tree-sha1 = "539682309e12265fbe75de8d83560c307af975bd"
+deps = ["FileIO", "IndirectArrays", "JpegTurbo", "LazyModules", "Netpbm", "OpenEXR", "PNGFiles", "QOI", "Sixel", "TiffImages", "UUIDs"]
+git-tree-sha1 = "d9a03ffc2f6650bd4c831b285637929d99a4efb5"
 uuid = "82e4d734-157c-48bb-816b-45c225c6df19"
-version = "0.6.2"
+version = "0.6.5"
 
 [[deps.Imath_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -973,16 +1197,16 @@ uuid = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 version = "0.13.6"
 
 [[deps.IntervalSets]]
-deps = ["Dates", "EllipsisNotation", "Statistics"]
-git-tree-sha1 = "bcf640979ee55b652f3b01650444eb7bbe3ea837"
+deps = ["Dates", "Random", "Statistics"]
+git-tree-sha1 = "57af5939800bce15980bddd2426912c4f83012d8"
 uuid = "8197267c-284f-5f27-9208-e0e47529a953"
-version = "0.5.4"
+version = "0.7.1"
 
 [[deps.InverseFunctions]]
 deps = ["Test"]
-git-tree-sha1 = "336cc738f03e069ef2cac55a104eb823455dca75"
+git-tree-sha1 = "b3364212fb5d870f724876ffcd34dd8ec6d98918"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
-version = "0.1.4"
+version = "0.1.7"
 
 [[deps.InvertedIndices]]
 git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
@@ -1046,6 +1270,12 @@ git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.1+0"
 
+[[deps.LERC_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "bf36f528eec6634efc60d7ec062008f171071434"
+uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
+version = "3.0.0+1"
+
 [[deps.LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "e5b909bcf985c5e2605737d2ce278ed791b89be6"
@@ -1060,6 +1290,11 @@ version = "1.3.0"
 [[deps.LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
 uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
+
+[[deps.LazyModules]]
+git-tree-sha1 = "a560dd966b386ac9ae60bdd3a3d3a326062d3c3e"
+uuid = "8cdb02fc-e678-4876-92c5-9defec4f444e"
+version = "0.3.1"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -1110,6 +1345,12 @@ git-tree-sha1 = "9c30530bf0effd46e15e0fdcf2b8636e78cbbd73"
 uuid = "4b2f31a3-9ecc-558c-b454-b3730dcb73e9"
 version = "2.35.0+0"
 
+[[deps.Libtiff_jll]]
+deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "3eb79b0ca5764d4799c06699573fd8f533259713"
+uuid = "89763e89-9b03-5906-acba-b20f662cd828"
+version = "4.4.0+0"
+
 [[deps.Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
@@ -1120,6 +1361,12 @@ version = "2.36.0+0"
 deps = ["Libdl", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
+[[deps.LittleCMS_jll]]
+deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pkg"]
+git-tree-sha1 = "110897e7db2d6836be22c18bffd9422218ee6284"
+uuid = "d3a379c0-f9a3-5b72-a4c0-6bf4d2e8af0f"
+version = "2.12.0+0"
+
 [[deps.Loess]]
 deps = ["Distances", "LinearAlgebra", "Statistics"]
 git-tree-sha1 = "46efcea75c890e5d820e670516dc156689851722"
@@ -1128,9 +1375,9 @@ version = "0.5.4"
 
 [[deps.LogExpFunctions]]
 deps = ["ChainRulesCore", "ChangesOfVariables", "DocStringExtensions", "InverseFunctions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "76c987446e8d555677f064aaac1145c4c17662f8"
+git-tree-sha1 = "09e4b894ce6a976c354a69041a04748180d43637"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "0.3.14"
+version = "0.3.15"
 
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -1141,17 +1388,23 @@ git-tree-sha1 = "e595b205efd49508358f7dc670a940c790204629"
 uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
 version = "2022.0.0+0"
 
+[[deps.MacroTools]]
+deps = ["Markdown", "Random"]
+git-tree-sha1 = "3d3e902b31198a27340d0bf00d6ac452866021cf"
+uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+version = "0.5.9"
+
 [[deps.Makie]]
-deps = ["Animations", "Base64", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "Contour", "Distributions", "DocStringExtensions", "FFMPEG", "FileIO", "FixedPointNumbers", "Formatting", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageIO", "IntervalSets", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MakieCore", "Markdown", "Match", "MathTeXEngine", "Observables", "OffsetArrays", "Packing", "PlotUtils", "PolygonOps", "Printf", "Random", "RelocatableFolders", "Serialization", "Showoff", "SignedDistanceFields", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "UnicodeFun"]
-git-tree-sha1 = "63de3b8a5c1f764e4e3a036c7752a632b4f0b8d1"
+deps = ["Animations", "Base64", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "Contour", "Distributions", "DocStringExtensions", "FFMPEG", "FileIO", "FixedPointNumbers", "Formatting", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageIO", "IntervalSets", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MakieCore", "Markdown", "Match", "MathTeXEngine", "Observables", "OffsetArrays", "Packing", "PlotUtils", "PolygonOps", "Printf", "Random", "RelocatableFolders", "Serialization", "Showoff", "SignedDistanceFields", "SparseArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "UnicodeFun"]
+git-tree-sha1 = "85b7bbc5ba64ee9c68fe32d908aa29f0a97a6145"
 uuid = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-version = "0.16.6"
+version = "0.17.5"
 
 [[deps.MakieCore]]
 deps = ["Observables"]
-git-tree-sha1 = "c5fb1bfac781db766f9e4aef96adc19a729bc9b2"
+git-tree-sha1 = "76b079514ddae2cb3bf839c499678e1ef6c5df78"
 uuid = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
-version = "0.2.1"
+version = "0.3.2"
 
 [[deps.MappedArrays]]
 git-tree-sha1 = "e8b359ef06ec72e8c030463fe02efe5527ee5142"
@@ -1169,9 +1422,9 @@ version = "1.2.0"
 
 [[deps.MathTeXEngine]]
 deps = ["AbstractTrees", "Automa", "DataStructures", "FreeTypeAbstraction", "GeometryBasics", "LaTeXStrings", "REPL", "RelocatableFolders", "Test"]
-git-tree-sha1 = "70e733037bbf02d691e78f95171a1fa08cdc6332"
+git-tree-sha1 = "5c1e3d66b3a36029de4e5ac07ab8bafd5a8041e5"
 uuid = "0a4f8689-d25c-4efe-a92b-7142dfc1aa53"
-version = "0.2.1"
+version = "0.4.1"
 
 [[deps.MbedTLS]]
 deps = ["Dates", "MbedTLS_jll", "Random", "Sockets"]
@@ -1182,6 +1435,18 @@ version = "1.0.3"
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
+
+[[deps.MeshViz]]
+deps = ["CategoricalArrays", "ColorSchemes", "Colors", "Makie", "Meshes", "Tables"]
+git-tree-sha1 = "4793ca0d6422ac2285303f98ba79cbc115a76517"
+uuid = "9ecf9c4f-6e5a-4b5e-83ae-06f2c7a661d8"
+version = "0.4.5"
+
+[[deps.Meshes]]
+deps = ["CategoricalArrays", "CircularArrays", "Distances", "IterTools", "IteratorInterfaceExtensions", "LinearAlgebra", "NearestNeighbors", "Random", "RecipesBase", "ReferenceFrameRotations", "SimpleTraits", "SparseArrays", "SpecialFunctions", "StaticArrays", "StatsBase", "TableTraits", "Tables"]
+git-tree-sha1 = "9beca5fb86e768ebab0ee9b7f0da68c2b39cfdc8"
+uuid = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
+version = "0.22.8"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1208,9 +1473,15 @@ version = "0.3.3"
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 
 [[deps.NaNMath]]
-git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
+git-tree-sha1 = "737a5957f387b17e74d4ad2f440eb330b39a62c5"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
-version = "0.3.7"
+version = "1.0.0"
+
+[[deps.NearestNeighbors]]
+deps = ["Distances", "StaticArrays"]
+git-tree-sha1 = "ded92de95031d4a8c61dfb6ba9adb6f1d8016ddd"
+uuid = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
+version = "0.4.10"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
@@ -1222,15 +1493,15 @@ version = "1.0.2"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 
 [[deps.Observables]]
-git-tree-sha1 = "fe29afdef3d0c4a8286128d4e45cc50621b1e43d"
+git-tree-sha1 = "dfd8d34871bc3ad08cd16026c1828e271d554db9"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.4.0"
+version = "0.5.1"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
-git-tree-sha1 = "aee446d0b3d5764e35289762f6a18e8ea041a592"
+git-tree-sha1 = "ec2e30596282d722f018ae784b7f44f3b88065e4"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.11.0"
+version = "1.12.6"
 
 [[deps.Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1253,6 +1524,12 @@ deps = ["Artifacts", "Imath_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
 git-tree-sha1 = "923319661e9a22712f24596ce81c54fc0366f304"
 uuid = "18a262bb-aa17-5467-a713-aee519bc75cb"
 version = "3.1.1+0"
+
+[[deps.OpenJpeg_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Libtiff_jll", "LittleCMS_jll", "Pkg", "libpng_jll"]
+git-tree-sha1 = "76374b6e7f632c130e78100b166e5a48464256f8"
+uuid = "643b3616-a352-519d-856d-80112ee9badc"
+version = "2.4.0+0"
 
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1289,15 +1566,21 @@ version = "8.44.0+0"
 
 [[deps.PDMats]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "c8c62e4aa5bbd0e48bafe294d4325fc87194a5ed"
+git-tree-sha1 = "3e32c8dbbbe1159a5057c80b8a463369a78dd8d8"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
-version = "0.11.9"
+version = "0.11.12"
 
 [[deps.PNGFiles]]
 deps = ["Base64", "CEnum", "ImageCore", "IndirectArrays", "OffsetArrays", "libpng_jll"]
 git-tree-sha1 = "e925a64b8585aa9f4e3047b8d2cdc3f0e79fd4e4"
 uuid = "f57f5aa1-a3ce-4bc8-8ab9-96f992907883"
 version = "0.3.16"
+
+[[deps.PROJ_jll]]
+deps = ["Artifacts", "JLLWrappers", "LibCURL_jll", "Libdl", "Libtiff_jll", "Pkg", "SQLite_jll"]
+git-tree-sha1 = "12bd68665a0c3cb4635c4359d3fa9e2769ed59e5"
+uuid = "58948b4f-47e0-5654-a9ad-f609743f8632"
+version = "900.0.0+0"
 
 [[deps.Packing]]
 deps = ["GeometryBasics"]
@@ -1319,9 +1602,9 @@ version = "1.50.3+0"
 
 [[deps.Parsers]]
 deps = ["Dates"]
-git-tree-sha1 = "1285416549ccfcdf0c50d4997a94331e88d68413"
+git-tree-sha1 = "0044b23da09b5608b4ecacb4e5e6c6332f833a7e"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.3.1"
+version = "2.3.2"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1347,9 +1630,9 @@ version = "1.2.0"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
-git-tree-sha1 = "670e559e5c8e191ded66fa9ea89c97f10376bb4c"
+git-tree-sha1 = "8d1f54886b9037091edf146b517989fc4a09efec"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.7.38"
+version = "0.7.39"
 
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
@@ -1426,11 +1709,17 @@ git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "1.2.2"
 
+[[deps.ReferenceFrameRotations]]
+deps = ["Crayons", "LinearAlgebra", "Printf", "Random", "StaticArrays"]
+git-tree-sha1 = "ec9bde2e30bc221e05e20fcec9a36a9c315e04a6"
+uuid = "74f56ac7-18b3-5285-802d-d4bd4f104033"
+version = "3.0.0"
+
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
-git-tree-sha1 = "cdbd3b1338c72ce29d9584fdbe9e9b70eeb5adca"
+git-tree-sha1 = "307761d71804208c0c62abdbd0ea6822aa5bbefd"
 uuid = "05181044-ff0b-4ac5-8273-598c1e38db00"
-version = "0.1.3"
+version = "0.2.0"
 
 [[deps.Requires]]
 deps = ["UUIDs"]
@@ -1458,11 +1747,17 @@ git-tree-sha1 = "7dbc15af7ed5f751a82bf3ed37757adf76c32402"
 uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
 version = "3.4.1"
 
+[[deps.SQLite_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
+git-tree-sha1 = "b6d006c4c57278d532de38912e16adf626c949c7"
+uuid = "76ed43ae-9a5d-5a62-8c75-30186b810ce8"
+version = "3.38.4+0"
+
 [[deps.ScanByte]]
 deps = ["Libdl", "SIMD"]
-git-tree-sha1 = "9cc2955f2a254b18be655a4ee70bc4031b2b189e"
+git-tree-sha1 = "c49318f1b9ca3d927ae576d323fa6f724d01ba53"
 uuid = "7b38b023-a4d7-4c5e-8d43-3f3097f304eb"
-version = "0.3.0"
+version = "0.3.1"
 
 [[deps.Scratch]]
 deps = ["Dates"]
@@ -1472,12 +1767,18 @@ version = "1.1.0"
 
 [[deps.SentinelArrays]]
 deps = ["Dates", "Random"]
-git-tree-sha1 = "6a2f7d70512d205ca8c7ee31bfa9f142fe74310c"
+git-tree-sha1 = "db8481cf5d6278a121184809e9eb1628943c7704"
 uuid = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
-version = "1.3.12"
+version = "1.3.13"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+
+[[deps.Shapefile]]
+deps = ["DBFTables", "Extents", "GeoFormatTypes", "GeoInterface", "GeoInterfaceRecipes", "RecipesBase", "Tables"]
+git-tree-sha1 = "2f400236c85ba357dfdc2a56af80c939dc118f02"
+uuid = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
+version = "0.8.0"
 
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
@@ -1500,6 +1801,12 @@ git-tree-sha1 = "d263a08ec505853a5ff1c1ebde2070419e3f28e9"
 uuid = "73760f76-fbc4-59ce-8f25-708e95d2df96"
 version = "0.4.0"
 
+[[deps.SimpleTraits]]
+deps = ["InteractiveUtils", "MacroTools"]
+git-tree-sha1 = "5d7e3f4e11935503d3ecaf7186eac40602e7d231"
+uuid = "699a6c99-e7fa-54fc-8d76-47d257e15c1d"
+version = "0.9.4"
+
 [[deps.Sixel]]
 deps = ["Dates", "FileIO", "ImageCore", "IndirectArrays", "OffsetArrays", "REPL", "libsixel_jll"]
 git-tree-sha1 = "8fb59825be681d451c246a795117f317ecbcaa28"
@@ -1521,9 +1828,9 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[deps.SpecialFunctions]]
 deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "5ba658aeecaaf96923dce0da9e703bd1fe7666f9"
+git-tree-sha1 = "a9e798cae4867e3a41cae2dd9eb60c047f1212db"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.1.4"
+version = "2.1.6"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]
@@ -1531,17 +1838,11 @@ git-tree-sha1 = "46e589465204cd0c08b4bd97385e4fa79a0c770c"
 uuid = "cae243ae-269e-4f55-b966-ac2d0dc13c15"
 version = "0.1.1"
 
-[[deps.Static]]
-deps = ["IfElse"]
-git-tree-sha1 = "5309da1cdef03e95b73cd3251ac3a39f887da53e"
-uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
-version = "0.6.4"
-
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "cd56bf18ed715e8b09f06ef8c6b781e6cdc49911"
+git-tree-sha1 = "2bbd9f2e40afd197a1379aef05e0d85dba649951"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.4.4"
+version = "1.4.7"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1549,9 +1850,9 @@ uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[deps.StatsAPI]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "c82aaa13b44ea00134f8c9c89819477bd3986ecd"
+git-tree-sha1 = "2c11d7290036fe7aac9038ff312d3b3a2a5bf89e"
 uuid = "82ae8749-77ed-4fe6-ae5f-f523153014b0"
-version = "1.3.0"
+version = "1.4.0"
 
 [[deps.StatsBase]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "LogExpFunctions", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
@@ -1560,10 +1861,10 @@ uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.16"
 
 [[deps.StatsFuns]]
-deps = ["ChainRulesCore", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "5950925ff997ed6fb3e985dcce8eb1ba42a0bbe7"
+deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "5783b877201a82fc0014cbf381e7e6eb130473a4"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "0.9.18"
+version = "1.0.1"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
@@ -1573,9 +1874,9 @@ version = "0.6.30"
 
 [[deps.StructArrays]]
 deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
-git-tree-sha1 = "e75d82493681dfd884a357952bbd7ab0608e1dc3"
+git-tree-sha1 = "9abba8f8fb8458e9adf07c8a2377a070674a24f1"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
-version = "0.6.7"
+version = "0.6.8"
 
 [[deps.SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -1629,6 +1930,11 @@ git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.6"
 
+[[deps.Tricks]]
+git-tree-sha1 = "6bac775f2d42a611cdfcd1fb217ee719630c4175"
+uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
+version = "0.1.6"
+
 [[deps.URIs]]
 git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
 uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
@@ -1649,9 +1955,9 @@ version = "0.4.1"
 
 [[deps.Vcov]]
 deps = ["Combinatorics", "GroupedArrays", "LinearAlgebra", "StatsBase", "Tables"]
-git-tree-sha1 = "b382811c8beba117f70c07a42f3f18b3075a39db"
+git-tree-sha1 = "1233e304ac41897767c137f6ee281391d6ebfb0e"
 uuid = "ec2bfdc2-55df-4fc9-b9ae-4958c2cf2486"
-version = "0.5.0"
+version = "0.5.2"
 
 [[deps.WeakRefStrings]]
 deps = ["DataAPI", "InlineStrings", "Parsers"]
@@ -1667,9 +1973,9 @@ version = "0.5.5"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "1acf5bdf07aa0907e0a37d3718bb88d4b687b74a"
+git-tree-sha1 = "58443b63fb7e465a8a7210828c91c08b92132dff"
 uuid = "02c8fc9c-b97f-50b9-bbe4-9be30ff0a78a"
-version = "2.9.12+0"
+version = "2.9.14+0"
 
 [[deps.XSLT_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libgcrypt_jll", "Libgpg_error_jll", "Libiconv_jll", "Pkg", "XML2_jll", "Zlib_jll"]
@@ -1729,6 +2035,12 @@ version = "1.4.0+3"
 deps = ["Libdl"]
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
 
+[[deps.Zstd_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "e45044cd873ded54b6a5bac0eb5c971392cf1927"
+uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
+version = "1.5.2+0"
+
 [[deps.isoband_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "51b5eeb3f98367157a7a12a1fb0aa5328946c03c"
@@ -1750,6 +2062,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "daacc84a041563f965be61859a36e17c4e4fcd55"
 uuid = "f638f0a6-7fb0-5443-88ba-1cc74229b280"
 version = "2.0.2+0"
+
+[[deps.libgeotiff_jll]]
+deps = ["Artifacts", "JLLWrappers", "LibCURL_jll", "Libdl", "Libtiff_jll", "PROJ_jll", "Pkg"]
+git-tree-sha1 = "e51bca193c8a4774dc1d2e5d40d5c4491c1b4fd4"
+uuid = "06c338fa-64ff-565b-ac2f-249532af990e"
+version = "1.7.1+0"
 
 [[deps.libpng_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
@@ -1791,12 +2109,29 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╠═aa8593ef-3f6f-4b0c-8046-f88aef680918
+# ╠═c28f291b-e805-4629-9bb4-3e5c7c5436bc
+# ╠═94686899-25fd-4d28-9894-5dcdc2650efe
+# ╠═c868737f-5bf4-4705-8b75-154390774e17
+# ╠═e8183f41-5921-4bfc-a262-6ac6b165870c
+# ╠═85768c95-3f0c-43ad-9e37-c479c9bb6a5b
+# ╠═edf2ff0d-ab91-47ff-ae03-cee7507601a1
+# ╠═9efde0b5-48dd-4766-bc66-10a69702a565
+# ╠═18f3c795-82f6-49f4-8a0b-3345e1893e32
+# ╠═c9f03768-f6bd-4b52-b18f-a4b6698b23ca
+# ╠═1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
+# ╠═301662e7-2d65-4b3b-9128-c415918e0058
+# ╠═ac0699ba-d578-45e9-996a-a7c88111aa4a
+# ╠═58df19fa-9f1b-49db-9302-b8003ff8244e
+# ╠═ddd7b231-ceac-4209-8499-cdf76ed3617a
 # ╠═2357bd9e-93e2-468e-8bd4-7720f07eed5e
 # ╠═fefa0c22-b554-49d5-a024-2f5307f13b31
 # ╠═0411bfbb-8790-4fab-9f7d-e1b2abe55aaa
 # ╠═81fe46fa-3b6c-47f4-997c-1b1a3e292541
 # ╠═af98fe40-d533-46fc-a3da-2cee27a40b9e
+# ╠═674087cc-b493-4428-9b89-9996345bfa00
 # ╠═5f07e878-cfc1-49b5-a9c9-be7b254fab1a
+# ╠═cbe5d7ba-da24-4ed5-a762-48d4e6aadb2a
 # ╠═69eb0012-68d9-4b0f-b141-51c2f20edbab
 # ╠═7902b275-2440-4297-8f8d-2715d43bbc62
 # ╠═7eaf948a-b4e3-45df-a765-d61df175e54b
