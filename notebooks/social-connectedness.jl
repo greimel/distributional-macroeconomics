@@ -43,29 +43,32 @@ using StatsBase: weights
 # ╔═╡ 93c33060-d39f-4ece-ab2c-c929cc249a5b
 using PlutoUI
 
+# ╔═╡ cc13875f-0407-4749-a30e-39737c28c8b3
+md"""
+## Getting the shapes for plotting maps
+"""
+
 # ╔═╡ 94686899-25fd-4d28-9894-5dcdc2650efe
 shapes0 = GeoTables.gadm("USA", depth=2);
-
-# ╔═╡ c868737f-5bf4-4705-8b75-154390774e17
-Meshes.centroid(shapes0.geometry[1])
 
 # ╔═╡ e8183f41-5921-4bfc-a262-6ac6b165870c
 shapes_df = @chain shapes0 begin
 	DataFrame
-	@subset(:NAME_1 ∉ ["Alaska", "Hawaii"])
-	@transform(_, :number = @c 1:size(_, 1))
-	@transform(:geometry = multi_to_multi(:geometry))
-	@select!(:state_name = :NAME_1, :county_name = :NAME_2,
-		:number, :geometry, :GID_2, :TYPE_2, :ENGTYPE_2)
-	transform!(:GID_2 => ByRow(GID2_to_fips) => AsTable)
-	@transform!(:county_matching = clean_county_name_for_matching(:county_name))
-	@subset!(:TYPE_2 ∉ ["Water body"])
-	@select!(:county_matching, :geometry, :state_name)
+	@subset(:TYPE_2 ∉ ["Water body"])
+	@subset!(:NAME_1 ∉ ["Alaska", "Hawaii"])
+	@select!(
+		:center = point_to_point(Meshes.centroid(:geometry)),		
+		#:area = Meshes.area(:geometry),
+		:geometry = multi_to_multi(:geometry),
+		:state_name = :NAME_1, #:county_name = :NAME_2,
+		#:GID_2 => ByRow(GID2_to_fips) => AsTable
+		:county_matching = clean_county_name_for_matching(:NAME_2)
+	)
 end
 
 # ╔═╡ 85768c95-3f0c-43ad-9e37-c479c9bb6a5b
-@chain pop_df begin
-	@select(:fips, :population2010, :state_name, :county_name,
+shapes_pop_df = @chain pop_df begin
+	@select(:fips, :state, :county, :population2010, :state_name, :county_name,
 		:county_matching = clean_county_name_for_matching(:county_name)
 	)
 	innerjoin(shapes_df, on = [:state_name, :county_matching], makeunique=true)
@@ -96,12 +99,6 @@ function clean_county_name_for_matching(county)
 	county_match = lowercase(county_match)
 end
 
-# ╔═╡ 9efde0b5-48dd-4766-bc66-10a69702a565
-
-
-# ╔═╡ 18f3c795-82f6-49f4-8a0b-3345e1893e32
-state_df
-
 # ╔═╡ c9f03768-f6bd-4b52-b18f-a4b6698b23ca
 function GID2_to_fips(code)
 	_, state, county_x = split(code, ".")
@@ -113,12 +110,13 @@ end
 
 # ╔═╡ ac0699ba-d578-45e9-996a-a7c88111aa4a
 begin
-	function point_to_point(point)
-		point |> collect |> GeometryBasics.Point
-	end
+	point_to_point = GeometryBasics.Point ∘ Meshes.coordinates 
 	
 	function chain_to_polygon(chain)
-		chain |> Meshes.vertices .|> Meshes.coordinates .|> point_to_point |> GeometryBasics.Polygon
+		chain |> Meshes.vertices .|>
+		point_to_point |>
+		#Meshes.coordinates .|> GeometryBasics.Point |>
+		GeometryBasics.Polygon
 	end
 
 	function multi_to_multi(multi_polygon)
@@ -127,9 +125,117 @@ begin
 end
 
 # ╔═╡ 58df19fa-9f1b-49db-9302-b8003ff8244e
-@chain states_df begin
-	data(_) * mapping(:geometry, color = :county) * visual(Poly)
+@chain shapes_pop_df begin
+	data(_) * (mapping(:geometry, color = :population2010 => log) * visual(Poly) + mapping(:center) * visual(Scatter, markersize = 1))
 	draw
+end
+
+# ╔═╡ e889d127-4796-4a89-ab36-b39bae718b6d
+md"""
+## Real estate prices
+"""
+
+# ╔═╡ 9b4cc5c3-ce13-4f90-b41e-d7a7398f3e65
+@chain zillow_df begin
+	@subset(!ismissing(:hpi), :month == 3, :year ∈ 2000:5:2020)
+	disallowmissing
+	innerjoin(shapes_pop_df, on = [:fips, :state, :county])
+	data(_) * mapping(:geometry, color = :hpi => log, layout = :year => nonnumeric) * visual(Poly)
+	draw
+end
+
+# ╔═╡ decc7aec-daa8-42e2-a62d-e09c2bf559cd
+@chain zillow_df begin
+	leftjoin(pop_df, on = [:state, :county, :fips])
+	@subset(!ismissing(:hpi))
+	@groupby(:date = Date(:year, :month))
+	@aside total = sum(pop_df.population2010)
+	@combine(:coverage = sum(:population2010) / total)
+	data(_) * mapping(:date => "", :coverage) * visual(Lines)
+	draw(axis=(title="What fraction of the US population do Zillow data cover?",))
+end
+
+# ╔═╡ 288cafba-1854-49e0-89ac-350282c3e249
+@chain zillow_df begin
+	leftjoin(pop_df, on = [:fips, :state, :county])
+	@subset(!ismissing(:hpi))
+	disallowmissing(:population2010)
+	@groupby(:date = Date(:year, :month), :state)
+	@combine(:hpi = mean(:hpi, weights(:population2010)), :pop = sum(:population2010))
+	data(_) * mapping(:date => "", :hpi => log, group=:state => nonnumeric) * visual(Lines)
+	draw
+end
+
+# ╔═╡ e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
+zillow_growth_df = @chain zillow_pop_df begin
+	sort([:fips, :year])
+	@groupby(:fips)
+	@transform(
+		:Δ_hpi = @c([missing; diff(:hpi)]),
+		:Δ_log_hpi = @c([missing; diff(log.(:hpi))])
+	)
+	@groupby(:fips)
+	@transform(
+		:l_hpi = @c(lag(:hpi)),
+		:l_Δ_hpi = @c(lag(:Δ_hpi)),
+		:l_Δ_log_hpi = @c(lag(:Δ_log_hpi))
+	)
+end
+
+# ╔═╡ f3df7592-bc70-4cc4-8ad0-778d48d75dc5
+@chain zillow_growth_df begin
+	@transform(:pop = log(:population2010 / 1000))
+	@subset(!ismissing(:Δ_log_hpi), !ismissing(:l_Δ_log_hpi))
+	data(_) * mapping(:Δ_log_hpi, :l_Δ_log_hpi) * (visual(Scatter, color=(:blue, 0.1)) * mapping(markersize = :pop) + AlgebraOfGraphics.density() * mapping(weights = :population2010) * visual(Contour))
+	draw
+end
+
+# ╔═╡ 507dcf3d-4751-4437-bd52-0f6a56b0f221
+
+
+# ╔═╡ bb4d5193-6b4a-4443-b3e4-a50a0e370eb2
+md"""
+# Price experiences of friends
+
+How much did house prices grow where friends live?
+"""
+
+# ╔═╡ c485a1ce-54b5-4f9b-8ab0-f6739af6344a
+friends_experience_df = @chain county_df begin
+	innerjoin(select(pop_df, :population2010, :fips), on = :fr_loc=>:fips)
+	@transform(:sci_pop = :scaled_sci * :population2010)
+	sort(:user_loc)
+	@subset(:user_loc < 5000)
+	groupby(:user_loc)
+	combine([:user_loc, :fr_loc, :sci_pop] => friends_exp(zillow_growth_df, :Δ_log_hpi) => AsTable)
+end
+
+# ╔═╡ 3c0bbf62-3bc2-429c-a8d6-47854cc55da1
+function friends_exp(x_df0, var)
+	x_df = @chain x_df0 begin
+		@select(:fips, :year, :x = $(var))
+		@subset(!ismissing(:x))
+	end
+		
+	function(user_loc, fr_loc, sci_pop)#fips, sci_pop)
+		user_loc = only(unique(user_loc))
+	
+		@chain begin
+			DataFrame(; fr_loc, sci_pop)
+			sort!(:fr_loc)
+			rightjoin(_, x_df, on = :fr_loc => :fips, makeunique=true)
+			@subset!(:fr_loc != user_loc)
+			disallowmissing!([:sci_pop, :x])
+			@groupby(:year)
+			@combine(:friends_exp = mean(:x, weights(:sci_pop)))
+		end
+	end
+end
+
+# ╔═╡ 9d975887-a482-4d30-9600-1d9ac7e3821e
+zillow_pop_df = @chain zillow_df_annual begin
+	leftjoin(pop_df, on = [:fips])
+	@select(:year, :hpi, :fips, :population2010)
 end
 
 # ╔═╡ ddd7b231-ceac-4209-8499-cdf76ed3617a
@@ -205,15 +311,15 @@ zillow_df = @chain zillow_df0 begin
 	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
 	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
 	@transform(:date = Date(:date))
-	@select(:year = year(:date), :month = month(:date), Not(:date))
+	@select(:year = year(:date), :month = month(:date), Not(:date), :fips = parse(Int, string(:state)*lpad(:county, 3, '0')))
 end
 
 # ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
 zillow_df_annual = @chain zillow_df begin
-	@groupby(:state, :county, :year)
+	@groupby(:fips, :year)
 	@combine(:hpi = mean(:hpi))
 	@transform(:lhpi = log(:hpi))
-	@groupby(:state, :county)
+	@groupby(:fips)
 	@transform(
 		:lhpi_D1 = @c(:lhpi - lag(:lhpi)),
 		:lhpi_D2 = @c(:lhpi - lag(:lhpi, 2)),
@@ -223,7 +329,7 @@ end
 
 # ╔═╡ 7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
 zillow_df_annual_stacked = @chain zillow_df_annual begin
-	stack(Not([:state, :county, :year]))
+	stack(Not([:fips, :year]))
 	@subset(!ismissing(:value))
 end
 
@@ -2109,20 +2215,29 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─cc13875f-0407-4749-a30e-39737c28c8b3
 # ╠═aa8593ef-3f6f-4b0c-8046-f88aef680918
 # ╠═c28f291b-e805-4629-9bb4-3e5c7c5436bc
+# ╠═1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
+# ╠═301662e7-2d65-4b3b-9128-c415918e0058
 # ╠═94686899-25fd-4d28-9894-5dcdc2650efe
-# ╠═c868737f-5bf4-4705-8b75-154390774e17
 # ╠═e8183f41-5921-4bfc-a262-6ac6b165870c
 # ╠═85768c95-3f0c-43ad-9e37-c479c9bb6a5b
 # ╠═edf2ff0d-ab91-47ff-ae03-cee7507601a1
-# ╠═9efde0b5-48dd-4766-bc66-10a69702a565
-# ╠═18f3c795-82f6-49f4-8a0b-3345e1893e32
 # ╠═c9f03768-f6bd-4b52-b18f-a4b6698b23ca
-# ╠═1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
-# ╠═301662e7-2d65-4b3b-9128-c415918e0058
 # ╠═ac0699ba-d578-45e9-996a-a7c88111aa4a
 # ╠═58df19fa-9f1b-49db-9302-b8003ff8244e
+# ╟─e889d127-4796-4a89-ab36-b39bae718b6d
+# ╠═9b4cc5c3-ce13-4f90-b41e-d7a7398f3e65
+# ╠═decc7aec-daa8-42e2-a62d-e09c2bf559cd
+# ╠═288cafba-1854-49e0-89ac-350282c3e249
+# ╠═e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
+# ╠═f3df7592-bc70-4cc4-8ad0-778d48d75dc5
+# ╠═507dcf3d-4751-4437-bd52-0f6a56b0f221
+# ╠═bb4d5193-6b4a-4443-b3e4-a50a0e370eb2
+# ╠═c485a1ce-54b5-4f9b-8ab0-f6739af6344a
+# ╠═3c0bbf62-3bc2-429c-a8d6-47854cc55da1
+# ╠═9d975887-a482-4d30-9600-1d9ac7e3821e
 # ╠═ddd7b231-ceac-4209-8499-cdf76ed3617a
 # ╠═2357bd9e-93e2-468e-8bd4-7720f07eed5e
 # ╠═fefa0c22-b554-49d5-a024-2f5307f13b31
