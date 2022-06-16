@@ -1,12 +1,12 @@
 ### A Pluto.jl notebook ###
-# v0.19.8
+# v0.19.9
 
 using Markdown
 using InteractiveUtils
 
 # ╔═╡ 8d268ee9-6a3b-4bf3-a0d1-59d86fe8f263
 md"""
-`social-connectedness.jl` | **Version 1.0** | _last updated on June 15, 2022_
+`social-connectedness.jl` | **Version 1.1** | _last updated on June 16, 2022_
 """
 
 # ╔═╡ 662cad72-af63-41c9-a895-5633be486f3f
@@ -93,7 +93,7 @@ Let counties be indexed by ``c`` and time ``t`` run from 2001 to 2016. We run th
 
 # ╔═╡ dbba5ead-cd2a-4714-9e56-dd34c7d72039
 md"""
-👉 Look at the output of the regressions below. Interpret the results. Are you convinced? You might want to play around with the specification to see check robustness.
+👉 Look at the output of the regressions below. Interpret the results. Are you convinced? You might want to play around with the specification to check robustness.
 """
 
 # ╔═╡ 8001cd65-2542-4a1a-93b8-2e7243226956
@@ -136,10 +136,7 @@ md"""
 """
 
 # ╔═╡ aa8593ef-3f6f-4b0c-8046-f88aef680918
-using GADM, GeoTables
-
-# ╔═╡ c28f291b-e805-4629-9bb4-3e5c7c5436bc
-using MeshViz
+using GeoTables
 
 # ╔═╡ 1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
 using GeoTables.Meshes
@@ -300,9 +297,6 @@ zillow_pop_df = @chain zillow_df begin
 	@select(:year, :hpi, :fips, :population2010)
 end
 
-# ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
-
-
 # ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
 zillow_df = @chain zillow_df0 begin
 	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
@@ -351,8 +345,8 @@ end
 end
   ╠═╡ =#
 
-# ╔═╡ 67697ae7-049e-42e2-b476-49c4fd807823
-using LinearAlgebra: norm
+# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
+county_df = SCI_data(:US_counties)
 
 # ╔═╡ bb4d5193-6b4a-4443-b3e4-a50a0e370eb2
 md"""
@@ -457,14 +451,6 @@ end
 	draw
 end
 
-# ╔═╡ 445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
-md"""
-# Friends' house price experiences
-"""
-
-# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
-county_df = SCI_data(:US_counties)
-
 # ╔═╡ 844c432e-c804-4a47-adad-bef2887f7dc0
 md"""
 # Appendix
@@ -474,7 +460,10 @@ md"""
 using Dates
 
 # ╔═╡ c1c01e0e-d155-11ec-14a0-1173f9a37f8f
-using RData
+using RData: RData
+
+# ╔═╡ 67697ae7-049e-42e2-b476-49c4fd807823
+using LinearAlgebra: norm
 
 # ╔═╡ 54c7ee04-19f9-4083-8869-f6a9d07ba51f
 using DataFrames, DataFrameMacros, Chain
@@ -496,6 +485,9 @@ TableOfContents()
 
 # ╔═╡ af98fe40-d533-46fc-a3da-2cee27a40b9e
 using ShiftedArrays
+
+# ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
+using HTTP: HTTP
 
 # ╔═╡ e6848c06-8895-444b-864f-6e4c86e488c1
 md"""
@@ -675,9 +667,6 @@ rentals_zip_url = "https://files.zillowstatic.com/research/public_csvs/zori/Zip_
 # ╔═╡ 872cb78f-27d3-40f5-b9e9-e116132a473c
 prices_zip_url = "https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
 
-# ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
-import HTTP
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -690,11 +679,9 @@ DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
-GADM = "a8dd9ffe-31dc-4cf5-a379-ea69100a8233"
 GeoTables = "e502b557-6362-48c1-8219-d30d308dcdb0"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-MeshViz = "9ecf9c4f-6e5a-4b5e-83ae-06f2c7a661d8"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 RData = "df47a6cb-8c03-5eed-afd8-b6050d6c41da"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
@@ -710,10 +697,8 @@ DataDeps = "~0.7.8"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 FixedEffectModels = "~1.6.6"
-GADM = "~0.4.1"
 GeoTables = "~0.4.0"
 HTTP = "~0.9.17"
-MeshViz = "~0.4.5"
 PlutoUI = "~0.7.39"
 RData = "~0.8.3"
 ShiftedArrays = "~1.0.0"
@@ -1586,12 +1571,6 @@ version = "1.0.3"
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 
-[[deps.MeshViz]]
-deps = ["CategoricalArrays", "ColorSchemes", "Colors", "Makie", "Meshes", "Tables"]
-git-tree-sha1 = "4793ca0d6422ac2285303f98ba79cbc115a76517"
-uuid = "9ecf9c4f-6e5a-4b5e-83ae-06f2c7a661d8"
-version = "0.4.5"
-
 [[deps.Meshes]]
 deps = ["CategoricalArrays", "CircularArrays", "Distances", "IterTools", "IteratorInterfaceExtensions", "LinearAlgebra", "NearestNeighbors", "Random", "RecipesBase", "ReferenceFrameRotations", "SimpleTraits", "SparseArrays", "SpecialFunctions", "StaticArrays", "StatsBase", "TableTraits", "Tables"]
 git-tree-sha1 = "9beca5fb86e768ebab0ee9b7f0da68c2b39cfdc8"
@@ -2277,7 +2256,6 @@ version = "3.5.0+0"
 # ╟─24013463-f8ea-463f-81e9-06542880dc8b
 # ╟─cc13875f-0407-4749-a30e-39737c28c8b3
 # ╠═aa8593ef-3f6f-4b0c-8046-f88aef680918
-# ╠═c28f291b-e805-4629-9bb4-3e5c7c5436bc
 # ╠═1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
 # ╠═301662e7-2d65-4b3b-9128-c415918e0058
 # ╠═94686899-25fd-4d28-9894-5dcdc2650efe
@@ -2294,14 +2272,13 @@ version = "3.5.0+0"
 # ╠═e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
 # ╠═f3df7592-bc70-4cc4-8ad0-778d48d75dc5
 # ╠═9d975887-a482-4d30-9600-1d9ac7e3821e
-# ╠═e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
 # ╠═c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
 # ╠═d6e02e8c-5783-4be7-aedc-7605f843d011
 # ╟─19bc4c50-66ed-49ea-ac30-283137a1aedf
 # ╟─f08a1afd-0ad6-4c85-98c1-28754356e73f
 # ╠═dd918f80-ac1f-46e9-ba6a-416e4bb2e39f
 # ╠═397ec8b4-5be1-4d13-a1ec-a9d1ddf8a00f
-# ╠═67697ae7-049e-42e2-b476-49c4fd807823
+# ╠═6afa713a-291c-41bc-94fc-466d64d73eef
 # ╟─bb4d5193-6b4a-4443-b3e4-a50a0e370eb2
 # ╠═f8c180f5-6976-4ce4-8d7e-4a162c400288
 # ╠═6cbf8d8c-29e1-4a8d-9359-5a6145ea8bd1
@@ -2313,11 +2290,10 @@ version = "3.5.0+0"
 # ╠═fefa0c22-b554-49d5-a024-2f5307f13b31
 # ╠═a6e7fdcb-0ad4-4b04-a032-ff14d3f63926
 # ╠═d5dc551e-c120-4a20-8c94-15e2e8300b7a
-# ╟─445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
-# ╠═6afa713a-291c-41bc-94fc-466d64d73eef
 # ╟─844c432e-c804-4a47-adad-bef2887f7dc0
 # ╠═e85d31e6-0068-44df-a88d-f245d90e21d1
 # ╠═c1c01e0e-d155-11ec-14a0-1173f9a37f8f
+# ╠═67697ae7-049e-42e2-b476-49c4fd807823
 # ╠═54c7ee04-19f9-4083-8869-f6a9d07ba51f
 # ╠═e3a83114-db7d-4488-9db7-14ed919b0f33
 # ╠═cb6557ad-1cc6-417b-8668-38e2399fd6af
@@ -2325,6 +2301,7 @@ version = "3.5.0+0"
 # ╠═93c33060-d39f-4ece-ab2c-c929cc249a5b
 # ╠═4953ba71-27ae-4197-9d2d-997c7f513159
 # ╠═af98fe40-d533-46fc-a3da-2cee27a40b9e
+# ╠═1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
 # ╟─e6848c06-8895-444b-864f-6e4c86e488c1
 # ╟─d43c8098-2c1e-48bc-8d82-64b110451ac4
 # ╠═48cc091a-afab-446a-a0dc-22b4f5572162
@@ -2344,6 +2321,5 @@ version = "3.5.0+0"
 # ╠═bd17661f-6d02-47e3-b2df-8f6bb3d99876
 # ╠═914522a3-ace0-49f1-8b87-50fa3af2dbb3
 # ╠═872cb78f-27d3-40f5-b9e9-e116132a473c
-# ╠═1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
