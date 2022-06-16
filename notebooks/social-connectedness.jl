@@ -203,21 +203,21 @@ How much did house prices grow where friends live?
 # ╔═╡ c485a1ce-54b5-4f9b-8ab0-f6739af6344a
 friends_experience_df = @chain county_df begin
 	innerjoin(select(pop_df, :population2010, :fips), on = :fr_loc=>:fips)
-	@transform(:sci_pop = :scaled_sci * :population2010)
-	sort(:user_loc)
+	@transform!(:sci_pop = :scaled_sci * :population2010)
+	sort!(:user_loc)
 	@subset(:user_loc < 5000)
 	groupby(:user_loc)
 	combine([:user_loc, :fr_loc, :sci_pop] => friends_exp(zillow_growth_df, :Δ_log_hpi) => AsTable)
 end
 
 # ╔═╡ 3c0bbf62-3bc2-429c-a8d6-47854cc55da1
-function friends_exp(x_df0, var)
+function friends_exp(x_df0, x)
 	x_df = @chain x_df0 begin
-		@select(:fips, :year, :x = $(var))
+		@select(:fips, :year, :x = $(x))
 		@subset(!ismissing(:x))
 	end
 		
-	function(user_loc, fr_loc, sci_pop)#fips, sci_pop)
+	function (user_loc, fr_loc, sci_pop)
 		user_loc = only(unique(user_loc))
 	
 		@chain begin
