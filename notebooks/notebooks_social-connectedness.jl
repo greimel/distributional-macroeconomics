@@ -26,13 +26,13 @@ We will use
 md"""
 ## Part 1: Friends' house price experiences (3 points)
 
-For a pair of regions ``(A, B)``, the Facebook Social Connectedness is defined as follows
+For a pair of regions ``(A, B)`` the Facebook Social Connectedness is defined as follows
 
 ```math
 \text{SCI}_{AB} = \frac{\text{\# FB friendships}_{AB}}{\text{\# FB users}_A \cdot \text{\#FB users}_B}
 ```
 
-For ``A\neq B`` the index measures how likely two random users ``(a, b) \in A \times B`` are friends with each other. Under the plausible assumption that Facebook friendships are representative for all friendships, we can use to measure how socially connected two regions are.
+For ``A\neq B`` the index measures how likely two random users ``(a, b) \in A \times B`` are friends with each other. Under the plausible assumption that Facebook friendships are representative for all friendships, we can use this measure to approxmiate how socially connected two regions are.
 
 We use the SCI to calculate the average house price change in the home counties of county ``c``'s friends. If ``p_{\tilde ct}`` is the change in log-house prices in period ``t``, the average friend of an inhabitant of county ``c`` will have experienced
 ```math
@@ -583,7 +583,7 @@ import CSV
 
 # ╔═╡ fe876989-2cb8-4846-a27f-67ed07e93335
 begin
-	using DataDeps
+	using DataDeps: DataDeps, DataDep, @datadep_str, register, unpack
 	ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 	
 	for (id, url) in sci_urls
