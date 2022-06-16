@@ -68,13 +68,13 @@ We will use
 md"""
 ## Part 1: Friends' house price experiences (3 points)
 
-For a pair of regions ``(A, B)``, the Facebook Social Connectedness is defined as follows
+For a pair of regions ``(A, B)`` the Facebook Social Connectedness is defined as follows
 
 ```math
 \text{SCI}_{AB} = \frac{\text{\# FB friendships}_{AB}}{\text{\# FB users}_A \cdot \text{\#FB users}_B}
 ```
 
-For ``A\neq B`` the index measures how likely two random users ``(a, b) \in A \times B`` are friends with each other. Under the plausible assumption that Facebook friendships are representative for all friendships, we can use to measure how socially connected two regions are.
+For ``A\neq B`` the index measures how likely two random users ``(a, b) \in A \times B`` are friends with each other. Under the plausible assumption that Facebook friendships are representative for all friendships, we can use this measure to approxmiate how socially connected two regions are.
 
 We use the SCI to calculate the average house price change in the home counties of county ``c``'s friends. If ``p_{\tilde ct}`` is the change in log-house prices in period ``t``, the average friend of an inhabitant of county ``c`` will have experienced
 ```math
@@ -443,9 +443,6 @@ md"""
 ## The HMDA mortgage database
 """
 
-# ╔═╡ 550295bd-ae15-404c-810a-f2f2561fcf5f
-hmda_df0 = RData.load(datadep"hmda-panel/hmda_big.RData")["hmda_big"]
-
 # ╔═╡ cdc99479-37cd-4ada-9ce0-08e136281a42
 hmda_panel_url = "https://gitlab.com/drechsel-grau-greimel/hmda/-/raw/master/data-processed/hmda_big.RData"
 
@@ -543,54 +540,10 @@ end
 # ╔═╡ cc203ba7-ab85-452f-b9c2-34dc0c0d937e
 import CSV
 
-# ╔═╡ d6e02e8c-5783-4be7-aedc-7605f843d011
-zillow_df0 = joinpath(datadep"zillow", "County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv") |> CSV.File |> DataFrame
-
-# ╔═╡ 48cc091a-afab-446a-a0dc-22b4f5572162
-function county_dist_data(id)
-	urls = dist_urls
-	id = string(id)
-	files = urls_to_files(urls)
-	valid_ids = first.(urls)
-	if id ∉ valid_ids
-		ArgumentError("provide one of $valid_ids") |> throw
-	end
-	path = joinpath(@datadep_str("county_dist_$id"), files[id])
-	
-	CSV.File(path) |> DataFrame
-end
-
-# ╔═╡ f3fbc391-0dea-4637-8911-126e9a52b913
-function SCI_data(id)
-	urls = sci_urls
-	id = Symbol(id)
-	files = urls_to_files(urls)
-	valid_ids = first.(urls)
-	if id ∉ valid_ids
-		ArgumentError("provide one of $valid_ids") |> throw
-	end
-	if id == :US_counties
-		path = joinpath(@datadep_str("SCI_$id"), "county_county.tsv")
-	else
-		path = joinpath(@datadep_str("SCI_$id"), files[id])
-	end
-	
-	CSV.File(path) |> DataFrame
-end
-
-# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
-county_df = SCI_data(:US_counties)
-
 # ╔═╡ 89e50510-636b-47ae-8f4a-7ef18317c284
 md"""
 ### Population data
 """
-
-# ╔═╡ fa730aed-a6f6-4a4a-94b2-76633eb8551b
-function get_pop(args...; kwargs...)
-	file = joinpath(datadep"county_pop", "co-est2019-alldata.csv")
-	df = CSV.File(file, args...; kwargs...) |> DataFrame
-end
 
 # ╔═╡ 8fb93eef-88c0-43b9-b193-4a8911ec8f15
 pop_url = "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv"
@@ -627,7 +580,7 @@ prices_zip_url = "https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_z
 
 # ╔═╡ fe876989-2cb8-4846-a27f-67ed07e93335
 begin
-	using DataDeps
+	using DataDeps: DataDeps, DataDep, @datadep_str, register, unpack
 	ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 	
 	for (id, url) in sci_urls
@@ -673,6 +626,53 @@ begin
 		hmda_panel_url,
 		"95e6e5d87915cf324912eb9a40b0ecfeeec3b8346ceb77d4b3cae16394db762d"
 	))
+end
+
+# ╔═╡ d6e02e8c-5783-4be7-aedc-7605f843d011
+zillow_df0 = joinpath(datadep"zillow", "County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv") |> CSV.File |> DataFrame
+
+# ╔═╡ 550295bd-ae15-404c-810a-f2f2561fcf5f
+hmda_df0 = RData.load(datadep"hmda-panel/hmda_big.RData")["hmda_big"]
+
+# ╔═╡ 48cc091a-afab-446a-a0dc-22b4f5572162
+function county_dist_data(id)
+	urls = dist_urls
+	id = string(id)
+	files = urls_to_files(urls)
+	valid_ids = first.(urls)
+	if id ∉ valid_ids
+		ArgumentError("provide one of $valid_ids") |> throw
+	end
+	path = joinpath(@datadep_str("county_dist_$id"), files[id])
+	
+	CSV.File(path) |> DataFrame
+end
+
+# ╔═╡ f3fbc391-0dea-4637-8911-126e9a52b913
+function SCI_data(id)
+	urls = sci_urls
+	id = Symbol(id)
+	files = urls_to_files(urls)
+	valid_ids = first.(urls)
+	if id ∉ valid_ids
+		ArgumentError("provide one of $valid_ids") |> throw
+	end
+	if id == :US_counties
+		path = joinpath(@datadep_str("SCI_$id"), "county_county.tsv")
+	else
+		path = joinpath(@datadep_str("SCI_$id"), files[id])
+	end
+	
+	CSV.File(path) |> DataFrame
+end
+
+# ╔═╡ 6afa713a-291c-41bc-94fc-466d64d73eef
+county_df = SCI_data(:US_counties)
+
+# ╔═╡ fa730aed-a6f6-4a4a-94b2-76633eb8551b
+function get_pop(args...; kwargs...)
+	file = joinpath(datadep"county_pop", "co-est2019-alldata.csv")
+	df = CSV.File(file, args...; kwargs...) |> DataFrame
 end
 
 # ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
