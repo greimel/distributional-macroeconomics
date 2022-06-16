@@ -91,7 +91,7 @@
             }
         ]
     },
-        {
+    {
         "title": "Heterogenous Agents in Continuous Time",
         "contents": [
             {
@@ -103,6 +103,17 @@
             {
                 "name": "Continuous time",
                 "notebook_path": "notebooks/continuous-time-new.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
+    },
+    {
+        "title": "Behavioural Macroeconomics",
+        "contents": [
+            {
+                "name": "Social networks and the housing market",
+                "notebook_path": "notebooks/social-connectedness.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
