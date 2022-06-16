@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ d9982d0b-432f-40c3-a3ec-237fa74042f3
 using InfinitesimalGenerators
 
+# ╔═╡ 97c6b1d5-1150-49ae-8c70-672ebb59e901
+using Distributions: Gamma, quantile
+
 # ╔═╡ b0bdc955-b391-4600-b223-ba0fe8f72445
 using LinearAlgebra: I
 
@@ -85,6 +88,13 @@ md"""
 ## Naively Simulating the CTMC
 """
 
+# ╔═╡ 3a9c46de-4cb8-4398-ade2-98e33cb741cd
+ts = let
+	T = 10
+	Δt = 0.01
+	ts = 0:Δt:T
+end
+
 # ╔═╡ fb201b0f-8ba3-459e-a3c6-75cf1697e628
 function simulate(Q, ts, s₀)
 	states = 1:size(Q, 1)
@@ -116,13 +126,6 @@ function simulate(Q, ts, s₀)
 	end
 
 	out
-end
-
-# ╔═╡ 3a9c46de-4cb8-4398-ade2-98e33cb741cd
-ts = let
-	T = 10
-	Δt = 0.01
-	ts = 0:Δt:T
 end
 
 # ╔═╡ ef83d144-c69c-43aa-a9ad-c91704315756
@@ -317,6 +320,45 @@ end
 # ╔═╡ b91b37e1-226a-4497-b78f-b86d6b44418a
 lines(xs, stationary_distribution(dp))
 
+# ╔═╡ 68b0a4a2-9062-406f-9f51-f1e34797aa67
+md"""
+# Trying the process from the other notebook
+"""
+
+# ╔═╡ c6453431-3e75-47fa-b3be-cb9fc5b652cb
+dp2 = let
+	
+	par = (; κy = 0.1, ybar = 1.0, σy = 0.07)
+	n_y = 10
+	distribution = Gamma(2 * par.κy * par.ybar / par.σy^2, par.σy^2 / (2 * par.κy))
+
+	ys = collect(range(quantile(distribution, 0.001), quantile(distribution, 0.9999), length = n_y))
+
+	
+	_drift(y, (; κy, ybar)) = κy * (ybar - y)
+	_volatility(y, (; σy)) = σy
+
+	μ = _drift.(ys, Ref(par))
+	σ = _volatility.(ys, Ref(par))
+
+#	@info μ .+ 0.5 σ.^2
+#	@info μ, σ
+	
+	dp = DiffusionProcess(ys, μ, σ) 
+end
+
+# ╔═╡ ff2e7087-1ab2-4606-9d46-616623824411
+stationary_distribution(dp2)
+
+# ╔═╡ 1af0bd25-677b-424b-aba0-73aedc9c0082
+lines(stationary_distribution(dp2))
+
+# ╔═╡ f4a3f21d-619f-4c58-8438-9f6443f6e9c0
+
+
+# ╔═╡ 498e87ce-0f7f-4fa7-b019-03cf6102ef7f
+generator(dp2)
+
 # ╔═╡ f21c9433-06a2-4b0c-b9f8-e64f827ced18
 md"""
 # Appendix
@@ -333,6 +375,7 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 InfinitesimalGenerators = "2fce0c6f-5f0b-5c85-85c9-2ffe1d5ee30d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
@@ -343,6 +386,7 @@ CairoMakie = "~0.8.3"
 Chain = "~0.4.10"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
+Distributions = "~0.25.62"
 InfinitesimalGenerators = "~0.4.0"
 PlutoUI = "~0.7.39"
 """
@@ -1691,6 +1735,13 @@ version = "3.5.0+0"
 # ╠═0ced208a-78a7-4b69-b33c-268eb01732c2
 # ╟─f57fec07-7dfc-4507-a7c1-c0a195a89455
 # ╠═b91b37e1-226a-4497-b78f-b86d6b44418a
+# ╟─68b0a4a2-9062-406f-9f51-f1e34797aa67
+# ╠═97c6b1d5-1150-49ae-8c70-672ebb59e901
+# ╠═c6453431-3e75-47fa-b3be-cb9fc5b652cb
+# ╠═ff2e7087-1ab2-4606-9d46-616623824411
+# ╠═1af0bd25-677b-424b-aba0-73aedc9c0082
+# ╠═f4a3f21d-619f-4c58-8438-9f6443f6e9c0
+# ╠═498e87ce-0f7f-4fa7-b019-03cf6102ef7f
 # ╟─f21c9433-06a2-4b0c-b9f8-e64f827ced18
 # ╠═b0bdc955-b391-4600-b223-ba0fe8f72445
 # ╠═6703af0e-7fcd-4c19-868b-06260584bec8
