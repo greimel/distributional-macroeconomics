@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.8
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -260,6 +260,16 @@ md"""
 # ╔═╡ c51b24d7-5897-4781-b508-43c2071ac902
 m0 = HuggettDiffusion(amin = -1, amax = 10)
 
+# ╔═╡ 62d34a89-3751-4a69-8ccb-723ead134d46
+md"""
+## Illustrate issue
+"""
+
+# ╔═╡ 3c6cf8ab-3aa4-4d7d-b824-3fc75a9121e5
+md"""
+## Illustrate issue (end)
+"""
+
 # ╔═╡ 588ca2c6-aa40-4f9b-b031-c9f33b8d88b3
 rs = range(0.03, 0.044, 10)
 #rs = [0.029, 0.044]
@@ -462,6 +472,24 @@ rs_itp = itp_interest_rate(rs₀, τs)
 # ╔═╡ af7d2940-ea36-443c-82a5-1f0e278ea357
 out0 = objective(m0, r0)
 
+# ╔═╡ c13e69e0-97cb-440e-8944-2a2d4830c6a2
+@chain out0.df begin
+	@groupby :y
+	@combine(:π_y = sum(:π))
+end
+
+# ╔═╡ 57f6a7d3-201d-4e81-ae41-4ea78e86411f
+@chain out0.df begin
+	data(_) * mapping(:a, :π, color = :y => nonnumeric) * visual(Lines)
+	draw
+end
+
+# ╔═╡ ef76785f-ef7f-4291-88f8-ba58022a3ccc
+@chain out0.df begin
+	data(_) * mapping(:a, :μa, color = :y => nonnumeric) * visual(Lines)
+	draw
+end
+
 # ╔═╡ ffd89433-2175-4402-b41d-e34a0f238dac
 objective(m1, r0).ζ
 
@@ -535,6 +563,25 @@ end
 
 # ╔═╡ 24fcfb5b-c189-4e08-883d-47c605ddfe58
 mean(out1.df.a, weights(out1.df.π))
+
+# ╔═╡ ddcce4b9-1d10-4e5e-854d-4237f7990a69
+let 
+
+	m = HuggettDiffusion(m0; r=r0)
+	a_grid = TwoSidedPowerSpacedGrid(; low = m.amin, high = m.amax, n = 500, frac_neg = 0.3, k_neg = 0.9, k_pos = 0.5)
+	
+	grid = OrderedDict(:y => collect(range(quantile(distribution, 0.001), quantile(distribution, 0.9999), length = 7)), 
+                        :a =>  a_grid
+                        )
+	(; df, results) = results_df(m0, grid)
+
+
+	@chain df begin
+		@groupby :y
+		@combine(:π_y = sum(:π))
+	end
+
+end
 
 # ╔═╡ 323c6284-ec8f-47b2-99de-59e78009b04d
 df_out = let
@@ -2207,6 +2254,12 @@ version = "3.5.0+0"
 # ╠═c51b24d7-5897-4781-b508-43c2071ac902
 # ╠═7c8c2634-7c79-4039-9563-ee6381347d0e
 # ╠═af7d2940-ea36-443c-82a5-1f0e278ea357
+# ╟─62d34a89-3751-4a69-8ccb-723ead134d46
+# ╠═c13e69e0-97cb-440e-8944-2a2d4830c6a2
+# ╠═57f6a7d3-201d-4e81-ae41-4ea78e86411f
+# ╠═ddcce4b9-1d10-4e5e-854d-4237f7990a69
+# ╠═ef76785f-ef7f-4291-88f8-ba58022a3ccc
+# ╟─3c6cf8ab-3aa4-4d7d-b824-3fc75a9121e5
 # ╠═588ca2c6-aa40-4f9b-b031-c9f33b8d88b3
 # ╠═323c6284-ec8f-47b2-99de-59e78009b04d
 # ╠═5fa48c22-83ee-48ea-bf0a-45eda5a92643
