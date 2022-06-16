@@ -22,12 +22,6 @@ using AlgebraOfGraphics.Makie.GeometryBasics
 # ╔═╡ 67697ae7-049e-42e2-b476-49c4fd807823
 using LinearAlgebra: norm
 
-# ╔═╡ af98fe40-d533-46fc-a3da-2cee27a40b9e
-using ShiftedArrays
-
-# ╔═╡ a5455cd9-fe6c-4bbe-a0c6-4537ddf585b5
-using Statistics: mean
-
 # ╔═╡ e85d31e6-0068-44df-a88d-f245d90e21d1
 using Dates
 
@@ -43,8 +37,14 @@ using CairoMakie, AlgebraOfGraphics
 # ╔═╡ cb6557ad-1cc6-417b-8668-38e2399fd6af
 using StatsBase: weights
 
+# ╔═╡ a5455cd9-fe6c-4bbe-a0c6-4537ddf585b5
+using Statistics: mean
+
 # ╔═╡ 93c33060-d39f-4ece-ab2c-c929cc249a5b
 using PlutoUI
+
+# ╔═╡ af98fe40-d533-46fc-a3da-2cee27a40b9e
+using ShiftedArrays
 
 # ╔═╡ 8d268ee9-6a3b-4bf3-a0d1-59d86fe8f263
 md"""
@@ -66,7 +66,7 @@ We will use
 
 # ╔═╡ cdfa2f05-45cc-4050-baf4-15d66910c4e9
 md"""
-## Part 1: Friends' house price experiences
+## Part 1: Friends' house price experiences (3 points)
 
 For a pair of regions ``(A, B)``, the Facebook Social Connectedness is defined as follows
 
@@ -115,14 +115,9 @@ md"""
 Your answer goes here ...
 """
 
-# ╔═╡ 7122ea20-fb8d-4d49-ab53-3fa6bae503f1
-md"""
-## Task 2: Mortgages
-"""
-
 # ╔═╡ 63d1da26-9ac4-411f-8f47-02a02b37f142
 md"""
-## Part 3: Social connectedness and the housing market (5 points)
+## Part 2: Social connectedness and the housing market (7 points)
 
 We want to see if we can replicate the main results of _Bailey et al. (2018)._ Do friends' house price experiences drive mortgage choices?
 
@@ -203,12 +198,6 @@ shapes_pop_df = @chain pop_df begin
 		:county_matching = clean_county_name_for_matching(:county_name)
 	)
 	innerjoin(shapes_df, on = [:state_name, :county_matching], makeunique=true)
-end
-
-# ╔═╡ b2cdd1a6-9b47-44e2-b061-818ecc011342
-@chain shapes_pop_df begin
-	@select(:fips, :center)
-	unique
 end
 
 # ╔═╡ edf2ff0d-ab91-47ff-ae03-cee7507601a1
@@ -320,17 +309,33 @@ zillow_growth_df = @chain zillow_pop_df begin
 end
 
 # ╔═╡ f3df7592-bc70-4cc4-8ad0-778d48d75dc5
+# ╠═╡ disabled = true
+#=╠═╡
 @chain zillow_growth_df begin
 	@transform(:pop = log(:population2010 / 1000))
 	@subset(!ismissing(:Δ_log_hpi), !ismissing(:l_Δ_log_hpi))
 	data(_) * mapping(:Δ_log_hpi, :l_Δ_log_hpi) * (visual(Scatter, color=(:blue, 0.1)) * mapping(markersize = :pop) + AlgebraOfGraphics.density() * mapping(weights = :population2010) * visual(Contour))
 	draw
 end
+  ╠═╡ =#
 
 # ╔═╡ 9d975887-a482-4d30-9600-1d9ac7e3821e
-zillow_pop_df = @chain zillow_df_annual begin
-	leftjoin(pop_df, on = [:fips])
+zillow_pop_df = @chain zillow_df begin
+	@groupby(:fips, :year, :state, :county)
+	@combine(:hpi = mean(:hpi))
+	leftjoin(pop_df, on = [:fips, :state, :county])
 	@select(:year, :hpi, :fips, :population2010)
+end
+
+# ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
+
+
+# ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
+zillow_df = @chain zillow_df0 begin
+	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
+	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
+	@transform(:date = Date(:date))
+	@select(:year = year(:date), :month = month(:date), Not(:date), :fips = parse(Int, string(:state)*lpad(:county, 3, '0')))
 end
 
 # ╔═╡ 19bc4c50-66ed-49ea-ac30-283137a1aedf
@@ -444,9 +449,6 @@ hmda_df0 = RData.load(datadep"hmda-panel/hmda_big.RData")["hmda_big"]
 # ╔═╡ cdc99479-37cd-4ada-9ce0-08e136281a42
 hmda_panel_url = "https://gitlab.com/drechsel-grau-greimel/hmda/-/raw/master/data-processed/hmda_big.RData"
 
-# ╔═╡ e739e95f-73b2-4761-8e63-3eab2be19daf
-
-
 # ╔═╡ fefa0c22-b554-49d5-a024-2f5307f13b31
 hmda_df = @chain hmda_df0 begin
 	@subset(!ismissing(:owner_occupied), !ismissing(:purpose_loan), !ismissing(:county))
@@ -476,85 +478,10 @@ end
 	draw
 end
 
-# ╔═╡ 81fe46fa-3b6c-47f4-997c-1b1a3e292541
-df_joined = @chain hmda_df begin
-	innerjoin(zillow_df_annual, on = [:state, :county, :year, :fips])
-	leftjoin(pop_df, on = [:state, :county, :fips])
-	@transform(:originations_per_capita = :count / :population2010)
-	innerjoin(zillow_sub, on = [:state, :county, :fips, :year])
-end
-
-# ╔═╡ 674087cc-b493-4428-9b89-9996345bfa00
-md"""
-# Some regressions
-
-
-* originations per capita
-* lhphi_D1 is the log difference in the price index relative to the previous period
-* lhphi_D2 is the log difference in the price index relative to two periods before
-"""
-
-# ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
-zillow_df = @chain zillow_df0 begin
-	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
-	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
-	@transform(:date = Date(:date))
-	@select(:year = year(:date), :month = month(:date), Not(:date), :fips = parse(Int, string(:state)*lpad(:county, 3, '0')))
-end
-
-# ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
-zillow_df_annual = @chain zillow_df begin
-	@groupby(:fips, :year, :state, :county)
-	@combine(:hpi = mean(:hpi))
-	@transform(:lhpi = log(:hpi))
-	#@groupby(:fips)
-	#@transform(
-	#	:lhpi_D1 = @c(:lhpi - lag(:lhpi)),
-	#	:lhpi_D2 = @c(:lhpi - lag(:lhpi, 2)),
-	#	:lhpi_D3 = @c(:lhpi - lag(:lhpi, 3))
-	#)
-end
-
-# ╔═╡ 7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
-# ╠═╡ disabled = true
-#=╠═╡
-
-  ╠═╡ =#
-
 # ╔═╡ 445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
 md"""
 # Friends' house price experiences
 """
-
-# ╔═╡ c18a3695-6768-4eb4-aa15-47c5dcef27f9
-
-
-# ╔═╡ da73a540-77dc-416e-ae39-480d9e1456d1
-# ╠═╡ disabled = true
-#=╠═╡
-df_friends0 = @chain df_c begin
-	@transform(:scaled_number_links_capita = :scaled_sci * :fr_population)
-	@subset(:fr_fips ≠ :user_fips)
-	#@subset(:distance ≥ 000)
-	#@subset(:user_fips ∈ [1001, 1002, 1003])
-	@groupby(:user_fips)
-	combine(_) do subdf
-		@chain subdf begin
-			innerjoin(
-				zillow_df_annual_stacked,
-				on = [:fr_state => :state, :fr_county => :county]
-			)
-			@groupby(:year, :variable)
-			@combine(
-				:friends_value = mean(:value, weights(:scaled_number_links_capita))
-			)
-		end
-	end
-end
-  ╠═╡ =#
-
-# ╔═╡ 9aad2e32-6d16-464a-b96e-6bd51b52b2fa
-# 170s
 
 # ╔═╡ 844c432e-c804-4a47-adad-bef2887f7dc0
 md"""
@@ -684,9 +611,6 @@ pop_df = @chain begin
 	@subset(:county != 0)
 end
 
-# ╔═╡ 7993c318-b6ac-407d-a63c-be4dbeba268f
-
-
 # ╔═╡ afb0db63-970a-469e-a7f4-f109a289d06f
 md"""
 ## House price data
@@ -753,20 +677,6 @@ end
 
 # ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
 import HTTP
-
-# ╔═╡ b298a227-9381-4c07-854e-97e5229b25c2
-
-
-# ╔═╡ 49ef5550-a71b-4aa0-88da-510b100fc2bf
-zillow_with_friends = @chain zillow_df_annual_stacked begin
-	@transform(:fips = string(:state) * lpad(:county, 3, '0'))
-	@transform(:fips = Meta.parse(:fips))
-	select(:fips, :)# Not([:state, :county]))
-	leftjoin(df_friends0, on = [:year, :variable, :fips => :user_fips])
-	rename!(:friends_value => :friends_value0)
-	leftjoin(df_friends, on = [:year, :variable, :fips => :user_fips])
-	rename!(:friends_value => :friends_value500)
-end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2356,7 +2266,6 @@ version = "3.5.0+0"
 # ╠═2bc4cd24-a12e-46c2-97d4-03d0bdaca3a3
 # ╟─c3b70e50-420b-4956-9c36-d4596fe07634
 # ╠═6959807f-03c5-4a9d-8c4d-c04c06c6e0a5
-# ╠═7122ea20-fb8d-4d49-ab53-3fa6bae503f1
 # ╟─63d1da26-9ac4-411f-8f47-02a02b37f142
 # ╟─dbba5ead-cd2a-4714-9e56-dd34c7d72039
 # ╠═8001cd65-2542-4a1a-93b8-2e7243226956
@@ -2373,19 +2282,20 @@ version = "3.5.0+0"
 # ╠═94686899-25fd-4d28-9894-5dcdc2650efe
 # ╠═e8183f41-5921-4bfc-a262-6ac6b165870c
 # ╠═85768c95-3f0c-43ad-9e37-c479c9bb6a5b
-# ╠═b2cdd1a6-9b47-44e2-b061-818ecc011342
 # ╠═edf2ff0d-ab91-47ff-ae03-cee7507601a1
 # ╠═c9f03768-f6bd-4b52-b18f-a4b6698b23ca
 # ╠═ac0699ba-d578-45e9-996a-a7c88111aa4a
 # ╠═58df19fa-9f1b-49db-9302-b8003ff8244e
 # ╟─e889d127-4796-4a89-ab36-b39bae718b6d
-# ╠═d6e02e8c-5783-4be7-aedc-7605f843d011
 # ╠═9b4cc5c3-ce13-4f90-b41e-d7a7398f3e65
 # ╟─decc7aec-daa8-42e2-a62d-e09c2bf559cd
 # ╟─288cafba-1854-49e0-89ac-350282c3e249
 # ╠═e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
 # ╠═f3df7592-bc70-4cc4-8ad0-778d48d75dc5
 # ╠═9d975887-a482-4d30-9600-1d9ac7e3821e
+# ╠═e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
+# ╠═c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
+# ╠═d6e02e8c-5783-4be7-aedc-7605f843d011
 # ╟─19bc4c50-66ed-49ea-ac30-283137a1aedf
 # ╟─f08a1afd-0ad6-4c85-98c1-28754356e73f
 # ╠═dd918f80-ac1f-46e9-ba6a-416e4bb2e39f
@@ -2399,30 +2309,21 @@ version = "3.5.0+0"
 # ╟─f2329bd8-b585-41a5-b286-8e3a8233a4cd
 # ╠═550295bd-ae15-404c-810a-f2f2561fcf5f
 # ╠═cdc99479-37cd-4ada-9ce0-08e136281a42
-# ╠═e739e95f-73b2-4761-8e63-3eab2be19daf
 # ╠═fefa0c22-b554-49d5-a024-2f5307f13b31
 # ╠═a6e7fdcb-0ad4-4b04-a032-ff14d3f63926
 # ╠═d5dc551e-c120-4a20-8c94-15e2e8300b7a
-# ╠═81fe46fa-3b6c-47f4-997c-1b1a3e292541
-# ╠═af98fe40-d533-46fc-a3da-2cee27a40b9e
-# ╠═674087cc-b493-4428-9b89-9996345bfa00
-# ╠═c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
-# ╠═a5455cd9-fe6c-4bbe-a0c6-4537ddf585b5
-# ╠═e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
-# ╠═7f5f6525-1d9f-4b87-b2a2-56ae7ed0153f
+# ╟─445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
+# ╠═6afa713a-291c-41bc-94fc-466d64d73eef
+# ╟─844c432e-c804-4a47-adad-bef2887f7dc0
 # ╠═e85d31e6-0068-44df-a88d-f245d90e21d1
 # ╠═c1c01e0e-d155-11ec-14a0-1173f9a37f8f
 # ╠═54c7ee04-19f9-4083-8869-f6a9d07ba51f
 # ╠═e3a83114-db7d-4488-9db7-14ed919b0f33
-# ╟─445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
-# ╠═6afa713a-291c-41bc-94fc-466d64d73eef
-# ╠═c18a3695-6768-4eb4-aa15-47c5dcef27f9
 # ╠═cb6557ad-1cc6-417b-8668-38e2399fd6af
-# ╠═da73a540-77dc-416e-ae39-480d9e1456d1
-# ╠═9aad2e32-6d16-464a-b96e-6bd51b52b2fa
-# ╟─844c432e-c804-4a47-adad-bef2887f7dc0
+# ╠═a5455cd9-fe6c-4bbe-a0c6-4537ddf585b5
 # ╠═93c33060-d39f-4ece-ab2c-c929cc249a5b
 # ╠═4953ba71-27ae-4197-9d2d-997c7f513159
+# ╠═af98fe40-d533-46fc-a3da-2cee27a40b9e
 # ╟─e6848c06-8895-444b-864f-6e4c86e488c1
 # ╟─d43c8098-2c1e-48bc-8d82-64b110451ac4
 # ╠═48cc091a-afab-446a-a0dc-22b4f5572162
@@ -2438,13 +2339,10 @@ version = "3.5.0+0"
 # ╠═fa730aed-a6f6-4a4a-94b2-76633eb8551b
 # ╠═8fb93eef-88c0-43b9-b193-4a8911ec8f15
 # ╠═0176205f-b123-4b1d-b38a-d871b1c6bbe4
-# ╠═7993c318-b6ac-407d-a63c-be4dbeba268f
 # ╟─afb0db63-970a-469e-a7f4-f109a289d06f
 # ╠═bd17661f-6d02-47e3-b2df-8f6bb3d99876
 # ╠═914522a3-ace0-49f1-8b87-50fa3af2dbb3
 # ╠═872cb78f-27d3-40f5-b9e9-e116132a473c
 # ╠═1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
-# ╠═b298a227-9381-4c07-854e-97e5229b25c2
-# ╠═49ef5550-a71b-4aa0-88da-510b100fc2bf
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
