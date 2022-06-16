@@ -20,7 +20,7 @@ using AlgebraOfGraphics.Makie.GeometryBasics
 using Dates
 
 # ╔═╡ c1c01e0e-d155-11ec-14a0-1173f9a37f8f
-using RData
+using RData: RData
 
 # ╔═╡ 67697ae7-049e-42e2-b476-49c4fd807823
 using LinearAlgebra: norm
@@ -42,6 +42,9 @@ using PlutoUI
 
 # ╔═╡ af98fe40-d533-46fc-a3da-2cee27a40b9e
 using ShiftedArrays
+
+# ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
+using HTTP: HTTP
 
 # ╔═╡ 8d268ee9-6a3b-4bf3-a0d1-59d86fe8f263
 md"""
@@ -87,21 +90,6 @@ The figure below shows that there is a strong correlation between ``p_{ct}`` and
 * `friends_exp_x00` omits friendship links when the other county is more than x00 miles away.
 """
 
-# ╔═╡ 2bc4cd24-a12e-46c2-97d4-03d0bdaca3a3
-@chain zillow_and_friends_df begin
-	@transform(:pop = log(:population2010/1000))
-	@subset(!ismissing(:Δ_log_hpi))
-	disallowmissing!
-	@subset(:year ∈ 2001:5:2021)
-	data(_) * mapping(:Δ_log_hpi,
-		:friends_exp, # all friends, incl own county
-		#:friends_exp_000, # friends in all other counties
-		#:friends_exp_100, # friends > 100 miles away
-		#:friends_exp_300, # friends > 300 miles away
-		layout = :year=> nonnumeric, markersize = :pop) * visual(Scatter)
-	draw
-end
-
 # ╔═╡ c3b70e50-420b-4956-9c36-d4596fe07634
 md"""
 👉 Look at the variations of the plot using `friends_exp_x00`, describe what you discover and try to make sense of it.
@@ -140,34 +128,10 @@ md"""
 Your answer goes here ...
 """
 
-# ╔═╡ ca4b0557-9360-4089-ab64-a62e07d23de9
-joined_df = @chain hmda_df begin
-	@select(:income, :amount, :count, :year, :fips, :state)
-	innerjoin(zillow_and_friends_df, on = [:year, :fips])
-	@transform!(:count_per_pop = :count / :population2010)
-end
-
-# ╔═╡ 2eb3a5db-f5a3-489f-b712-146934229772
-reg(joined_df, 
-	@formula(amount ~ Δ_log_hpi + (friends_exp_000 ~ friends_exp_100) + fe(year)),
-	#Vcov.cluster(:state),
-	weights = :population2010
-)
-
-# ╔═╡ 7297dc74-44b4-4d2d-98f5-7120b74cb196
-reg(joined_df, 
-	@formula(count_per_pop ~ Δ_log_hpi + (friends_exp_000 ~ friends_exp_100) + fe(year)),
-	#Vcov.cluster(:state),
-	weights = :population2010
-)
-
 # ╔═╡ 24013463-f8ea-463f-81e9-06542880dc8b
 md"""
 # Appendix: Getting all the data
 """
-
-# ╔═╡ c28f291b-e805-4629-9bb4-3e5c7c5436bc
-
 
 # ╔═╡ cc13875f-0407-4749-a30e-39737c28c8b3
 md"""
@@ -176,29 +140,6 @@ md"""
 
 # ╔═╡ 94686899-25fd-4d28-9894-5dcdc2650efe
 shapes0 = GeoTables.gadm("USA", depth=2);
-
-# ╔═╡ e8183f41-5921-4bfc-a262-6ac6b165870c
-shapes_df = @chain shapes0 begin
-	DataFrame
-	@subset(:TYPE_2 ∉ ["Water body"])
-	@subset!(:NAME_1 ∉ ["Alaska", "Hawaii"])
-	@select!(
-		:center = point_to_point(Meshes.centroid(:geometry)),		
-		#:area = Meshes.area(:geometry),
-		:geometry = multi_to_multi(:geometry),
-		:state_name = :NAME_1, #:county_name = :NAME_2,
-		#:GID_2 => ByRow(GID2_to_fips) => AsTable
-		:county_matching = clean_county_name_for_matching(:NAME_2)
-	)
-end
-
-# ╔═╡ 85768c95-3f0c-43ad-9e37-c479c9bb6a5b
-shapes_pop_df = @chain pop_df begin
-	@select(:fips, :state, :county, :population2010, :state_name, :county_name,
-		:county_matching = clean_county_name_for_matching(:county_name)
-	)
-	innerjoin(shapes_df, on = [:state_name, :county_matching], makeunique=true)
-end
 
 # ╔═╡ edf2ff0d-ab91-47ff-ae03-cee7507601a1
 function clean_county_name_for_matching(county)
@@ -250,93 +191,25 @@ begin
 	end
 end
 
-# ╔═╡ 58df19fa-9f1b-49db-9302-b8003ff8244e
-@chain shapes_pop_df begin
-	data(_) * (mapping(:geometry, color = :population2010 => log) * visual(Poly) + mapping(:center) * visual(Scatter, markersize = 1))
-	draw
+# ╔═╡ e8183f41-5921-4bfc-a262-6ac6b165870c
+shapes_df = @chain shapes0 begin
+	DataFrame
+	@subset(:TYPE_2 ∉ ["Water body"])
+	@subset!(:NAME_1 ∉ ["Alaska", "Hawaii"])
+	@select!(
+		:center = point_to_point(Meshes.centroid(:geometry)),		
+		#:area = Meshes.area(:geometry),
+		:geometry = multi_to_multi(:geometry),
+		:state_name = :NAME_1, #:county_name = :NAME_2,
+		#:GID_2 => ByRow(GID2_to_fips) => AsTable
+		:county_matching = clean_county_name_for_matching(:NAME_2)
+	)
 end
 
 # ╔═╡ e889d127-4796-4a89-ab36-b39bae718b6d
 md"""
 ## Zillow real estate prices
 """
-
-# ╔═╡ 9b4cc5c3-ce13-4f90-b41e-d7a7398f3e65
-@chain zillow_df begin
-	@subset(!ismissing(:hpi), :month == 3, :year ∈ 2000:5:2020)
-	disallowmissing
-	innerjoin(shapes_pop_df, on = [:fips, :state, :county])
-	data(_) * mapping(:geometry, color = :hpi => log, layout = :year => nonnumeric) * visual(Poly)
-	draw
-end
-
-# ╔═╡ decc7aec-daa8-42e2-a62d-e09c2bf559cd
-@chain zillow_df begin
-	leftjoin(pop_df, on = [:state, :county, :fips])
-	@subset(!ismissing(:hpi))
-	@groupby(:date = Date(:year, :month))
-	@aside total = sum(pop_df.population2010)
-	@combine(:coverage = sum(:population2010) / total)
-	data(_) * mapping(:date => "", :coverage) * visual(Lines)
-	draw(axis=(title="What fraction of the US population do Zillow data cover?",))
-end
-
-# ╔═╡ 288cafba-1854-49e0-89ac-350282c3e249
-@chain zillow_df begin
-	leftjoin(pop_df, on = [:fips, :state, :county])
-	@subset(!ismissing(:hpi))
-	disallowmissing(:population2010)
-	@groupby(:date = Date(:year, :month), :state)
-	@combine(:hpi = mean(:hpi, weights(:population2010)), :pop = sum(:population2010))
-	data(_) * mapping(:date => "", :hpi => log, group=:state => nonnumeric) * visual(Lines)
-	draw(axis=(; title = "(log) House prices across states over time"))
-end
-
-# ╔═╡ e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
-zillow_growth_df = @chain zillow_pop_df begin
-	sort([:fips, :year])
-	@groupby(:fips)
-	@transform(
-		:Δ_hpi = @c([missing; diff(:hpi)]),
-		:Δ_log_hpi = @c([missing; diff(log.(:hpi))])
-	)
-	@groupby(:fips)
-	@transform(
-		:l_hpi = @c(lag(:hpi)),
-		:l_Δ_hpi = @c(lag(:Δ_hpi)),
-		:l_Δ_log_hpi = @c(lag(:Δ_log_hpi))
-	)
-end
-
-# ╔═╡ f3df7592-bc70-4cc4-8ad0-778d48d75dc5
-# ╠═╡ disabled = true
-#=╠═╡
-@chain zillow_growth_df begin
-	@transform(:pop = log(:population2010 / 1000))
-	@subset(!ismissing(:Δ_log_hpi), !ismissing(:l_Δ_log_hpi))
-	data(_) * mapping(:Δ_log_hpi, :l_Δ_log_hpi) * (visual(Scatter, color=(:blue, 0.1)) * mapping(markersize = :pop) + AlgebraOfGraphics.density() * mapping(weights = :population2010) * visual(Contour))
-	draw
-end
-  ╠═╡ =#
-
-# ╔═╡ 9d975887-a482-4d30-9600-1d9ac7e3821e
-zillow_pop_df = @chain zillow_df begin
-	@groupby(:fips, :year, :state, :county)
-	@combine(:hpi = mean(:hpi))
-	leftjoin(pop_df, on = [:fips, :state, :county])
-	@select(:year, :hpi, :fips, :population2010)
-end
-
-# ╔═╡ e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
-
-
-# ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
-zillow_df = @chain zillow_df0 begin
-	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
-	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
-	@transform(:date = Date(:date))
-	@select(:year = year(:date), :month = month(:date), Not(:date), :fips = parse(Int, string(:state)*lpad(:county, 3, '0')))
-end
 
 # ╔═╡ 19bc4c50-66ed-49ea-ac30-283137a1aedf
 md"""
@@ -348,65 +221,12 @@ md"""
 ### SCI with population and distances
 """
 
-# ╔═╡ dd918f80-ac1f-46e9-ba6a-416e4bb2e39f
-sci_pop_distance_df = @chain county_df begin
-	@aside centers_df = @select(shapes_pop_df, :fips, :center, :pop = :population2010)
-	innerjoin(centers_df, on = :user_loc => :fips)
-	rename!(:center => :user_center, :pop => :user_pop)
-	innerjoin(centers_df, on = :fr_loc => :fips)
-	rename!(:center => :fr_center, :pop => :fr_pop)
-	@transform!(:distance = norm(:fr_center - :user_center))
-	@select!(:user_loc, :fr_loc, :scaled_sci, 
-		:user_pop, :fr_pop,
-		:distance, :distance_mi = :distance * 55
-	)
-	dropmissing
-end
-
-# ╔═╡ 397ec8b4-5be1-4d13-a1ec-a9d1ddf8a00f
-# ╠═╡ disabled = true
-#=╠═╡
-@chain sci_pop_distance_df begin
-	@transform(
-		:pop_pop = :fr_pop * :user_pop
-	)
-	data(_) * mapping(:distance_mi, weights = :pop_pop) * AlgebraOfGraphics.density()
-	draw
-end
-  ╠═╡ =#
-
 # ╔═╡ bb4d5193-6b4a-4443-b3e4-a50a0e370eb2
 md"""
 ## Price experiences of friends
 
 How much did house prices grow where friends live?
 """
-
-# ╔═╡ f8c180f5-6976-4ce4-8d7e-4a162c400288
-@chain zillow_and_friends_df begin
-	@transform(:pop = log(:population2010/1000))
-	@subset(!ismissing(:Δ_log_hpi))
-	disallowmissing!
-	@subset(:year ∈ 2001:5:2021)
-	data(_) * mapping(:Δ_log_hpi, :friends_exp_100, layout = :year=> nonnumeric, markersize = :pop) * visual(Scatter)
-	draw
-end
-
-# ╔═╡ 6cbf8d8c-29e1-4a8d-9359-5a6145ea8bd1
-zillow_and_friends_df = @chain zillow_growth_df begin
-	@select(:year, :fips, :population2010, :hpi, :Δ_log_hpi)
-	@subset(!ismissing(:Δ_log_hpi))
-	innerjoin(friends_experience_df, on = [:year, :fips])
-end
-
-# ╔═╡ c485a1ce-54b5-4f9b-8ab0-f6739af6344a
-friends_experience_df = @chain sci_pop_distance_df begin
-	@transform!(:sci_pop = :scaled_sci * :fr_pop)
-	sort!(:user_loc)
-	#@subset(:user_loc < 20000)
-	@groupby(:fips = :user_loc)
-	combine([:fips, :fr_loc, :sci_pop, :distance_mi] => friends_exp(zillow_growth_df, :Δ_log_hpi) => AsTable)
-end
 
 # ╔═╡ 3c0bbf62-3bc2-429c-a8d6-47854cc55da1
 function friends_exp(x_df0, x)
@@ -445,35 +265,6 @@ md"""
 
 # ╔═╡ cdc99479-37cd-4ada-9ce0-08e136281a42
 hmda_panel_url = "https://gitlab.com/drechsel-grau-greimel/hmda/-/raw/master/data-processed/hmda_big.RData"
-
-# ╔═╡ fefa0c22-b554-49d5-a024-2f5307f13b31
-hmda_df = @chain hmda_df0 begin
-	@subset(!ismissing(:owner_occupied), !ismissing(:purpose_loan), !ismissing(:county))
-	@subset!(:owner_occupied, :purpose_loan == "purchase")
-	@transform!(:state = Int(:state), :county = tryparse(Int, replace(get(:county), "O" => "0")))
-	@subset(!isnothing(:county))
-	@transform!(:fips = parse(Int, string(:state) * lpad(string(:county), 3, '0')))
-end
-
-# ╔═╡ a6e7fdcb-0ad4-4b04-a032-ff14d3f63926
-@chain hmda_df begin
-	@select(:amount, :count, :year, :fips)
-	innerjoin(shapes_pop_df, on = :fips)
-	@transform!(:count_per_pop = :count / :population2010)
-	@subset!(:year ∈ 2000:5:2015)
-	data(_) * mapping(:geometry, color = :count_per_pop, layout = :year => nonnumeric) * visual(Poly)
-	draw
-end
-
-# ╔═╡ d5dc551e-c120-4a20-8c94-15e2e8300b7a
-@chain hmda_df begin
-	@select(:amount = log(:amount / 1000), :count, :year, :fips)
-	innerjoin(shapes_pop_df, on = :fips)
-	@transform!(:count_per_pop = :count / :population2010)
-	@subset!(:year ∈ 2000:5:2015)
-	data(_) * mapping(:geometry, color = :amount, layout = :year => nonnumeric) * visual(Poly)
-	draw
-end
 
 # ╔═╡ 844c432e-c804-4a47-adad-bef2887f7dc0
 md"""
@@ -543,22 +334,6 @@ md"""
 # ╔═╡ 8fb93eef-88c0-43b9-b193-4a8911ec8f15
 pop_url = "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv"
 
-# ╔═╡ 0176205f-b123-4b1d-b38a-d871b1c6bbe4
-pop_df = @chain begin
-	get_pop(select = [:REGION, :DIVISION, :STATE, :COUNTY, :STNAME, :CTYNAME, :CENSUS2010POP])
-	@transform(:fips = string(:STATE) * lpad(string(:COUNTY), 3, '0'))
-	@select(
-		:fips = Meta.parse(:fips),
-		:state_name = :STNAME, :county_name = :CTYNAME,
-		:state = :STATE, :county = :COUNTY,
-		:population2010 = :CENSUS2010POP,
-	#	#:divisor = :STNAME * " " * :CTYNAME
-
-	)
-	#@transform(:county_match = clean_county_name_for_matching(:county))
-	@subset(:county != 0)
-end
-
 # ╔═╡ afb0db63-970a-469e-a7f4-f109a289d06f
 md"""
 ## House price data
@@ -626,8 +401,25 @@ end
 # ╔═╡ d6e02e8c-5783-4be7-aedc-7605f843d011
 zillow_df0 = joinpath(datadep"zillow", "County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv") |> CSV.File |> DataFrame
 
+# ╔═╡ c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
+zillow_df = @chain zillow_df0 begin
+	rename(:StateCodeFIPS => :state, :MunicipalCodeFIPS => :county)
+	stack(r"^20", [:state, :county], value_name = :hpi, variable_name = :date )
+	@transform(:date = Date(:date))
+	@select(:year = year(:date), :month = month(:date), Not(:date), :fips = parse(Int, string(:state)*lpad(:county, 3, '0')))
+end
+
 # ╔═╡ 550295bd-ae15-404c-810a-f2f2561fcf5f
 hmda_df0 = RData.load(datadep"hmda-panel/hmda_big.RData")["hmda_big"]
+
+# ╔═╡ fefa0c22-b554-49d5-a024-2f5307f13b31
+hmda_df = @chain hmda_df0 begin
+	@subset(!ismissing(:owner_occupied), !ismissing(:purpose_loan), !ismissing(:county))
+	@subset!(:owner_occupied, :purpose_loan == "purchase")
+	@transform!(:state = Int(:state), :county = tryparse(Int, replace(get(:county), "O" => "0")))
+	@subset(!isnothing(:county))
+	@transform!(:fips = parse(Int, string(:state) * lpad(string(:county), 3, '0')))
+end
 
 # ╔═╡ 48cc091a-afab-446a-a0dc-22b4f5572162
 function county_dist_data(id)
@@ -670,13 +462,210 @@ function get_pop(args...; kwargs...)
 	df = CSV.File(file, args...; kwargs...) |> DataFrame
 end
 
-# ╔═╡ 1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
-import HTTP
+# ╔═╡ 0176205f-b123-4b1d-b38a-d871b1c6bbe4
+pop_df = @chain begin
+	get_pop(select = [:REGION, :DIVISION, :STATE, :COUNTY, :STNAME, :CTYNAME, :CENSUS2010POP])
+	@transform(:fips = string(:STATE) * lpad(string(:COUNTY), 3, '0'))
+	@select(
+		:fips = Meta.parse(:fips),
+		:state_name = :STNAME, :county_name = :CTYNAME,
+		:state = :STATE, :county = :COUNTY,
+		:population2010 = :CENSUS2010POP,
+	#	#:divisor = :STNAME * " " * :CTYNAME
 
-# ╔═╡ 445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
-md"""
-# Friends' house price experiences
-"""
+	)
+	#@transform(:county_match = clean_county_name_for_matching(:county))
+	@subset(:county != 0)
+end
+
+# ╔═╡ 85768c95-3f0c-43ad-9e37-c479c9bb6a5b
+shapes_pop_df = @chain pop_df begin
+	@select(:fips, :state, :county, :population2010, :state_name, :county_name,
+		:county_matching = clean_county_name_for_matching(:county_name)
+	)
+	innerjoin(shapes_df, on = [:state_name, :county_matching], makeunique=true)
+end
+
+# ╔═╡ 58df19fa-9f1b-49db-9302-b8003ff8244e
+@chain shapes_pop_df begin
+	data(_) * (mapping(:geometry, color = :population2010 => log) * visual(Poly) + mapping(:center) * visual(Scatter, markersize = 1))
+	draw
+end
+
+# ╔═╡ 9b4cc5c3-ce13-4f90-b41e-d7a7398f3e65
+@chain zillow_df begin
+	@subset(!ismissing(:hpi), :month == 3, :year ∈ 2000:5:2020)
+	disallowmissing
+	innerjoin(shapes_pop_df, on = [:fips, :state, :county])
+	data(_) * mapping(:geometry, color = :hpi => log, layout = :year => nonnumeric) * visual(Poly)
+	draw
+end
+
+# ╔═╡ dd918f80-ac1f-46e9-ba6a-416e4bb2e39f
+sci_pop_distance_df = @chain county_df begin
+	@aside centers_df = @select(shapes_pop_df, :fips, :center, :pop = :population2010)
+	innerjoin(centers_df, on = :user_loc => :fips)
+	rename!(:center => :user_center, :pop => :user_pop)
+	innerjoin(centers_df, on = :fr_loc => :fips)
+	rename!(:center => :fr_center, :pop => :fr_pop)
+	@transform!(:distance = norm(:fr_center - :user_center))
+	@select!(:user_loc, :fr_loc, :scaled_sci, 
+		:user_pop, :fr_pop,
+		:distance, :distance_mi = :distance * 55
+	)
+	dropmissing
+end
+
+# ╔═╡ 397ec8b4-5be1-4d13-a1ec-a9d1ddf8a00f
+# ╠═╡ disabled = true
+#=╠═╡
+@chain sci_pop_distance_df begin
+	@transform(
+		:pop_pop = :fr_pop * :user_pop
+	)
+	data(_) * mapping(:distance_mi, weights = :pop_pop) * AlgebraOfGraphics.density()
+	draw
+end
+  ╠═╡ =#
+
+# ╔═╡ a6e7fdcb-0ad4-4b04-a032-ff14d3f63926
+@chain hmda_df begin
+	@select(:amount, :count, :year, :fips)
+	innerjoin(shapes_pop_df, on = :fips)
+	@transform!(:count_per_pop = :count / :population2010)
+	@subset!(:year ∈ 2000:5:2015)
+	data(_) * mapping(:geometry, color = :count_per_pop, layout = :year => nonnumeric) * visual(Poly)
+	draw
+end
+
+# ╔═╡ d5dc551e-c120-4a20-8c94-15e2e8300b7a
+@chain hmda_df begin
+	@select(:amount = log(:amount / 1000), :count, :year, :fips)
+	innerjoin(shapes_pop_df, on = :fips)
+	@transform!(:count_per_pop = :count / :population2010)
+	@subset!(:year ∈ 2000:5:2015)
+	data(_) * mapping(:geometry, color = :amount, layout = :year => nonnumeric) * visual(Poly)
+	draw
+end
+
+# ╔═╡ decc7aec-daa8-42e2-a62d-e09c2bf559cd
+@chain zillow_df begin
+	leftjoin(pop_df, on = [:state, :county, :fips])
+	@subset(!ismissing(:hpi))
+	@groupby(:date = Date(:year, :month))
+	@aside total = sum(pop_df.population2010)
+	@combine(:coverage = sum(:population2010) / total)
+	data(_) * mapping(:date => "", :coverage) * visual(Lines)
+	draw(axis=(title="What fraction of the US population do Zillow data cover?",))
+end
+
+# ╔═╡ 288cafba-1854-49e0-89ac-350282c3e249
+@chain zillow_df begin
+	leftjoin(pop_df, on = [:fips, :state, :county])
+	@subset(!ismissing(:hpi))
+	disallowmissing(:population2010)
+	@groupby(:date = Date(:year, :month), :state)
+	@combine(:hpi = mean(:hpi, weights(:population2010)), :pop = sum(:population2010))
+	data(_) * mapping(:date => "", :hpi => log, group=:state => nonnumeric) * visual(Lines)
+	draw(axis=(; title = "(log) House prices across states over time"))
+end
+
+# ╔═╡ 9d975887-a482-4d30-9600-1d9ac7e3821e
+zillow_pop_df = @chain zillow_df begin
+	@groupby(:fips, :year, :state, :county)
+	@combine(:hpi = mean(:hpi))
+	leftjoin(pop_df, on = [:fips, :state, :county])
+	@select(:year, :hpi, :fips, :population2010)
+end
+
+# ╔═╡ e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
+zillow_growth_df = @chain zillow_pop_df begin
+	sort([:fips, :year])
+	@groupby(:fips)
+	@transform(
+		:Δ_hpi = @c([missing; diff(:hpi)]),
+		:Δ_log_hpi = @c([missing; diff(log.(:hpi))])
+	)
+	@groupby(:fips)
+	@transform(
+		:l_hpi = @c(lag(:hpi)),
+		:l_Δ_hpi = @c(lag(:Δ_hpi)),
+		:l_Δ_log_hpi = @c(lag(:Δ_log_hpi))
+	)
+end
+
+# ╔═╡ f3df7592-bc70-4cc4-8ad0-778d48d75dc5
+# ╠═╡ disabled = true
+#=╠═╡
+@chain zillow_growth_df begin
+	@transform(:pop = log(:population2010 / 1000))
+	@subset(!ismissing(:Δ_log_hpi), !ismissing(:l_Δ_log_hpi))
+	data(_) * mapping(:Δ_log_hpi, :l_Δ_log_hpi) * (visual(Scatter, color=(:blue, 0.1)) * mapping(markersize = :pop) + AlgebraOfGraphics.density() * mapping(weights = :population2010) * visual(Contour))
+	draw
+end
+  ╠═╡ =#
+
+# ╔═╡ c485a1ce-54b5-4f9b-8ab0-f6739af6344a
+friends_experience_df = @chain sci_pop_distance_df begin
+	@transform!(:sci_pop = :scaled_sci * :fr_pop)
+	sort!(:user_loc)
+	#@subset(:user_loc < 20000)
+	@groupby(:fips = :user_loc)
+	combine([:fips, :fr_loc, :sci_pop, :distance_mi] => friends_exp(zillow_growth_df, :Δ_log_hpi) => AsTable)
+end
+
+# ╔═╡ 6cbf8d8c-29e1-4a8d-9359-5a6145ea8bd1
+zillow_and_friends_df = @chain zillow_growth_df begin
+	@select(:year, :fips, :population2010, :hpi, :Δ_log_hpi)
+	@subset(!ismissing(:Δ_log_hpi))
+	innerjoin(friends_experience_df, on = [:year, :fips])
+end
+
+# ╔═╡ 2bc4cd24-a12e-46c2-97d4-03d0bdaca3a3
+@chain zillow_and_friends_df begin
+	@transform(:pop = log(:population2010/1000))
+	@subset(!ismissing(:Δ_log_hpi))
+	disallowmissing!
+	@subset(:year ∈ 2001:5:2021)
+	data(_) * mapping(:Δ_log_hpi,
+		:friends_exp, # all friends, incl own county
+		#:friends_exp_000, # friends in all other counties
+		#:friends_exp_100, # friends > 100 miles away
+		#:friends_exp_300, # friends > 300 miles away
+		layout = :year=> nonnumeric, markersize = :pop) * visual(Scatter)
+	draw
+end
+
+# ╔═╡ ca4b0557-9360-4089-ab64-a62e07d23de9
+joined_df = @chain hmda_df begin
+	@select(:income, :amount, :count, :year, :fips, :state)
+	innerjoin(zillow_and_friends_df, on = [:year, :fips])
+	@transform!(:count_per_pop = :count / :population2010)
+end
+
+# ╔═╡ 2eb3a5db-f5a3-489f-b712-146934229772
+reg(joined_df, 
+	@formula(amount ~ Δ_log_hpi + (friends_exp_000 ~ friends_exp_100) + fe(year)),
+	#Vcov.cluster(:state),
+	weights = :population2010
+)
+
+# ╔═╡ 7297dc74-44b4-4d2d-98f5-7120b74cb196
+reg(joined_df, 
+	@formula(count_per_pop ~ Δ_log_hpi + (friends_exp_000 ~ friends_exp_100) + fe(year)),
+	#Vcov.cluster(:state),
+	weights = :population2010
+)
+
+# ╔═╡ f8c180f5-6976-4ce4-8d7e-4a162c400288
+@chain zillow_and_friends_df begin
+	@transform(:pop = log(:population2010/1000))
+	@subset(!ismissing(:Δ_log_hpi))
+	disallowmissing!
+	@subset(:year ∈ 2001:5:2021)
+	data(_) * mapping(:Δ_log_hpi, :friends_exp_100, layout = :year=> nonnumeric, markersize = :pop) * visual(Scatter)
+	draw
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2264,7 +2253,6 @@ version = "3.5.0+0"
 # ╠═7297dc74-44b4-4d2d-98f5-7120b74cb196
 # ╠═ca4b0557-9360-4089-ab64-a62e07d23de9
 # ╟─24013463-f8ea-463f-81e9-06542880dc8b
-# ╠═c28f291b-e805-4629-9bb4-3e5c7c5436bc
 # ╟─cc13875f-0407-4749-a30e-39737c28c8b3
 # ╠═aa8593ef-3f6f-4b0c-8046-f88aef680918
 # ╠═1af8b2a8-f7fb-4afa-a746-cedbe1fea1a6
@@ -2283,7 +2271,6 @@ version = "3.5.0+0"
 # ╠═e33a1edc-d414-4e87-91aa-ed3ef9fa1ca2
 # ╠═f3df7592-bc70-4cc4-8ad0-778d48d75dc5
 # ╠═9d975887-a482-4d30-9600-1d9ac7e3821e
-# ╠═e8ac1b5a-e6aa-411c-8f8a-cb33fea24946
 # ╠═c1bbfe1e-27c0-4cd3-9679-e95dd7e8be57
 # ╠═d6e02e8c-5783-4be7-aedc-7605f843d011
 # ╟─19bc4c50-66ed-49ea-ac30-283137a1aedf
@@ -2313,6 +2300,7 @@ version = "3.5.0+0"
 # ╠═93c33060-d39f-4ece-ab2c-c929cc249a5b
 # ╠═4953ba71-27ae-4197-9d2d-997c7f513159
 # ╠═af98fe40-d533-46fc-a3da-2cee27a40b9e
+# ╠═1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
 # ╟─e6848c06-8895-444b-864f-6e4c86e488c1
 # ╟─d43c8098-2c1e-48bc-8d82-64b110451ac4
 # ╠═48cc091a-afab-446a-a0dc-22b4f5572162
@@ -2332,7 +2320,5 @@ version = "3.5.0+0"
 # ╠═bd17661f-6d02-47e3-b2df-8f6bb3d99876
 # ╠═914522a3-ace0-49f1-8b87-50fa3af2dbb3
 # ╠═872cb78f-27d3-40f5-b9e9-e116132a473c
-# ╠═1f40fbb1-feb7-41ea-8cfe-8d00c0c30a54
-# ╠═445a136d-a0ff-47ac-8d4b-7d4b34dd38ea
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
