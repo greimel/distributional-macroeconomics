@@ -16,6 +16,9 @@ using GeoTables.Meshes
 # ╔═╡ 301662e7-2d65-4b3b-9128-c415918e0058
 using AlgebraOfGraphics.Makie.GeometryBasics
 
+# ╔═╡ 6871566b-fb9a-4d7a-b6f0-6b8d38fc7127
+using MarkdownLiteral: @mdx
+
 # ╔═╡ e85d31e6-0068-44df-a88d-f245d90e21d1
 using Dates
 
@@ -48,14 +51,14 @@ using HTTP: HTTP
 
 # ╔═╡ 8d268ee9-6a3b-4bf3-a0d1-59d86fe8f263
 md"""
-`social-connectedness.jl` | **Version 1.1** | _last updated on June 16, 2022_
+`social-connectedness.jl` | **Version 1.2** | _last updated on June 20, 2022_
 """
 
 # ╔═╡ 662cad72-af63-41c9-a895-5633be486f3f
 md"""
 # Assignment: Social networks and the housing market
 
-The goal is to replicate some of the analysis in *__The Economic Effects of Social Networks: Evidence from the Housing Market__ (Bailey, Cao, Kuchler & Stroebel, 2018, JPE)* using publicly available (county-level) data.
+The goal is to replicate some of the analysis in *[__The Economic Effects of Social Networks: Evidence from the Housing Market__](https://www.journals.uchicago.edu/doi/abs/10.1086/700073) (Bailey, Cao, Kuchler & Stroebel, 2018, JPE)* using publicly available (county-level) data.
 
 We will use 
 
@@ -81,17 +84,27 @@ We use the SCI to calculate the average house price change in the home counties 
 p^\text{friends}_{ct} =\frac{1}{\sum_c \text{\# friendships}_{c\tilde c}}\sum_c \text{\# friendships}_{c\tilde c} \cdot p_{\tilde ct}.
 ```
 ``p^\text{friends}_{ct}`` is a weighted average of house price changes, using friendship links as weights.
-"""
 
-# ╔═╡ eae1a5ec-5526-4479-8ec7-589225b83e68
-md"""
-The figure below shows that there is a strong correlation between ``p_{ct}`` and ``p_{ct}^\text{friends}``. Look at lines 7–10 of the code that generates this plot. The variable 
-* `friends_exp_000` omits friendship links within the county,
-* `friends_exp_x00` omits friendship links when the other county is more than x00 miles away.
+The figure below shows that there is a strong correlation between ``p_{ct}`` and ``p_{ct}^{\text{friends}}``.
 """
 
 # ╔═╡ c3b70e50-420b-4956-9c36-d4596fe07634
-md"""
+@mdx """
+ Look at lines 7–10 of the code that generates this plot. The variable 
+* `friends_exp_000` omits friendship links within the county,
+* `friends_exp_x00` omits friendship links when the other county is ``≤ x00`` miles away.
+* <details> <summary> Click here if you are wondering why you should care about these variables. </summary> 
+
+	These variables can be used as instruments to mimic the IV strategy in the paper:
+	
+	> To exploit only variation in friends’ house price experiences that is orthogonal to
+	> a person’s own experiences, we instrument for the house price experiences of all
+	> friends with the experiences of only her friends in geographically distant housing
+	> markets.
+	
+	</details>
+
+
 👉 Look at the variations of the plot using `friends_exp_x00`, describe what you discover and try to make sense of it.
 """
 
@@ -115,12 +128,16 @@ Let counties be indexed by ``c`` and time ``t`` run from 2001 to 2016. We run th
 \end{align}
 ```
 
-``\delta_c`` and ``\delta_t`` are region and time fixed effects.
+* ``\text{originations}_{ct}`` is the number (the count) of mortgages originated (normalized by population) in county ``c`` and year ``t``
+* ``\text{amount}_{ct}`` is the average size of originated mortgages in county ``c`` and year ``t``
+* ``\delta_c`` and ``\delta_t`` are region and time fixed effects.
 """
 
 # ╔═╡ dbba5ead-cd2a-4714-9e56-dd34c7d72039
 md"""
 👉 Look at the output of the regressions below. Interpret the results. Are you convinced? You might want to play around with the specification to check robustness.
+
+(It might be helpful to read the introduction of [_Bailey et al. (2018)_](https://www.journals.uchicago.edu/doi/abs/10.1086/700073) and refer to it in your discussion.)
 """
 
 # ╔═╡ 8001cd65-2542-4a1a-93b8-2e7243226956
@@ -629,9 +646,9 @@ end
 	@subset(:year ∈ 2001:5:2021)
 	data(_) * mapping(:Δ_log_hpi,
 		:friends_exp, # all friends, incl own county
-		#:friends_exp_000, # friends in all other counties
-		#:friends_exp_100, # friends > 100 miles away
-		#:friends_exp_300, # friends > 300 miles away
+		#:friends_exp_000, # distant friends (all other counties)
+		#:friends_exp_100, # distant friends (> 100 miles away)
+		#:friends_exp_300, # distant friends (> 300 miles away)
 		layout = :year=> nonnumeric, markersize = :pop) * visual(Scatter)
 	draw
 end
@@ -682,6 +699,7 @@ FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
 GeoTables = "e502b557-6362-48c1-8219-d30d308dcdb0"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MarkdownLiteral = "736d6165-7244-6769-4267-6b50796e6954"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 RData = "df47a6cb-8c03-5eed-afd8-b6050d6c41da"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
@@ -699,6 +717,7 @@ DataFrames = "~1.3.4"
 FixedEffectModels = "~1.6.6"
 GeoTables = "~0.4.0"
 HTTP = "~0.9.17"
+MarkdownLiteral = "~0.1.1"
 PlutoUI = "~0.7.39"
 RData = "~0.8.3"
 ShiftedArrays = "~1.0.0"
@@ -893,6 +912,12 @@ version = "0.12.8"
 git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
 uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 version = "1.0.2"
+
+[[deps.CommonMark]]
+deps = ["Crayons", "JSON", "URIs"]
+git-tree-sha1 = "4cd7063c9bdebdbd55ede1af70f3c2f48fab4215"
+uuid = "a80b9123-70ca-4bc0-993e-6e3bcb318db6"
+version = "0.8.6"
 
 [[deps.Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
@@ -1549,6 +1574,12 @@ version = "0.4.1"
 [[deps.Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[[deps.MarkdownLiteral]]
+deps = ["CommonMark", "HypertextLiteral"]
+git-tree-sha1 = "0d3fa2dd374934b62ee16a4721fe68c418b92899"
+uuid = "736d6165-7244-6769-4267-6b50796e6954"
+version = "0.1.1"
 
 [[deps.Match]]
 git-tree-sha1 = "1d9bc5c1a6e7ee24effb93f175c9342f9154d97f"
@@ -2241,7 +2272,6 @@ version = "3.5.0+0"
 # ╟─8d268ee9-6a3b-4bf3-a0d1-59d86fe8f263
 # ╟─662cad72-af63-41c9-a895-5633be486f3f
 # ╟─cdfa2f05-45cc-4050-baf4-15d66910c4e9
-# ╟─eae1a5ec-5526-4479-8ec7-589225b83e68
 # ╠═2bc4cd24-a12e-46c2-97d4-03d0bdaca3a3
 # ╟─c3b70e50-420b-4956-9c36-d4596fe07634
 # ╠═6959807f-03c5-4a9d-8c4d-c04c06c6e0a5
@@ -2290,6 +2320,7 @@ version = "3.5.0+0"
 # ╠═a6e7fdcb-0ad4-4b04-a032-ff14d3f63926
 # ╠═d5dc551e-c120-4a20-8c94-15e2e8300b7a
 # ╟─844c432e-c804-4a47-adad-bef2887f7dc0
+# ╠═6871566b-fb9a-4d7a-b6f0-6b8d38fc7127
 # ╠═e85d31e6-0068-44df-a88d-f245d90e21d1
 # ╠═c1c01e0e-d155-11ec-14a0-1173f9a37f8f
 # ╠═67697ae7-049e-42e2-b476-49c4fd807823
