@@ -226,7 +226,6 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 		u = c.^(1-σ)/(1-σ)
 
 		# STEP 3
-
 		X = - min.(ȧb,0)/da
 		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
 		Z =   max.(ȧf,0)/da
@@ -282,6 +281,9 @@ $$1 = \int_{\bar{a}}^\infty g_1(a)da + \int_{\bar{a}}^\infty g_2(a)da$$
 A finite difference approximation of the KF equation results into the matrix equation $A^T g = 0$ where $A$ is the matrix from implicit algorithm for the HJB equation.
 """
 
+# ╔═╡ 4ebeb5e8-505d-4ed2-8d37-4a64ceb7d796
+#using QuantEcon: gth_solve
+
 # ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
 function solve_KF(m::HuggettPoisson, A)
 
@@ -294,7 +296,18 @@ function solve_KF(m::HuggettPoisson, A)
 	b[i_fix] = .1
 	AT[i_fix,:] = hcat(zeros(1, i_fix-1), 1., zeros(1,2*N_a-i_fix))
 
-	g_stacked = AT\b
+	try
+		global g_stacked = AT\b
+	catch e
+		if e isa SingularException
+			@warn "SingularException – added noise"
+			
+			global g_stacked = (AT + I * √eps())\b
+		else
+			rethrow(e)
+		end
+	end
+	
 	g_sum = sum(g_stacked) * da
 	g_stacked_norm = g_stacked ./ g_sum
 
@@ -525,14 +538,13 @@ function statespace(m)
 	[(; a, z) for a ∈ a_grid, z ∈ z_grid]
 end
 
-# ╔═╡ 36d5c62e-8ab6-43c2-88cf-ed1ce76dd47d
-m
+# ╔═╡ 01234bcc-a428-4922-969f-9a1ba49c8d62
+function statespace_inds(m)
+	(; N_a, z) = m
+	N_z = length(z)
 
-# ╔═╡ 32f9b9e6-5026-4b29-abab-dcd0fa5b7509
-statespace(m)
-
-# ╔═╡ 00d5313a-ca02-46aa-9e7c-a262b4d83c15
-construct_a(m)
+	[(; i_a, i_z) for i_a ∈ 1:N_a, i_z ∈ 1:N_z]
+end
 
 # ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
 function consumption_and_drift((; a, z), dv, (; r, σ))
@@ -557,24 +569,24 @@ end
 const T = typeof((; dv=0.0, ȧf=0.0, ȧb=0.0, c=0.0))
 
 # ╔═╡ 7734c75e-5f2b-4807-8b9a-82e7e010edac
-function consumption_and_drift_upwind(state, dvf, dvb, par)
+function consumption_and_drift_upwind(state, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
 	# consumption and savings with forward difference
-	outf = consumption_and_drift(state, dvf, par)
+	outf = consumption_and_drift(state, dvf, (; σ, r))
 	# consumption and savings with backward difference
-	outb = consumption_and_drift(state, dvb, par)
+	outb = consumption_and_drift(state, dvb, (; σ, r))
 	# consumption and derivate of value function at steady state
-	out0 = consumption_and_drift₀(state, par)
+	out0 = consumption_and_drift₀(state, (; σ, r))
 
 		
-	if outf.ȧ > 0 
-		return (; outf.dv, ȧf = outf.ȧ, ȧb = 0.0, outf.c) |> T
+	if outf.ȧ > 0 && state.a < aₘₐₓ
+		return (; outf.dv, ȧf = outf.ȧ, ȧb = 0.0, outf.c)
 	end
-	if outb.ȧ < 0 
-		return (; outb.dv, ȧf = 0.0, ȧb = outb.ȧ, outb.c) |> T
+	if outb.ȧ < 0 && state.a > aₘᵢₙ
+		return (; outb.dv, ȧf = 0.0, ȧb = outb.ȧ, outb.c)
 	end
-	if outf.ȧ ≤ 0 && outb.ȧ ≥ 0
-		return (; dv = out0.dv, ȧf = 0.0, ȧb = 0.0, out0.c) |> T
-	end
+	#if outf.ȧ ≤ 0 && outb.ȧ ≥ 0
+		return (; dv = out0.dv, ȧf = 0.0, ȧb = 0.0, out0.c)
+	#end
 	#if outf.ȧ > 0 && outb.ȧ < 0
 	#	dv =  outf.dv + outb.dv
 	#	return (; dv, ȧf = outf.ȧ, ȧb = outb.ȧ, c = dv^(-1/par.σ)) |> T
@@ -586,6 +598,57 @@ function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
 	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
 end
 
+# ╔═╡ b57ea0a2-bee4-450f-99fa-cc79054fc963
+function construct_A_alt(ȧfs, ȧbs, da, N_a, N_z)
+	T = typeof((; I_from=1, I_to=1, λ=0.0))
+	list = T[]
+	
+	car_inds = CartesianIndices((N_a, N_z)) |> collect .|> Tuple
+	lin_inds = LinearIndices((N_a, N_z))
+
+	for (I_from, (ȧf, ȧb)) in enumerate(zip(ȧfs, ȧbs))
+		i_a, i_z = car_inds[I_from]
+
+		if ȧf > 0 && i_a < N_a
+			I_to = lin_inds[i_a + 1, i_z]
+			λ = ȧf / da
+			push!(list, (; I_from, I_to, λ))
+		end
+		if ȧb < 0 && i_a > 1
+			I_to = lin_inds[i_a - 1, i_z]
+			λ = -ȧb / da
+			push!(list, (; I_from, I_to, λ))
+		end
+	end
+	
+	sa = StructArray(list)
+	NN = N_a * 2
+	A₀ = sparse(sa.I_from, sa.I_to, sa.λ, NN, NN)
+	for i ∈ 1:NN
+		A₀[i, i] = - sum(A₀[i,:])
+	end
+
+	A₀
+end
+
+# ╔═╡ 434ecb8d-eae2-4913-97f8-3bdbefbf78ff
+function construct_A(ȧf, ȧb, da, N_a)
+	X = - min.(ȧb,0)/da
+	#Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+	Z =   max.(ȧf,0)/da
+
+	A11 = spdiagm(-1 => X[2:N_a,1], 1 => Z[1:N_a-1,1])
+	A22 = spdiagm(-1 => X[2:N_a,2], 1 => Z[1:N_a-1,2])
+	A = cat(A11, A22, dims=(1,2))
+	A[diagind(A)] .= - vec(sum(A, dims=2))
+	
+#	A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+#	A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+#	A = cat(A11, A22, dims=(1,2))
+
+	A
+end
+
 # ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
 function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
 
@@ -595,13 +658,15 @@ function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-
 	a = construct_a(m)
 
 	ss = statespace(m)
+	ss_inds = statespace_inds(m)
+	lin_ind = LinearIndices((N_a, 2))
 	
 	# initialize arrays for forward and backward difference
 	dvf = zeros(N_a, 2)
 	dvb = zeros(N_a, 2)
 
 	# precompute A_switch matrix
-	id = sparse(I, N_a, N_a)
+	id = I(N_a)
 	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
 	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
 	A_switch   = vcat(A_switch_1, A_switch_2)
@@ -629,24 +694,23 @@ function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-
 		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
 	
 		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		(; c, ȧf, ȧb) = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; r, σ))
-		
-		u = c.^(1-σ)/(1-σ)
-
+				
 		# STEP 3
+		(; c, ȧf, ȧb) = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
+		u = c .^ (1-σ)/(1-σ)
 
-		X = - min.(ȧb,0)/da
-		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
-		Z =   max.(ȧf,0)/da
+		ȧf[end,:] .= 0.0
+		ȧb[1,:] .= 0.0
+		
+		#A = construct_A_alt(ȧf, ȧb, da, N_a, 2) + A_switch
+		A = construct_A(ȧf, ȧb, da, N_a) + A_switch
+		#A = construct_A_moll(ȧf, ȧb, da, N_a) + A_switch
 
-		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-		A1 = hcat(A11, spzeros(N_a, N_a))
-		A2 = hcat(spzeros(N_a, N_a), A22)
-		A = vcat(A1, A2) + A_switch
-
+#		if A_diag != A_moll
+#			@warn A_diag - A
+#		end
+		#@assert A ≈ A_alt
+		
 		B = (ρ + 1/Δ) * I - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
@@ -728,6 +792,44 @@ end
 # ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
 r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
 
+# ╔═╡ b77b52ac-73ad-456c-94e5-5f72e310268f
+function construct_A_moll(ȧf, ȧb, da, N_a)
+	X = - min.(ȧb,0)/da
+	Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+	Z =   max.(ȧf,0)/da
+
+	#A11 = spdiagm(-1 => X[2:N_a,1], 1 => Z[1:N_a-1,1])
+	#A22 = spdiagm(-1 => X[2:N_a,2], 1 => Z[1:N_a-1,2])
+	#A = cat(A11, A22, dims=(1,2))
+	#A[diagind(A)] .= - vec(sum(A, dims=2))
+	
+	A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+	A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+	A = cat(A11, A22, dims=(1,2))
+
+	A
+end
+
+# ╔═╡ 6ed1d91c-ed9b-48af-bfeb-2af5b8e35889
+let
+	N_a = 3
+	N_z = 2
+	ȧ = randn(N_a, N_z)
+	ȧb = ȧ .* (ȧ .< 0)
+	ȧf = ȧ .* (ȧ .> 0)
+
+	da = 0.01
+
+	A1 = construct_A(ȧb, ȧf, da, N_a)
+	A2 = construct_A_alt(ȧb, ȧf, da, N_a, 2)
+
+	Matrix(A1), Matrix(A2), ȧ
+
+#	Matrix(A1)
+	A1 - A2 |> Matrix
+	
+end
+
 # ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
 md"""
 ## Imported packages
@@ -767,7 +869,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.0-rc1"
 manifest_format = "2.0"
-project_hash = "d5cf51db8dc7567f5978935ed8c0900fe34e7ee0"
+project_hash = "8a5d69a4a93318ea2cf74030cb67f92ec5616486"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -1490,9 +1592,9 @@ uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2022.2.1"
 
 [[deps.NaNMath]]
-git-tree-sha1 = "737a5957f387b17e74d4ad2f440eb330b39a62c5"
+git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
-version = "1.0.0"
+version = "0.3.7"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
@@ -1809,9 +1911,9 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[deps.SpecialFunctions]]
 deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "a9e798cae4867e3a41cae2dd9eb60c047f1212db"
+git-tree-sha1 = "69fa1bef454c483646e8a250f384e589fd76562b"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.1.6"
+version = "1.8.6"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]
@@ -2079,6 +2181,7 @@ version = "3.5.0+0"
 # ╠═4d7ee33f-ff78-4ea9-838b-a8320df4651f
 # ╟─1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
 # ╟─2e09462e-6030-4e33-bc7a-9d2faed4ca74
+# ╠═4ebeb5e8-505d-4ed2-8d37-4a64ceb7d796
 # ╠═eb565042-1823-4d5a-b4d1-ee314dccd4e0
 # ╟─e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
 # ╠═e1376e99-a636-4d28-b711-2dd4be66374f
@@ -2109,15 +2212,17 @@ version = "3.5.0+0"
 # ╟─f3e0b42f-370d-4887-b6a1-d9ecd83c6275
 # ╠═70930f84-fe69-4fa3-a37c-eec9a377526c
 # ╠═b9efca1a-b978-4794-b421-ee9df889a6a8
-# ╠═36d5c62e-8ab6-43c2-88cf-ed1ce76dd47d
-# ╠═32f9b9e6-5026-4b29-abab-dcd0fa5b7509
-# ╠═00d5313a-ca02-46aa-9e7c-a262b4d83c15
+# ╠═01234bcc-a428-4922-969f-9a1ba49c8d62
 # ╠═e57a2dfa-0937-49cf-9161-fa1e39fb5e80
 # ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
 # ╠═d10a14a7-d479-46e7-b707-618126e5c5de
 # ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
 # ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
 # ╠═e204ae15-fefd-4f01-8d5e-3772aefe9b0f
+# ╠═b57ea0a2-bee4-450f-99fa-cc79054fc963
+# ╠═434ecb8d-eae2-4913-97f8-3bdbefbf78ff
+# ╠═b77b52ac-73ad-456c-94e5-5f72e310268f
+# ╠═6ed1d91c-ed9b-48af-bfeb-2af5b8e35889
 # ╟─518eec58-eb4b-4294-9090-b6645f51a337
 # ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
 # ╠═6f92c837-1760-423e-9777-9db9ad758475
