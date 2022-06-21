@@ -348,7 +348,7 @@ where $\lambda_{jk}$ is the rate at which agents in state $j$ switch to state $k
 	z::Matrix{Float64} = reshape([0.1, 0.15, 0.2], 1, :) # income states (row vector)
 	Λ::Matrix{Float64} = [-0.06 0.04 0.02; 0.02 -0.04 0.02; 0.02 0.04 -0.06]
 
-	@assert all(sum(Λ; dims=2) .< 1e-12)
+	@assert all(abs.(sum(Λ; dims=2)) .< 1e-12)
 	
 	# asset grid parameters
 	N_a::Int64 = 500
@@ -551,7 +551,7 @@ md"""
 		0.01 0.02 0.04 -0.07
 	]
 
-	@assert all(sum(Λ; dims=2) .< 1e-12)
+	@assert all(abs.(sum(Λ; dims=2)) .< 1e-12)
 	
 	# asset grid parameters
 	N_a::Int64 = 500
