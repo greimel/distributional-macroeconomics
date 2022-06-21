@@ -4,169 +4,178 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 6f92c837-1760-423e-9777-9db9ad758475
+# ╔═╡ 52885681-b577-49a2-b8a1-7965e68b6b17
 using PlutoUI
 
-# ╔═╡ 563c267e-0c6a-4b90-81a7-fc8ff4c73c75
+# ╔═╡ 89688b7b-aea5-4551-b9f3-f14d9821d0de
 using AlgebraOfGraphics, CairoMakie
 
-# ╔═╡ 6d5523f2-a517-48df-9f31-bbd516e1208e
+# ╔═╡ 2b07a251-25b7-4dd8-ae6e-4765a9306e2e
 using Parameters
 
-# ╔═╡ 9fa33ac0-bb2f-4055-b124-8c7c19621226
+# ╔═╡ 40a8b311-b518-4bd9-b89d-4c74b0279e68
 using LinearAlgebra
 
-# ╔═╡ 276e171b-271d-4610-b9bb-01b212193123
+# ╔═╡ 1d6b41db-2298-42a6-a226-1bbf8f364cf1
 using SparseArrays
 
-# ╔═╡ aecea3fe-f0ee-4953-857b-29d6a5640530
+# ╔═╡ 4c7d813f-79e9-4719-b68e-987494ac2c74
+using LCPsolve
+
+# ╔═╡ 018818eb-8e27-42f9-bdce-89ffb0c3a35c
 using DataFrames
 
-# ╔═╡ 9353566b-a70e-4dbe-8f02-b16d2c0570d2
+# ╔═╡ 8b738d67-96b8-4d12-99c9-46825cdaef1a
 using Chain: @chain
 
-# ╔═╡ 0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
-using Roots: find_zero, Brent
-
-# ╔═╡ cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
+# ╔═╡ c3bf5880-f169-11ec-20e3-bf9092156abf
 md"""
-`continuous-time-moll-solution.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`stopping-time-problem-solution.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
-# ╔═╡ 0edf9214-7213-4b1d-8fa6-54a365525d29
+# ╔═╡ 23df23ca-df80-4789-ac79-fc777d258beb
 md"""
-# Huggett model in continuous time
-
-In this notebook, we consider a Huggett economy in continuous time. Income follows a Poisson process.
-
-More information on the algorithms can be found in the [Online Appendix of Achdou et al. (2021)](https://benjaminmoll.com/wp-content/uploads/2020/02/HACT_Numerical_Appendix.pdf). The Julia code in this notebook follows the closely the [Matlab code snippets](https://benjaminmoll.com/codes/) that Ben Moll uploaded on his website.
-
-**Warning**
-
-The code is not particularly robust to changes in the parameters. If you change one model parameter and get an error message, it sometimes helps to increase the maximum asset value on the grid.
+# Durable good
 """
 
-# ╔═╡ c3773842-4fa1-4f80-a8a0-82d4d9ca49bc
+# ╔═╡ 826ee178-6423-470f-abb8-74f808baa26f
 md"""
-# Two income states
+Example taken from Ben Moll's website: [Model description](https://benjaminmoll.com/wp-content/uploads/2020/06/car.pdf), [Matlab code](https://benjaminmoll.com/wp-content/uploads/2020/06/car.m)
+
+Also useful: [Exercising an option](https://benjaminmoll.com/wp-content/uploads/2020/06/option_simple.pdf)
 """
 
-# ╔═╡ 1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
+# ╔═╡ 698dc1ed-87d3-4383-aff3-f50b0d2101db
 md"""
 ## Model
 """
 
-# ╔═╡ 64d44910-988c-4e24-baf6-6408da65bd21
-@with_kw struct HuggettPoisson2
+# ╔═╡ a4d2a937-efe4-47a5-bd67-8c63e24eabeb
+@with_kw struct DurableModel
 	
-	σ::Float64 = 2.   # risk aversion coefficient u'(c) = c^(-σ)
-	ρ::Float64 = 0.05 # rate of time preference
+	σ::Float64 = 2.    # risk aversion coefficient u'(c) = c^(-σ)
+	ρ::Float64 = 0.05  # rate of time preference
+	r::Float64 = 0.045 # interest rate
+	y::Float64 = 0.1   # income
 
-	N_z = 2
-	z::Matrix{Float64} = [0.1 0.2]   # income states (row vector)
-	λ::Matrix{Float64} = [0.02 0.03] # intensities (row vector)
+	κ::Float64 = 0.25  # utility from durable good
+	p₀::Float64 = 0.2  # buying price
+	p₁::Float64 = 0.1  # selling price
 
 	# asset grid parameters
 	N_a::Int64 = 500
-	aₘᵢₙ::Float64 = - 0.1
-	aₘₐₓ::Float64 = 1.5
+	aₘᵢₙ::Float64 = - 0.02
+	aₘₐₓ::Float64 = 3
 	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
 	
 end
 
-# ╔═╡ ac27dd69-1216-4a02-ba62-ebb098b33fa1
-md"""
-We work with an equi-spaced asset grid with $N_a$ grid points. The difference between two grid points is denoted by $\Delta a$. (Section 7 in the online appendix explains how to deal with non-uniform grids.)
-"""
-
-# ╔═╡ 3dd0c186-04f0-425c-93dc-825c7d4b606e
+# ╔═╡ 16dabb4f-5de2-491f-8cd2-a4cc52afeecf
 function construct_a(m)
 	(; N_a, aₘᵢₙ, aₘₐₓ) = m
 	[aᵢ for aᵢ in range(aₘᵢₙ, aₘₐₓ, N_a)] |> hcat # asset grid (column vector)
 end
 
-# ╔═╡ 2289c7a7-3493-4bfb-8ffe-31b074d17b14
+# ╔═╡ 95c68a25-05a8-4485-ac66-6af85a0af0f9
 md"""
-## HJB equation (implicit method)
-"""
+The value function for agents that do not own a car is $v_0(a)$.
 
-# ╔═╡ 0caee0bf-77c0-4542-a68e-9052d230ca74
-md"""
-$$\rho v_1(a) = \max_c u(c) + v_1'(a) (z_1 + ra - c) + \lambda_1(v_2(a) - v_1(a))$$
-$$\rho v_2(a) = \max_c u(c) + v_2'(a) (z_2 + ra - c) + \lambda_2(v_1(a) - v_2(a))$$
-"""
+The value function for agents that own a car is $v_1(a)$.
 
-# ╔═╡ 38555a5e-5d39-4c61-9381-94c8fb67a257
-md"""
-**Algorithm**
+The value of buying a car is $v_0^*(a) = v_1(a - p_0)$ if $a-p_0 \ge \underline{a}$, else $v_0^*(a) = \infty$.
 
-(Notation: $v_{i,j}$ is short-hand notation for $v_j(a_i)$.)
+The value of selling the car is $v_1^*(a) = v_0(\max\{a + p_1, a_\max\})$. 
 
-Start with an initial guess for the value function $v_{i,j}^0$. A natural choice is
-$$v_{i,j}^0 = \frac{u(z_j + ra_i)}{\rho}$$.
-
-For i = 1, ... maxit 
-
-(1) Approximate $(v_{i,j}^n)'$, $j=1,2$ using a finite difference method:
-
-(Notation: Superscript $n$ is omitted.) 
-
-- forward difference $v_{i,j,F}' = \frac{v_{i+1,j} - v_{i,j}}{\Delta a}$
-- backward diffrence $v_{i,j,B}' = \frac{v_{i,j} - v_{i-1,j}}{\Delta a}$
-
-The state constraint $a \ge a_\text{min}$ needs to be enforced by setting $v'_{1,j,B} = u'(z_j + ra_\text{min})$.
-
-- savings according to forward difference $s_{i,j,F} = z_j + ra_i - (u')^{-1}(v'_{i,j,F})$
-- savings according to backward difference $s_{i,j,B} = z_j + ra_i - (u')^{-1}(v'_{i,j,B})$
-
-The finite difference approximation of $(v_{i,j}^n)'$ is
-
-$$v'_{i,j} = v'_{i,j,F} 1_{s_{i,j,F}>0} + v'_{i,j,B} 1_{s_{i,j,B}<0} + \bar{v}_{i,j} 1_{s_{i,j,F} \le 0 \le s_{i,j,B}}$$
-
-where $\bar{v}_{i,j} = u'(s_j + r a_i)$.
-
-(We assume concavity of the value function here so that the case $s_{i,j,F}>0$ and $s_{i,j,B}<0$ cannot occur.)
-
-(2) Compute the consumption policy implied by the value function $c_{i,j}^n = (u')^{-1}[(v_{i,j}^n)']$
-
-(3) Find updated value function $v^{n+1}$:
+HJB variational inequalities:
 
 ```math
 \begin{align}
-&\frac{v_{i,j}^{n+1} - v_{i,j}^{n}}{\Delta} + \rho v_{i,j}^{n+1} = \\
-&u(c_{i,j}^n) + (v_{i,j,F}^{n+1})'{\underbrace{[z_j + ra_i - c_{i,j,F}^n]}_{=s_{i,j,F}^n}}^+ + (v_{i,j,B}^{n+1})'{\underbrace{[z_j + ra_i - c_{i,j,B}^n]}_{=s_{i,j,B}^n}}^- + \lambda_j (v_{i,-j}^{n+1} - v_{i,j}^{n+1})
+0 &= \min\{\rho v_0(a) - \max_c\{u(c) + v'_0(a)(y + ra - c)\}, v_0(a) - v_0^*(a))\} \\
+0 &= \min\{\rho v_1(a) - \max_c\{u(c) + \kappa + v'_1(a)(y + ra - c)\}, v_1(a) - v_1^*(a))\} \\
+\end{align}
+```
+"""
+
+# ╔═╡ eee0de53-9e36-42f4-88d9-7a8ee25ea13a
+md"""
+## Exercise 1: Solution algorithm
+"""
+
+# ╔═╡ 0834be20-1a8d-4498-9019-ebfcc4769711
+md"""
+
+Finite difference method $\implies$ 
+
+```math
+\begin{align}
+0 &= \min\{\frac{v_0^{n+1} + v_0^n}{\Delta} + \rho v_0^{n+1} - u(v_0^n) - A(v_0^n) v_0^{n+1}, v_0^{n+1} - (v_0^*)^n\} \\
+0 &= \min\{\frac{v_1^{n+1} + v_1^n}{\Delta} + \rho v_1^{n+1} - u(v_1^n) - A(v_1^n) v_1^{n+1}, v_1^{n+1} - (v_1^*)^n\} \\
 \end{align}
 ```
 
-where $\Delta$ is the step size.
+where $v_0$, $v_1$, etc. denote the column vectors now (the value functions evaluated on the discrete grid).
 
-This is a system of $2N_a$ linear equations. Since $v^{n+1}$ is implicitly defined by the equations above, this approach is referred to as the implicit method.
+Stacking both equations $\implies$
 
-The system of equations can be written in matrix notation as 
+```math
+\begin{align}
+0 &= \min\{\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1}, v^{n+1} - (v^*)^n\}
+\end{align}
+```
 
-$$\frac{1}{\Delta} (v^{n+1} - v^n) + \rho v^{n+1} = u^n + A^n v^{n+1}$$
-
-The $2N_a \times 2N_a$ matrix $A^n$ can be written as a sum of two matrices $\bar{A}^n$ and $A_\text{switch}$:
-
-$A^n = \bar{A}^n + A_\text{switch} = \begin{pmatrix} \bar{A}_{11}^n & 0 \\ 0 & \bar{A}_{22}^n \end{pmatrix} + \begin{pmatrix} -\lambda_1 I & \lambda_1 I \\ \lambda_2 I & -\lambda_2 I \end{pmatrix}$
-
-where $I$ is a $N_a \times N_a$ identity matrix. Since $A_\text{switch}$ stays unchanged, it can be pre-computed outside the for-loop.
-
-The $N_a \times N_a$ submatrices $\bar{A}_{11}^n$ and $\bar{A}_{22}^n$ are tri-diagonal:
-- The -1 diagonal is filled with $x_{i,j} = - \frac{(s^n_{i,j,B})^-}{\Delta a}$, $i=2, \dots N_a$
-- The main diagonal is filled with $y_{i,j} = - \frac{(s^n_{i,j,F})^+}{\Delta a} + \frac{(s^n_{i,j,B})^-}{\Delta a}$, $i=1, \dots N_a$
-- The +1 diagonal is filled with $z_{i,j} = \frac{(s^n_{i,j,F})^+}{\Delta a}$, $i=1, \dots N_a - 1$
-
-Since $A^n$ is a sparse matrix, computers can solve the system of linear equations quickly even for large $N_a$.
-
-(4) Stop if $v^{n+1}$ is close enough to $v^n$. 
-
+where $v = \begin{pmatrix} v_0 \\ v_1 \end{pmatrix}$, $A = \begin{pmatrix} A(v_0) & 0 \\ 0 & A(v_1) \end{pmatrix}$, etc.
 """
 
-# ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
-function solve_HJB_implicit(m::HuggettPoisson2, r; maxit = 100, crit = 1e-6, Δ = 1000)
+# ╔═╡ 7b2a66b2-cec7-40c2-b90e-e8064d2e6be8
+md"""
+We will solve the equation for the updated value function $v^{n+1}$ by writing the equation above as a Linear Complementarity Problem (LCP):
 
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+```math
+\begin{align}
+z'(Bz + q) &= 0 \\
+z &\ge 0 \\
+Bz + q &\ge 0 
+\end{align}
+```
+
+Then we can use the LCP solver from the ```LCPsolve.jl``` package to solve for $z$.
+
+👉 Rewrite the equation $0 = \min\{\dots\}$ above as a LCP. Express $z$, $B$ and $q$ in terms of $v^{n+1}$, $v^n$, $(v^*)^n$, $u$, $A$, $\rho$ and $\Delta$.
+"""
+
+# ╔═╡ e461b94e-703b-43bf-9e30-56c2b0e2ee3e
+md"""
+
+Writing as Linear Complementarity Problem $\implies$
+
+```math
+\begin{align}
+(v^{n+1} - (v^*)^n)'(\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1}) &= 0 \\
+v^{n+1} - (v^*)^n &\ge 0 \\
+\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1} &\ge 0
+\end{align}
+```
+
+Convert into ```LCPsolve.jl``` parameterization $\implies$ 
+
+$z = v^{n+1} - (v_0^*)^n$
+
+$B = ((1/\Delta + \rho) I - A)$
+
+$q = -u - v^n/\Delta + B (v^*)^n$
+
+This means that after finding the correct $z$ from the LCP solver, we can obtain the updated value function as follows: $v^{n+1} = z + (v^*)^n$
+"""
+
+# ╔═╡ 953f1f64-f8a7-4ca4-bf23-39ccf74db272
+md"""
+👉 Use your result to complete the code below.
+"""
+
+# ╔═╡ 588e0247-65ef-4d98-88f7-b80a76b695ce
+function solve_HJBVI(m::DurableModel; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	(; σ, ρ, r, y, κ, p₀, p₁, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
 	# construct asset grid
 	a = construct_a(m)
@@ -174,47 +183,41 @@ function solve_HJB_implicit(m::HuggettPoisson2, r; maxit = 100, crit = 1e-6, Δ 
 	# initialize arrays for forward and backward difference
 	dvf = zeros(N_a, 2)
 	dvb = zeros(N_a, 2)
-
-	# precompute A_switch matrix
-	id = sparse(I, N_a, N_a)
-	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
-	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
-	A_switch   = vcat(A_switch_1, A_switch_2)
+	v_star = zeros(N_a, 2)
 
 	# initial guess for value function
 	v₀ = zeros(N_a, 2)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
+	v₀[:,:] .= (y .+ r * a).^(1-σ) / (1-σ) / ρ
 	v = v₀
 
 	# initialize vector that keeps track of convergence
 	dist = - ones(maxit)
 
-	for it in range(1, maxit)
+	i_buy  = ceil(Int, p₀/da) #p₀ equals i_buy grid points
+	i_sell = ceil(Int, p₁/da) #p₁ equals i_sell grid points
 
-		# STEP 1
+	for it in range(1, maxit)
 
 		# forward difference
 		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+		dvf[N_a,:] .= (y .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
 
 		# backward difference
 		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+		dvb[1,:] .= (y .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
 	
 		I_concave = dvb .> dvf # problems if value function not concave
 
 		# consumption and savings with forward difference
 		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
+		ȧf = y .+ r .* a .- cf
 
 		# consumption and savings with backward difference
 		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
+		ȧb = y .+ r .* a .- cb
 
 		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
+		c0 = y .+ r .* a .+ zeros(N_a, 2)
 		dv0 = c0 .^ (-σ)
 
 		If = ȧf .> 0 # positive drift => forward difference
@@ -222,15 +225,12 @@ function solve_HJB_implicit(m::HuggettPoisson2, r; maxit = 100, crit = 1e-6, Δ 
 		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
 		If[N_a,:] .= 0.
 		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
 
-		# STEP 2
-	
-		c = dv_upwind .^ (-1/σ)
-		u = c.^(1-σ)/(1-σ)
-
-		# STEP 3
+		c = cf .* If + cb .* Ib + c0 .* I0
+		
+		u = zeros(N_a, 2)
+		u[:,1] = c[:,1] .^ (1-σ) / (1-σ)
+		u[:,2] = c[:,2] .^ (1-σ) / (1-σ) .+ κ
 
 		X = - min.(ȧb,0)/da
 		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
@@ -238,769 +238,161 @@ function solve_HJB_implicit(m::HuggettPoisson2, r; maxit = 100, crit = 1e-6, Δ 
 
 		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
 		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-		A1 = hcat(A11, spzeros(N_a, N_a))
-		A2 = hcat(spzeros(N_a, N_a), A22)
-		A = vcat(A1, A2) + A_switch
+		A = blockdiag(A11, A22)
 
+    	# value of buying car if currently, don't own car
+	    v_star[i_buy+1:N_a,1] = v[1:N_a-i_buy,2]
+	    # instead of setting Vstar[1:i_buy,1]=-Inf, do something smoother
+	    slope = (v_star[i_buy+2,1] - v_star[i_buy+1,1]) / da
+	    v_star[1:i_buy,1] = v_star[i_buy+1,1] .+ slope * (a[1:i_buy] .- a[i_buy+1])
+
+	    # value of selling car if currently own car
+	    v_star[1:N_a-i_sell,2] = v[i_sell+1:N_a,1]
+	    v_star[N_a-i_sell+1:N_a,2] .= v[N_a,1] # assume p = min(p,amax - a)
+
+		### YOUR CODE ###
+		
 		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
-		b = vec(u) + vec(v)/Δ
-		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, 2)
+		q = - (vec(u) + vec(v)/Δ) + B * vec(v_star)
+		z₀ = vec(v) - vec(v_star)
 
-		# STEP 4
+		#################
+		
+		res = solve!(LCP(B, q), z₀)
+		z = res.sol
 
-		v_change = v_new - v
+		LCP_error = maximum(abs.(z.*(B*z + q)))
+	    if LCP_error > 1e-5
+			error("LCP not solved")
+		end
+
+	    v_new = reshape(z + vec(v_star), N_a, 2)
+	    
+	    v_change = v_new - v
 		dist[it] = maximum(abs.(v_change))
 		
-		v = v_new
+	    v = v_new
 
 		if dist[it] < crit
 
-			ȧ = z .+ r.*a - c
+			ȧ = y .+ r .* a .- c
 
-			return v, c, ȧ, A, it, dist
+			return v, v_star, c, ȧ, it, dist
 
 		end
 
 	end
 
 	error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
-md"""
-## KF equation
-"""
-
-# ╔═╡ 2e09462e-6030-4e33-bc7a-9d2faed4ca74
-md"""
-$$0 = - \frac{d}{da}[s_1(a)g_1(a)] - \lambda_1 g_1(a) + \lambda_2 g_2(a)$$
-$$0 = - \frac{d}{da}[s_2(a)g_2(a)] - \lambda_2 g_2(a) + \lambda_1 g_1(a)$$
-
-where $s_j(a) + z_j + ra - c_j(a)$
-
-$$1 = \int_{\bar{a}}^\infty g_1(a)da + \int_{\bar{a}}^\infty g_2(a)da$$
-
-**Algorithm**
-
-A finite difference approximation of the KF equation results into the matrix equation $A^T g = 0$ where $A$ is the matrix from implicit algorithm for the HJB equation.
-"""
-
-# ╔═╡ e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
-md"""
-## Putting everything together
-"""
-
-# ╔═╡ 23a991be-7c8b-45e2-bd75-af5e146fc6b0
-m = HuggettPoisson2();
-
-# ╔═╡ deeff3d5-3856-43cb-8469-2a4d6d7fca4f
-md"""
-## Equilibrium interest rate
-"""
-
-# ╔═╡ b6101102-2054-4932-b6b6-5070cd84f2be
-md"""
-$$0 = \int_{\bar{a}}^\infty ag_1(a)da + \int_{\bar{a}}^\infty ag_2(a)da = S(r)$$
-"""
-
-# ╔═╡ a8f1dc13-b73c-44b0-8e63-82431f904313
-initial_bracket = (0.01, 0.03)
-
-# ╔═╡ b26682fb-4b4b-45bc-b406-7a15637f8199
-md"""
-# Three income states 
-"""
-
-# ╔═╡ 505d44ec-1c16-4cc3-851d-a9d7feb18cb3
-md"""
-## Model
-"""
-
-# ╔═╡ 288c66fc-aa44-42d8-b19b-c9725bef2d44
-md"""
-In the case of 2 income states, we represented the intensities of the Poisson process as a vector $\lambda = [\lambda_1, \lambda_2]$ where $\lambda_j$ is the rate at which agents leave income state $j$ and switch to the other income state. An alternative representation would be a matrix 
-
-$\Lambda = \begin{pmatrix}
--\lambda_1 & \lambda_1 \\
-\lambda_2 & -\lambda_2
-\end{pmatrix}$
-
-In the case of 3 income states, the matrix representation becomes more convenient:
-
-$$\Lambda = \begin{pmatrix} 
--\lambda_{12}-\lambda_{13} & \lambda_{12} & \lambda_{13} \\ 
-\lambda_{21} & -\lambda_{21} - \lambda_{23} & \lambda_{23} \\
-\lambda_{31} & \lambda_{32} & -\lambda_{31} & -\lambda_{32}
-\end{pmatrix}$$
-
-where $\lambda_{jk}$ is the rate at which agents in state $j$ switch to state $k$.
-"""
-
-# ╔═╡ d7f08043-fa3e-476c-a25a-dac7c16cc570
-@with_kw struct HuggettPoisson3
-	
-	σ::Float64 = 2.   # risk aversion coefficient u'(c) = c^(-σ)
-	ρ::Float64 = 0.05 # rate of time preference
-
-	N_z = 3
-	z::Matrix{Float64} = [0.1 0.15 0.2] # income states (row vector)
-	Λ::Matrix{Float64} = [-0.06 0.04 0.02; 0.02 -0.04 0.02; 0.02 0.04 -0.06]
-
-	@assert all(abs.(sum(Λ; dims=2)) .< 1e-12)
-	
-	# asset grid parameters
-	N_a::Int64 = 500
-	aₘᵢₙ::Float64 = - 0.1
-	aₘₐₓ::Float64 = 1.
-	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
 	
 end
 
-# ╔═╡ 49d69255-20f3-490d-b068-81ec0cb22ff3
-md"""
-## Exercise 1: HJB equation
-"""
-
-# ╔═╡ ec990221-bff1-41f3-8a94-2ef23a836f2c
-md"""
-👉 Write down the system of HJB equations for the case of 3 income states.
-"""
-
-# ╔═╡ 90d0941c-d952-44c5-8acf-6adf30361b57
-md"""
-Version 1:
-
-$$\rho v_j(a) = \max_c u(c) + v_j'(a) (z_j + ra - c) + \sum_{k=1}^3 \Lambda_{j,k} v_k(a)$$
-
-Version 2:
-
-$$\rho v_j(a) = \max_c u(c) + v_j'(a) (z_j + ra - c) + \sum_{k\neq j} \lambda_{j,k} (v_k(a) - v_j(a))$$
-
-for $j = 1,2,3$
-"""
-
-# ╔═╡ fe3bf03d-eb60-40d6-aae8-8e85b0bb9213
-md"""
-👉 How does the matrix $A^n$ look like for 3 income states?
-"""
-
-# ╔═╡ 514c081b-5343-4e63-abdf-eda3356c110a
-md"""
-```math
-\begin{align}
-A^n = \begin{pmatrix} 
-	\bar{A}_{11}^n & 0 & 0 \\ 
-	0 & \bar{A}_{22}^n & 0 \\ 
-	0 & 0 & \bar{A}_{33}^n 
-\end{pmatrix} + \begin{pmatrix} 
-	-(\lambda_{12} + \lambda_{13}) I & \lambda_{12} I & \lambda_{13} I \\ 
-	\lambda_{21} I & -(\lambda_{21} + \lambda_{23}) I & \lambda_{23} I \\
-	\lambda_{31} I & \lambda_{32} I & -(\lambda_{31} + \lambda_{32})I
-\end{pmatrix}
-\end{align}
-```
-"""
-
-# ╔═╡ 612478ce-215b-4020-a2f7-a64818f8fb03
-md"""
-👉 Adapt the algorithm for solving the HJB equation so that it can deal with 3 income states.
-
-(Writing separate algorithms for 2 and 3 income states is of course not very elegant from a programming perspective, but it hopefully helps you to understand the algorithm in Achdou et al. better.) 
-"""
-
-# ╔═╡ ec54c169-f795-40fe-8c5c-b63600834d77
-function solve_HJB_implicit(m::HuggettPoisson3, r; maxit = 100, crit = 1e-6, Δ = 1000)
-
-	(; σ, ρ, z, Λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
-
-	# construct asset grid
-	a = construct_a(m)
-
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 3)
-	dvb = zeros(N_a, 3)
-
-	# precompute A_switch matrix
-	id = sparse(I, N_a, N_a)
-	A_switch_1 = hcat(Λ[1,1] * id,  Λ[1,2] * id, Λ[1,3] * id)
-	A_switch_2 = hcat(Λ[2,1] * id,  Λ[2,2] * id, Λ[2,3] * id)
-	A_switch_3 = hcat(Λ[3,1] * id,  Λ[3,2] * id, Λ[3,3] * id)
-	A_switch   = vcat(A_switch_1, A_switch_2, A_switch_3)
-
-	# initial guess for value function
-	v₀ = zeros(N_a, 3)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
-
-	# initialize vector that keeps track of convergence
-	dist = - ones(maxit)
-
-	for it in range(1, maxit)
-
-		# STEP 1
-
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+# ╔═╡ 0923cba9-0286-459f-aa6a-f0df0b3196c7
+function results_to_df(m::DurableModel; v, v_star, c, ȧ)
 	
-		I_concave = dvb .> dvf # problems if value function not concave
+	(; N_a) = m
 
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-
-		# STEP 2
-	
-		c = dv_upwind .^ (-1/σ)
-		u = c.^(1-σ)/(1-σ)
-
-		# STEP 3
-
-		X = - min.(ȧb,0)/da
-		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
-		Z =   max.(ȧf,0)/da
-
-		zero = spzeros(N_a, N_a)
-		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-		A33 = spdiagm(-1 => X[2:N_a,3], 0 => Y[:,3], 1 => Z[1:N_a-1,3])
-		A1 = hcat(A11, zero, zero)
-		A2 = hcat(zero, A22, zero)
-		A3 = hcat(zero, zero, A33)
-		A = vcat(A1, A2, A3) + A_switch
-
-		B = (ρ + 1/Δ) * sparse(I, 3*N_a, 3*N_a) - A
-		b = vec(u) + vec(v)/Δ
-		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, 3)
-
-		# STEP 4
-
-		v_change = v_new - v
-		dist[it] = maximum(abs.(v_change))
-		
-		v = v_new
-
-		if dist[it] < crit
-
-			ȧ = z .+ r.*a - c
-
-			return v, c, ȧ, A, it, dist
-
-		end
-
-	end
-
-	error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 9ebdb7e1-c1e3-4e22-8c24-e82e5d927160
-md"""
-## Results
-"""
-
-# ╔═╡ 492aa578-b079-4710-b1e9-2c887922d9f2
-m3 = HuggettPoisson3();
-
-# ╔═╡ d4efae22-e989-4d59-b916-ecc6d3c8b0e3
-initial_bracket3 = (0.01, 0.03)
-
-# ╔═╡ f8c3b95f-0895-4301-9eaf-02b238a46ec9
-md"""
-# $N_z$ income states
-"""
-
-# ╔═╡ d7cbcf7e-a467-4c51-bc9e-9b04aa943e3f
-md"""
-## Model
-"""
-
-# ╔═╡ f783c67b-5456-43cb-baa7-7812bf797723
-@with_kw struct HuggettPoissonN
-	
-	σ::Float64 = 2.   # risk aversion coefficient u'(c) = c^(-σ)
-	ρ::Float64 = 0.05 # rate of time preference
-
-	N_z::Int64 = 4
-	z::Matrix{Float64} = [0.1 0.13 0.17 0.2] # income states (row vector)
-	Λ::Matrix{Float64} = [
-		-0.07 0.04 0.02 0.01; 
-		0.02 -0.05 0.02 0.01; 
-		0.01 0.02 -0.05 0.02;
-		0.01 0.02 0.04 -0.07
-	]
-
-	@assert all(abs.(sum(Λ; dims=2)) .< 1e-12)
-	
-	# asset grid parameters
-	N_a::Int64 = 500
-	aₘᵢₙ::Float64 = - 0.1
-	aₘₐₓ::Float64 = 1.5
-	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
-	
-end
-
-# ╔═╡ f8686182-95b7-497d-9b3a-8d272efd9f90
-md"""
-## Exercise 2: HJB equation (optional)
-"""
-
-# ╔═╡ 86dced4d-2eb3-4f67-835f-3b9b4f247007
-md"""
-👉 Adapt the algorithm for solving the HJB equation so that it can deal with an arbitrary number $N_z$ of income states.
-"""
-
-# ╔═╡ 573757f8-8093-4310-8073-11ae7fcff776
-function solve_HJB_implicit(m::HuggettPoissonN, r; maxit = 100, crit = 1e-6, Δ = 1000)
-
-	(; σ, ρ, N_z, z, Λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
-
-	# construct asset grid
-	a = construct_a(m)
-
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, N_z)
-	dvb = zeros(N_a, N_z)
-
-	# precompute A_switch matrix
-	id = sparse(I, N_a, N_a)
-	A_switch_rows = [
-		hcat([Λ[j,k] * id for k in range(1,N_z)]...) for j in range(1,N_z)
-	]
-	A_switch   = vcat(A_switch_rows...)
-
-	# initial guess for value function
-	v₀ = zeros(N_a, N_z)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
-
-	# initialize vector that keeps track of convergence
-	dist = - ones(maxit)
-
-	for it in range(1, maxit)
-
-		# STEP 1
-
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-
-		# STEP 2
-	
-		c = dv_upwind .^ (-1/σ)
-		u = c.^(1-σ)/(1-σ)
-
-		# STEP 3
-
-		X = - min.(ȧb,0)/da
-		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
-		Z =   max.(ȧf,0)/da
-
-		A_bar = blockdiag([
-			spdiagm(-1 => X[2:N_a,j], 0 => Y[:,j], 1 => Z[1:N_a-1,j])
-		for j in range(1,N_z)]...)
-		
-		A = A_bar + A_switch
-
-		B = (ρ + 1/Δ) * sparse(I, N_z*N_a, N_z*N_a) - A
-		b = vec(u) + vec(v)/Δ
-		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, N_z)
-
-		# STEP 4
-
-		v_change = v_new - v
-		dist[it] = maximum(abs.(v_change))
-		
-		v = v_new
-
-		if dist[it] < crit
-
-			ȧ = z .+ r.*a - c
-
-			return v, c, ȧ, A, it, dist
-
-		end
-
-	end
-
-	error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 98a7d8e0-1741-4447-b612-e40491fa8673
-t_impl = @elapsed solve_HJB_implicit(m, 0.03)
-
-# ╔═╡ bc435feb-ed9f-4662-b023-5eae0f1e778a
-md"""
-## Results
-"""
-
-# ╔═╡ 9349d7cf-ddab-41a8-9ba2-44ea849619b3
-mN = HuggettPoissonN();
-
-# ╔═╡ 110ed843-0259-43bc-9e60-189dcd4515b3
-initial_bracketN = (0.01, 0.035)
-
-# ╔═╡ e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
-md"""
-# Appendix 
-"""
-
-# ╔═╡ ab69ab43-99bf-4a92-9698-70e170761e82
-md"""
-## HJB equation (explicit method)
-"""
-
-# ╔═╡ 5c7c3dc0-7848-4431-829e-508664d9c5af
-md"""
-**Basic dea**
-
-Start with some initial guess $v_{i,j}^0$ and update $v_{i,j}^n$ as follows:
-
-$$\frac{v_{i,j}^{n+1} - v_{i,j}^n}{\Delta} + \rho v_{i,j}^n = u(c_{i,j}^n) + (v_{i,j}^n)'(z_j + ra_i - c_{i,j}^n) + \lambda_i (v_{i,-j}^n - v_{i,j}^n)$$
-
-In contrast to the implicit method, we can rearrange for $v_{i,j}^{n+1}$ in the equation above.
-
-The disadvantage of the explicit method is that it converges only if $\Delta$ is not too large.
-"""
-
-# ╔═╡ b099dbbf-9648-44c5-984c-fdd80ee81469
-function solve_HJB_explicit(m::HuggettPoisson2, r; maxit = 100000, crit = 1e-6)
-
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
-
-	# construct asset grid
-	a = construct_a(m)
-
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-
-	# initial guess for value function
-	v₀ = zeros(N_a, 2)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
-
-	# initialize vector that keeps track of convergence
-	dist = - ones(maxit)
-
-	# step size for updating the value function
-	Δ = .9 * da / (z[2] .+ r.*aₘₐₓ)
-
-	for it in range(1, maxit)
-
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-	
-		c = dv_upwind .^ (-1/σ)
-		ȧ = z .+ r.*a - c
-		
-		v_switch = zeros(N_a, 2)
-		v_switch[:,2] = v[:,1]
-		v_switch[:,1] = v[:,2]
-
-		# HJB equation
-		v_change = c.^(1-σ)/(1-σ) + dv_upwind .* ȧ + ones(N_a,1)*λ.*(v_switch - v) - ρ*v
-
-		# updating the value function
-		v[:,:] = v + Δ * v_change
-
-		dist[it] = maximum(abs.(v_change))
-
-		if dist[it] < crit
-			
-			return v, c, ȧ, it, dist
-
-		end
-
-	end
-
-	error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 4bfa5d92-b177-4442-b045-e05cc48b6cc4
-t_expl = @elapsed solve_HJB_explicit(m, 0.03; crit=1e-6)
-
-# ╔═╡ fd0fb774-a805-4739-b570-0d2e191a3294
-md"""
-## Implicit vs. explicit method
-"""
-
-# ╔═╡ eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
-md"""
-**Implicit method**
-"""
-
-# ╔═╡ bd2e4d28-c68b-45c9-b68e-b477b44fcd75
-md"""
-**Explicit method**
-"""
-
-# ╔═╡ 6e607792-e297-483f-8917-c871fa0c26d0
-md"""
-## Helper functions
-"""
-
-# ╔═╡ 0605f7f4-7123-4c1e-a0f6-aefdfeaed25d
-HuggettPoisson = Union{HuggettPoisson2, HuggettPoisson3, HuggettPoissonN};
-
-# ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
-function solve_KF(m::HuggettPoisson, A)
-
-	(; N_a, da, N_z) = m
-	
-	AT = transpose(A)
-	b = zeros(N_z*N_a, 1)
-	
-	i_fix = 1
-	b[i_fix] = .1
-	AT[i_fix,:] = hcat(zeros(1, i_fix-1), 1., zeros(1,N_z*N_a-i_fix))
-
-	g_stacked = AT\b
-	g_sum = sum(g_stacked) * da
-	g_stacked_norm = g_stacked ./ g_sum
-
-	@assert sum(g_stacked_norm) * da ≈ 1
-	
-	g = reshape(g_stacked_norm, N_a, N_z)
-
-end
-
-# ╔═╡ 532d0b24-6ace-4579-bf2a-d12c07ee9436
-function results_to_df(m::HuggettPoisson; v, c, ȧ, g=nothing)
-	
-	(; N_a, N_z, z) = m
+	d = [0 1]
 
 	a = construct_a(m)
 
 	df = DataFrame()
-	df.a = a * ones(1, N_z) |> vec
-	df.z = ones(N_a, 1) * z |> vec
+	df.a = a * ones(1, 2) |> vec
+	df.d = ones(Int, N_a, 1) * d |> vec
 	df.c = c |> vec
 	df.ȧ = ȧ |> vec
 	df.v = v |> vec
-	
-	if ! isnothing(g)
-		df.g = g |> vec
-	end
+	df.v_star = v_star |> vec
+	df.action = (v_star .≈ v ) |> vec
+
+	df.c[df.action] .= NaN
+	df.ȧ[df.action] .= NaN
 
 	df
 	
 end
 
-# ╔═╡ e1376e99-a636-4d28-b711-2dd4be66374f
-function solve_df(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	
-	v, c, ȧ, A, it_last, dist = solve_HJB_implicit(m, r; maxit, crit, Δ)
-	g = solve_KF(m, A)
-	df = results_to_df(m; v, c, ȧ, g)
-	
-	return df, it_last, dist
+# ╔═╡ e701b4c7-2e55-443e-a37e-34b10c831095
+function solve_df(m; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	v, v_star, c, ȧ, it, dist = solve_HJBVI(m; maxit, crit, Δ)
+
+	df = results_to_df(m; v, v_star, c, ȧ)
+
+	return df
 	
 end
 
-# ╔═╡ 4de350bb-d2be-46b1-8558-a49f54a29dd1
-(df, it_last, dist) = solve_df(m, 0.03; maxit = 100);
+# ╔═╡ dc7da594-5213-42da-9962-2b7f899cb192
+md"""
+## Exercise 2: Results
+"""
 
-# ╔═╡ 1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
-let 
-	
-	df.g_max = min.(df.g,df.g[2])
-	# do not show the point mass at the borrowing constraint
+# ╔═╡ 3f509c06-dfb6-4373-ae94-1aef74578ffa
+m = DurableModel();
+
+# ╔═╡ abd5e562-03ff-43a4-b4d0-146f2cf69717
+df = solve_df(m);
+
+# ╔═╡ edf44a54-baeb-4139-9545-eb9fbb89d561
+md"""
+👉 Interpret the diagram below.
+"""
+
+# ╔═╡ 054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
+md"""
+Left panel: agent does not own car $d=0$
+- low wealth: $v_0 > v_0^*$ $\implies$ agents does not buy car
+- sufficiently high wealth: $v_0 = v_0^*$ $\implies$ agent buys car
+
+Right panel: agent owns car $d=1$
+- high wealth: $v_1 > v_1^*$ $\implies$ agents does not sell car
+- sufficiently low wealth: $v_1 = v_1^*$ $\implies$ agent sells car
+
+Note that "value matching" and "smooth pasting" hold even though we did not impose them.
+"""
+
+# ╔═╡ cbfc715f-83ff-4700-b49f-ce623b43b7db
+let
+
+	figure = (; resolution = (800, 400))
 	
 	@chain df begin
-		stack(Not([:a, :z, :g]))
-		data(_) * mapping(:a, :value, layout = :variable, color = :z => nonnumeric) * visual(Lines)
-		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+		stack([:v_star, :v])
+		data(_) * mapping(:a, :value, layout = :d => nonnumeric, color = :variable => nonnumeric) * visual(Lines)
+		draw(; figure, facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 	end
 
 end
 
-# ╔═╡ ae8fd43c-f658-47b1-8781-6f699ade6bdb
-let 
-	df_dist = DataFrame(
-		iteration = range(1, it_last), 
-		time = range(0, t_impl, it_last),
-		log10_dist = log10.(dist[1:it_last])
-		)
-	figure = (; resolution = (500, 250))
-	@chain df_dist begin
-		data(_) * mapping(:time, :log10_dist) * visual(Lines)
-		draw(; figure)
-	end
+# ╔═╡ 231ce8ae-1219-48a5-b829-a07093322221
+md"""
+👉 Interpret the diagram below.
+"""
+
+# ╔═╡ 99d92b37-1bfe-44a6-ab12-5f511c97d6a3
+md"""
+There is a large range of wealth values for which owners do not sell but non-owners do not buy. This is because of the difference between the selling and the buying price.
+"""
+
+# ╔═╡ ea368b73-478a-4029-844a-e1beb759fcff
+@chain df begin
+	stack([:c, :ȧ, :action])
+	data(_) * mapping(:a, :value, layout = :variable, color = :d => nonnumeric) * visual(Lines)
+	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 end
 
-# ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
-function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	(; da) = m
-	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
-	A = dot(df.a, df.g) * da
+# ╔═╡ b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
+md"""
+# Appendix
+"""
 
-end
-
-# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
-r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
-
-# ╔═╡ d31538cc-4223-47bf-ad19-b1ed9c1ab1f5
-r_eq3 = find_zero(r -> excess_demand(m3, r), initial_bracket3, Brent())
-
-# ╔═╡ 2d15caf9-986d-4595-ab24-39ada24c9778
-r_eqN = find_zero(r -> excess_demand(mN, r), initial_bracketN, Brent())
-
-# ╔═╡ f29e5256-ccec-4c99-9f90-5f98142b1f40
-(df3, it_last3, dist3) = solve_df(m3, r_eq3);
-
-# ╔═╡ 30496b92-df7c-4f48-9983-5cbb99d81f7a
-let 
-	
-	df3.g_max = min.(df3.g, df3.g[2])
-	# do not show the point mass at the borrowing constraint
-	
-	@chain df3 begin
-		stack(Not([:a, :z, :g]))
-		data(_) * mapping(:a, :value, layout = :variable, color = :z => nonnumeric) * visual(Lines)
-		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
-	end
-
-end
-
-# ╔═╡ 9f901ed5-0458-4358-a793-a530e397c01f
-(dfN, it_lastN, distN) = solve_df(mN, r_eqN);
-
-# ╔═╡ 6f18ea5e-5816-4791-974f-78910f393e57
-let 
-	
-	dfN.g_max = min.(dfN.g, dfN.g[1]/5)
-	# do not show the point mass at the borrowing constraint
-	
-	@chain dfN begin
-		stack(Not([:a, :z, :g]))
-		data(_) * mapping(:a, :value, layout = :variable, color = :z => nonnumeric) * visual(Lines)
-		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
-	end
-
-end
-
-# ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-function solve_explicit_df(m::HuggettPoisson2, r; maxit = 100000, crit = 1e-6)
-	
-	v, c, ȧ, it_last, dist = solve_HJB_explicit(m, r; maxit, crit)
-	df = results_to_df(m; v, c, ȧ)
-	
-	return df, it_last, dist
-	
-end
-
-# ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
-(df_expl, it_last_expl, dist_expl) = solve_explicit_df(m, 0.03; crit=1e-6);
-
-# ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
-(df_expl[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]])
-
-# ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
-let 
-	df_dist = DataFrame(
-		iteration = range(1, it_last_expl), 
-		time = range(0, t_expl, it_last_expl),
-		log10_dist = log10.(dist_expl[1:it_last_expl])
-		)
-	figure = (; resolution = (500, 250))
-	@chain df_dist begin
-		data(_) * mapping(:time, :log10_dist) * visual(Lines)
-		draw(; figure)
-	end
-end
-
-# ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
+# ╔═╡ 7513b208-c92a-43f3-9b00-439a1f49ded8
 md"""
 ## Imported packages
 """
 
-# ╔═╡ 5c1387ed-973c-4109-9ace-c473a4efe9ee
+# ╔═╡ 3836dcce-1b4e-4e2c-98a4-2a8d41e70625
 TableOfContents()
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -1010,10 +402,10 @@ AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+LCPsolve = "2a7bdd54-bc59-11e8-11d9-476dcad269f6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
@@ -1021,9 +413,9 @@ AlgebraOfGraphics = "~0.6.8"
 CairoMakie = "~0.8.7"
 Chain = "~0.4.10"
 DataFrames = "~1.3.4"
+LCPsolve = "~0.1.1"
 Parameters = "~0.12.3"
 PlutoUI = "~0.7.39"
-Roots = "~2.0.1"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1171,11 +563,6 @@ git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
-[[deps.CommonSolve]]
-git-tree-sha1 = "332a332c97c7071600984b3c31d9067e1a4e6e25"
-uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.1"
-
 [[deps.Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
 git-tree-sha1 = "9be8be1d8a6f44b96482c8af52238ea7987da3e3"
@@ -1185,12 +572,6 @@ version = "3.45.0"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-
-[[deps.ConstructionBase]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "f74e9d5388b8620b4cee35d4c5a618dd4dc547f4"
-uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-version = "1.3.0"
 
 [[deps.Contour]]
 deps = ["StaticArrays"]
@@ -1582,6 +963,12 @@ git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.1+0"
 
+[[deps.LCPsolve]]
+deps = ["LinearAlgebra", "Printf", "SparseArrays"]
+git-tree-sha1 = "e0908a7b7cc3897dcc54096c0038b06ea09fd895"
+uuid = "2a7bdd54-bc59-11e8-11d9-476dcad269f6"
+version = "0.1.1"
+
 [[deps.LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "e5b909bcf985c5e2605737d2ce278ed791b89be6"
@@ -1681,12 +1068,6 @@ deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl",
 git-tree-sha1 = "e595b205efd49508358f7dc670a940c790204629"
 uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
 version = "2022.0.0+0"
-
-[[deps.MacroTools]]
-deps = ["Markdown", "Random"]
-git-tree-sha1 = "3d3e902b31198a27340d0bf00d6ac452866021cf"
-uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
-version = "0.5.9"
 
 [[deps.Makie]]
 deps = ["Animations", "Base64", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "Contour", "Distributions", "DocStringExtensions", "FFMPEG", "FileIO", "FixedPointNumbers", "Formatting", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageIO", "IntervalSets", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MakieCore", "Markdown", "Match", "MathTeXEngine", "Observables", "OffsetArrays", "Packing", "PlotUtils", "PolygonOps", "Printf", "Random", "RelocatableFolders", "Serialization", "Showoff", "SignedDistanceFields", "SparseArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "UnicodeFun"]
@@ -1958,9 +1339,9 @@ version = "1.2.2"
 
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
-git-tree-sha1 = "cdbd3b1338c72ce29d9584fdbe9e9b70eeb5adca"
+git-tree-sha1 = "22c5201127d7b243b9ee1de3b43c408879dff60f"
 uuid = "05181044-ff0b-4ac5-8273-598c1e38db00"
-version = "0.1.3"
+version = "0.3.0"
 
 [[deps.Requires]]
 deps = ["UUIDs"]
@@ -1979,12 +1360,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "68db32dff12bb6127bac73c209881191bf0efbb7"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
 version = "0.3.0+0"
-
-[[deps.Roots]]
-deps = ["CommonSolve", "Printf", "Setfield"]
-git-tree-sha1 = "30e3981751855e2340e9b524ab58c1ec85c36f33"
-uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "2.0.1"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -2008,12 +1383,6 @@ version = "1.1.0"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
-
-[[deps.Setfield]]
-deps = ["ConstructionBase", "Future", "MacroTools", "Requires"]
-git-tree-sha1 = "38d88503f695eb0301479bc9b0d4320b378bafe5"
-uuid = "efcf1570-3423-57d1-acb7-fd33fddbac46"
-version = "0.8.2"
 
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
@@ -2308,85 +1677,40 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
-# ╟─0edf9214-7213-4b1d-8fa6-54a365525d29
-# ╟─c3773842-4fa1-4f80-a8a0-82d4d9ca49bc
-# ╟─1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
-# ╠═64d44910-988c-4e24-baf6-6408da65bd21
-# ╟─ac27dd69-1216-4a02-ba62-ebb098b33fa1
-# ╠═3dd0c186-04f0-425c-93dc-825c7d4b606e
-# ╟─2289c7a7-3493-4bfb-8ffe-31b074d17b14
-# ╟─0caee0bf-77c0-4542-a68e-9052d230ca74
-# ╟─38555a5e-5d39-4c61-9381-94c8fb67a257
-# ╠═4d7ee33f-ff78-4ea9-838b-a8320df4651f
-# ╟─1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
-# ╟─2e09462e-6030-4e33-bc7a-9d2faed4ca74
-# ╠═eb565042-1823-4d5a-b4d1-ee314dccd4e0
-# ╟─e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
-# ╠═e1376e99-a636-4d28-b711-2dd4be66374f
-# ╠═23a991be-7c8b-45e2-bd75-af5e146fc6b0
-# ╠═4de350bb-d2be-46b1-8558-a49f54a29dd1
-# ╠═98a7d8e0-1741-4447-b612-e40491fa8673
-# ╠═1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
-# ╟─deeff3d5-3856-43cb-8469-2a4d6d7fca4f
-# ╟─b6101102-2054-4932-b6b6-5070cd84f2be
-# ╠═19e28c66-a389-4903-82a5-c963cf0b90b9
-# ╠═a8f1dc13-b73c-44b0-8e63-82431f904313
-# ╠═bd353706-be2d-480d-8ebb-cf20cab0dbec
-# ╟─b26682fb-4b4b-45bc-b406-7a15637f8199
-# ╟─505d44ec-1c16-4cc3-851d-a9d7feb18cb3
-# ╟─288c66fc-aa44-42d8-b19b-c9725bef2d44
-# ╠═d7f08043-fa3e-476c-a25a-dac7c16cc570
-# ╟─49d69255-20f3-490d-b068-81ec0cb22ff3
-# ╟─ec990221-bff1-41f3-8a94-2ef23a836f2c
-# ╟─90d0941c-d952-44c5-8acf-6adf30361b57
-# ╟─fe3bf03d-eb60-40d6-aae8-8e85b0bb9213
-# ╟─514c081b-5343-4e63-abdf-eda3356c110a
-# ╟─612478ce-215b-4020-a2f7-a64818f8fb03
-# ╠═ec54c169-f795-40fe-8c5c-b63600834d77
-# ╟─9ebdb7e1-c1e3-4e22-8c24-e82e5d927160
-# ╠═492aa578-b079-4710-b1e9-2c887922d9f2
-# ╠═d4efae22-e989-4d59-b916-ecc6d3c8b0e3
-# ╠═d31538cc-4223-47bf-ad19-b1ed9c1ab1f5
-# ╠═f29e5256-ccec-4c99-9f90-5f98142b1f40
-# ╠═30496b92-df7c-4f48-9983-5cbb99d81f7a
-# ╟─f8c3b95f-0895-4301-9eaf-02b238a46ec9
-# ╟─d7cbcf7e-a467-4c51-bc9e-9b04aa943e3f
-# ╠═f783c67b-5456-43cb-baa7-7812bf797723
-# ╟─f8686182-95b7-497d-9b3a-8d272efd9f90
-# ╟─86dced4d-2eb3-4f67-835f-3b9b4f247007
-# ╠═573757f8-8093-4310-8073-11ae7fcff776
-# ╟─bc435feb-ed9f-4662-b023-5eae0f1e778a
-# ╠═9349d7cf-ddab-41a8-9ba2-44ea849619b3
-# ╠═110ed843-0259-43bc-9e60-189dcd4515b3
-# ╠═2d15caf9-986d-4595-ab24-39ada24c9778
-# ╠═9f901ed5-0458-4358-a793-a530e397c01f
-# ╠═6f18ea5e-5816-4791-974f-78910f393e57
-# ╟─e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
-# ╟─ab69ab43-99bf-4a92-9698-70e170761e82
-# ╟─5c7c3dc0-7848-4431-829e-508664d9c5af
-# ╠═b099dbbf-9648-44c5-984c-fdd80ee81469
-# ╠═f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-# ╠═4894a323-c8c8-4f34-b311-20c64176b89d
-# ╠═4bfa5d92-b177-4442-b045-e05cc48b6cc4
-# ╠═ebd88b43-e277-4c79-b443-1661a3c438b8
-# ╟─fd0fb774-a805-4739-b570-0d2e191a3294
-# ╟─eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
-# ╟─ae8fd43c-f658-47b1-8781-6f699ade6bdb
-# ╟─bd2e4d28-c68b-45c9-b68e-b477b44fcd75
-# ╟─264fc65e-d09a-4c67-94de-f845d42d18a3
-# ╟─6e607792-e297-483f-8917-c871fa0c26d0
-# ╠═0605f7f4-7123-4c1e-a0f6-aefdfeaed25d
-# ╠═532d0b24-6ace-4579-bf2a-d12c07ee9436
-# ╟─518eec58-eb4b-4294-9090-b6645f51a337
-# ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
-# ╠═6f92c837-1760-423e-9777-9db9ad758475
-# ╠═563c267e-0c6a-4b90-81a7-fc8ff4c73c75
-# ╠═6d5523f2-a517-48df-9f31-bbd516e1208e
-# ╠═9fa33ac0-bb2f-4055-b124-8c7c19621226
-# ╠═276e171b-271d-4610-b9bb-01b212193123
-# ╠═aecea3fe-f0ee-4953-857b-29d6a5640530
-# ╠═9353566b-a70e-4dbe-8f02-b16d2c0570d2
-# ╠═0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
+# ╟─c3bf5880-f169-11ec-20e3-bf9092156abf
+# ╟─23df23ca-df80-4789-ac79-fc777d258beb
+# ╟─826ee178-6423-470f-abb8-74f808baa26f
+# ╟─698dc1ed-87d3-4383-aff3-f50b0d2101db
+# ╠═a4d2a937-efe4-47a5-bd67-8c63e24eabeb
+# ╠═16dabb4f-5de2-491f-8cd2-a4cc52afeecf
+# ╟─95c68a25-05a8-4485-ac66-6af85a0af0f9
+# ╟─eee0de53-9e36-42f4-88d9-7a8ee25ea13a
+# ╟─0834be20-1a8d-4498-9019-ebfcc4769711
+# ╟─7b2a66b2-cec7-40c2-b90e-e8064d2e6be8
+# ╟─e461b94e-703b-43bf-9e30-56c2b0e2ee3e
+# ╟─953f1f64-f8a7-4ca4-bf23-39ccf74db272
+# ╠═588e0247-65ef-4d98-88f7-b80a76b695ce
+# ╠═0923cba9-0286-459f-aa6a-f0df0b3196c7
+# ╠═e701b4c7-2e55-443e-a37e-34b10c831095
+# ╟─dc7da594-5213-42da-9962-2b7f899cb192
+# ╠═3f509c06-dfb6-4373-ae94-1aef74578ffa
+# ╠═abd5e562-03ff-43a4-b4d0-146f2cf69717
+# ╟─edf44a54-baeb-4139-9545-eb9fbb89d561
+# ╟─054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
+# ╠═cbfc715f-83ff-4700-b49f-ce623b43b7db
+# ╟─231ce8ae-1219-48a5-b829-a07093322221
+# ╟─99d92b37-1bfe-44a6-ab12-5f511c97d6a3
+# ╠═ea368b73-478a-4029-844a-e1beb759fcff
+# ╟─b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
+# ╟─7513b208-c92a-43f3-9b00-439a1f49ded8
+# ╠═3836dcce-1b4e-4e2c-98a4-2a8d41e70625
+# ╠═52885681-b577-49a2-b8a1-7965e68b6b17
+# ╠═89688b7b-aea5-4551-b9f3-f14d9821d0de
+# ╠═2b07a251-25b7-4dd8-ae6e-4765a9306e2e
+# ╠═40a8b311-b518-4bd9-b89d-4c74b0279e68
+# ╠═1d6b41db-2298-42a6-a226-1bbf8f364cf1
+# ╠═4c7d813f-79e9-4719-b68e-987494ac2c74
+# ╠═018818eb-8e27-42f9-bdce-89ffb0c3a35c
+# ╠═8b738d67-96b8-4d12-99c9-46825cdaef1a
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
