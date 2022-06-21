@@ -63,8 +63,8 @@ md"""
 	ρ::Float64 = 0.05 # rate of time preference
 
 	N_z = 2
-	z::Matrix{Float64} = reshape([0.1, 0.2], 1, :)   # income states (row vector)
-	λ::Matrix{Float64} = reshape([0.02, 0.03], 1, :) # intensities (row vector)
+	z::Matrix{Float64} = [0.1 0.2]   # income states (row vector)
+	λ::Matrix{Float64} = [0.02 0.03] # intensities (row vector)
 
 	# asset grid parameters
 	N_a::Int64 = 500
@@ -345,7 +345,7 @@ where $\lambda_{jk}$ is the rate at which agents in state $j$ switch to state $k
 	ρ::Float64 = 0.05 # rate of time preference
 
 	N_z = 3
-	z::Matrix{Float64} = reshape([0.1, 0.15, 0.2], 1, :) # income states (row vector)
+	z::Matrix{Float64} = [0.1 0.15 0.2] # income states (row vector)
 	Λ::Matrix{Float64} = [-0.06 0.04 0.02; 0.02 -0.04 0.02; 0.02 0.04 -0.06]
 
 	@assert all(abs.(sum(Λ; dims=2)) .< 1e-12)
@@ -547,7 +547,7 @@ md"""
 	ρ::Float64 = 0.05 # rate of time preference
 
 	N_z::Int64 = 4
-	z::Matrix{Float64} = reshape([0.1, 0.13, 0.17, 0.2], 1, :) # income states (row vector)
+	z::Matrix{Float64} = [0.1 0.13 0.17 0.2] # income states (row vector)
 	Λ::Matrix{Float64} = [
 		-0.07 0.04 0.02 0.01; 
 		0.02 -0.05 0.02 0.01; 
