@@ -158,110 +158,6 @@ Since $A^n$ is a sparse matrix, computers can solve the system of linear equatio
 
 """
 
-# ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
-function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
-
-	# construct asset grid
-	a = construct_a(m)
-
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-
-	# precompute A_switch matrix
-	id = sparse(I, N_a, N_a)
-	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
-	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
-	A_switch   = vcat(A_switch_1, A_switch_2)
-
-	# initial guess for value function
-	v₀ = zeros(N_a, 2)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
-
-	# initialize vector that keeps track of convergence
-	dist = - ones(maxit)
-
-	for it in range(1, maxit)
-
-		# STEP 1
-
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-
-		# STEP 2
-	
-		c = dv_upwind .^ (-1/σ)
-		u = c.^(1-σ)/(1-σ)
-
-		# STEP 3
-		X = - min.(ȧb,0)/da
-		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
-		Z =   max.(ȧf,0)/da
-
-		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-		A1 = hcat(A11, spzeros(N_a, N_a))
-		A2 = hcat(spzeros(N_a, N_a), A22)
-		A = vcat(A1, A2) + A_switch
-
-		B = (ρ + 1/Δ) * I - A
-		b = vec(u) + vec(v)/Δ
-		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, 2)
-
-		# STEP 4
-
-		v_change = v_new - v
-		dist[it] = maximum(abs.(v_change))
-		
-		v = v_new
-
-		if dist[it] < crit
-
-			ȧ = z .+ r.*a - c
-
-			return v, c, ȧ, A, it, dist
-
-		end
-
-	end
-
-	error("Algorithm did not converge")
-
-end
-
 # ╔═╡ 1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
 md"""
 ## KF equation
@@ -321,9 +217,6 @@ end
 md"""
 ## Putting everything together
 """
-
-# ╔═╡ 98a7d8e0-1741-4447-b612-e40491fa8673
-t_impl = @elapsed solve_HJB_implicit(m, 0.03)
 
 # ╔═╡ deeff3d5-3856-43cb-8469-2a4d6d7fca4f
 md"""
@@ -548,7 +441,7 @@ end
 
 # ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
 function consumption_and_drift((; a, z), dv, (; r, σ))
-	dv = max(dv, eps(0.0))
+	#dv = max(dv, eps(0.0))
 	c = dv ^ (-1/σ)
 	ȧ = z + r * a - c
 
@@ -557,7 +450,7 @@ end
 
 # ╔═╡ 91c8dce8-07b8-46d2-8c61-e6bccced64e4
 function consumption_and_drift₀((; a, z), (; r, σ))
-	ȧ = 0
+	ȧ = 0.0
 	c = z + r * a
 
 	dv = c^(-σ)
@@ -565,32 +458,21 @@ function consumption_and_drift₀((; a, z), (; r, σ))
 	(; c, ȧ, dv)
 end
 
-# ╔═╡ d10a14a7-d479-46e7-b707-618126e5c5de
-const T = typeof((; dv=0.0, ȧf=0.0, ȧb=0.0, c=0.0))
-
 # ╔═╡ 7734c75e-5f2b-4807-8b9a-82e7e010edac
 function consumption_and_drift_upwind(state, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
 	# consumption and savings with forward difference
-	outf = consumption_and_drift(state, dvf, (; σ, r))
+	(; dv, ȧ, c) =  consumption_and_drift(state, dvf, (; σ, r))
+	if ȧ > 0 && state.a < aₘₐₓ
+		return (; dv, ȧf = ȧ, ȧb = 0.0, c, ȧ)
+	end
 	# consumption and savings with backward difference
-	outb = consumption_and_drift(state, dvb, (; σ, r))
+	(; dv, ȧ, c) = consumption_and_drift(state, dvb, (; σ, r))
+	if ȧ < 0 && state.a > aₘᵢₙ
+		return (; dv, ȧf = 0.0, ȧb = ȧ, c, ȧ)
+	end
 	# consumption and derivate of value function at steady state
-	out0 = consumption_and_drift₀(state, (; σ, r))
-
-		
-	if outf.ȧ > 0 && state.a < aₘₐₓ
-		return (; outf.dv, ȧf = outf.ȧ, ȧb = 0.0, outf.c)
-	end
-	if outb.ȧ < 0 && state.a > aₘᵢₙ
-		return (; outb.dv, ȧf = 0.0, ȧb = outb.ȧ, outb.c)
-	end
-	#if outf.ȧ ≤ 0 && outb.ȧ ≥ 0
-		return (; dv = out0.dv, ȧf = 0.0, ȧb = 0.0, out0.c)
-	#end
-	#if outf.ȧ > 0 && outb.ȧ < 0
-	#	dv =  outf.dv + outb.dv
-	#	return (; dv, ȧf = outf.ȧ, ȧb = outb.ȧ, c = dv^(-1/par.σ)) |> T
-	#end
+	(; dv, ȧ, c) = consumption_and_drift₀(state, (; σ, r))
+	return (; dv, ȧf = 0.0, ȧb = 0.0, c, ȧ)
 end
 
 # ╔═╡ 3e4b82aa-a6ec-4097-afb5-927b7e16262a
@@ -631,10 +513,53 @@ function construct_A_alt(ȧfs, ȧbs, da, N_a, N_z)
 	A₀
 end
 
+# ╔═╡ 8777505c-6db4-4e75-a57b-59f4620b0051
+function construct_A(ȧs, da, N_a, N_z)
+
+
+	size_ss = (N_a, N_z)
+	N = N_a * N_z
+	car_inds = CartesianIndices(size_ss) |> collect .|> Tuple
+	lin_inds = LinearIndices(size_ss)
+
+	# initialize list of entries A
+	T = typeof((; I_from=1, I_to=1, λ=0.0))
+	list = T[]
+
+	# create list of entries of A
+	for (I_from, ȧ) in enumerate(ȧs)
+		i_a, i_z = car_inds[I_from]
+
+		i_a_next = nothing
+		λ = nothing
+
+		# in which direction to move?
+		if ȧ > 0 && i_a < N_a
+			i_a_next = i_a + 1
+			λ = ȧ / da
+		elseif ȧ < 0 && i_a > 1
+			i_a_next = i_a - 1
+			λ = -ȧ / da
+		end
+
+		if !isnothing(i_a_next)
+			I_to = lin_inds[i_a_next, i_z]
+			push!(list, (; I_from, I_to, λ))
+		end
+	end
+
+	# construct sparse matrix from list of entries
+	list_sa = StructArray(list)
+	A = sparse(list_sa.I_from, list_sa.I_to, list_sa.λ, N, N)
+	# fill diagonal
+	A[diagind(A)] .= - vec(sum(A, dims=2))
+
+	A
+end
+
 # ╔═╡ 434ecb8d-eae2-4913-97f8-3bdbefbf78ff
-function construct_A(ȧf, ȧb, da, N_a)
+function construct_A_diag(ȧf, ȧb, da, N_a)
 	X = - min.(ȧb,0)/da
-	#Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
 	Z =   max.(ȧf,0)/da
 
 	A11 = spdiagm(-1 => X[2:N_a,1], 1 => Z[1:N_a-1,1])
@@ -642,31 +567,41 @@ function construct_A(ȧf, ȧb, da, N_a)
 	A = cat(A11, A22, dims=(1,2))
 	A[diagind(A)] .= - vec(sum(A, dims=2))
 	
-#	A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-#	A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-#	A = cat(A11, A22, dims=(1,2))
+	A
+end
+
+# ╔═╡ b77b52ac-73ad-456c-94e5-5f72e310268f
+function construct_A_moll(ȧf, ȧb, da, N_a)
+	X = - min.(ȧb,0)/da
+	Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+	Z =   max.(ȧf,0)/da
+
+	#A11 = spdiagm(-1 => X[2:N_a,1], 1 => Z[1:N_a-1,1])
+	#A22 = spdiagm(-1 => X[2:N_a,2], 1 => Z[1:N_a-1,2])
+	#A = cat(A11, A22, dims=(1,2))
+	#A[diagind(A)] .= - vec(sum(A, dims=2))
+	
+	A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+	A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+	A = cat(A11, A22, dims=(1,2))
 
 	A
 end
 
-# ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
-function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+# ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
+function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
 
 	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
 	# construct asset grid
 	a = construct_a(m)
 
-	ss = statespace(m)
-	ss_inds = statespace_inds(m)
-	lin_ind = LinearIndices((N_a, 2))
-	
 	# initialize arrays for forward and backward difference
 	dvf = zeros(N_a, 2)
 	dvb = zeros(N_a, 2)
 
 	# precompute A_switch matrix
-	id = I(N_a)
+	id = sparse(I, N_a, N_a)
 	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
 	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
 	A_switch   = vcat(A_switch_1, A_switch_2)
@@ -694,23 +629,35 @@ function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-
 		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
 	
 		I_concave = dvb .> dvf # problems if value function not concave
-				
+
+		# consumption and savings with forward difference
+		cf = dvf .^ (-1/σ)
+		ȧf = z .+ r .* a - cf
+
+		# consumption and savings with backward difference
+		cb = dvb .^ (-1/σ)
+		ȧb = z .+ r .* a - cb
+
+		# consumption and derivate of value function at steady state
+		c0 = z .+ r .* a
+		dv0 = c0 .^ (-σ)
+
+		If = ȧf .> 0 # positive drift => forward difference
+		Ib = ȧb .< 0 # negative drift => backward difference
+		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
+		If[N_a,:] .= 0.
+		I0 = (1 .- If .- Ib) # steady state
+	
+		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
+
+		# STEP 2
+	
+		c = dv_upwind .^ (-1/σ)
+		u = c.^(1-σ)/(1-σ)
+
 		# STEP 3
-		(; c, ȧf, ȧb) = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
-		u = c .^ (1-σ)/(1-σ)
+		A = construct_A_moll(ȧf, ȧb, da, N_a) + A_switch
 
-		ȧf[end,:] .= 0.0
-		ȧb[1,:] .= 0.0
-		
-		#A = construct_A_alt(ȧf, ȧb, da, N_a, 2) + A_switch
-		A = construct_A(ȧf, ȧb, da, N_a) + A_switch
-		#A = construct_A_moll(ȧf, ȧb, da, N_a) + A_switch
-
-#		if A_diag != A_moll
-#			@warn A_diag - A
-#		end
-		#@assert A ≈ A_alt
-		
 		B = (ρ + 1/Δ) * I - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
@@ -733,7 +680,87 @@ function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-
 
 	end
 
-	error("Algorithm did not converge")
+	@error("Algorithm did not converge")
+
+end
+
+# ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
+function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+
+	# construct asset grid
+	a = construct_a(m)
+	ss = statespace(m)
+	ss_inds = statespace_inds(m)
+	lin_ind = LinearIndices((N_a, 2))
+	
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
+
+	# precompute A_switch matrix
+	id = I(N_a)
+	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
+	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
+	A_switch   = vcat(A_switch_1, A_switch_2)
+
+	# initial guess for value function
+	v₀((; z, a)) = (z + r*a)^(1-σ)/(1-σ)/ρ
+	v = v₀.(ss)
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	for it in range(1, maxit)
+
+		# STEP 1
+
+		# forward difference
+		dvf[1:N_a-1,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] .= (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] .= (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+		I_concave = dvb .> dvf # problems if value function not concave
+				
+		# STEP 3
+		(; c, ȧf, ȧb, ȧ) = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
+		u = c .^ (1-σ)/(1-σ)
+
+		#@assert all(ȧf[end,:] .== 0.0)
+		#@assert all(ȧb[1,:] .== 0.0)
+		
+		#A = construct_A_alt(ȧf, ȧb, da, N_a, 2) + A_switch
+		#A = construct_A_diag(ȧf, ȧb, da, N_a) + A_switch
+		A = construct_A_moll(ȧf, ȧb, da, N_a) + A_switch
+		# A = construct_A(ȧ, da, N_a, 2) + A_switch
+
+		B = (ρ + 1/Δ) * I - A
+		b = vec(u) + vec(v)/Δ
+		v_new_stacked = B \ b
+		v_new = reshape(v_new_stacked, N_a, 2)
+
+		# STEP 4
+
+		v_change = v_new - v
+		dist[it] = maximum(abs.(v_change))
+		
+		v = v_new
+
+		if dist[it] < crit
+
+			ȧ = z .+ r.*a .- c
+
+			return v, c, ȧ, A, it, dist
+
+		end
+
+	end
+
+	@error("Algorithm did not converge")
 
 end
 
@@ -767,6 +794,20 @@ end
 # ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
 (df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]])
 
+# ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
+function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+	(; da) = m
+	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
+	A = dot(df.a, df.g) * da
+
+end
+
+# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
+r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
+
+# ╔═╡ 98a7d8e0-1741-4447-b612-e40491fa8673
+t_impl = @elapsed solve_HJB_implicit_julian(m, 0.03)
+
 # ╔═╡ ae8fd43c-f658-47b1-8781-6f699ade6bdb
 let 
 	df_dist = DataFrame(
@@ -781,54 +822,8 @@ let
 	end
 end
 
-# ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
-function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	(; da) = m
-	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
-	A = dot(df.a, df.g) * da
-
-end
-
-# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
-r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
-
-# ╔═╡ b77b52ac-73ad-456c-94e5-5f72e310268f
-function construct_A_moll(ȧf, ȧb, da, N_a)
-	X = - min.(ȧb,0)/da
-	Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
-	Z =   max.(ȧf,0)/da
-
-	#A11 = spdiagm(-1 => X[2:N_a,1], 1 => Z[1:N_a-1,1])
-	#A22 = spdiagm(-1 => X[2:N_a,2], 1 => Z[1:N_a-1,2])
-	#A = cat(A11, A22, dims=(1,2))
-	#A[diagind(A)] .= - vec(sum(A, dims=2))
-	
-	A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-	A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-	A = cat(A11, A22, dims=(1,2))
-
-	A
-end
-
-# ╔═╡ 6ed1d91c-ed9b-48af-bfeb-2af5b8e35889
-let
-	N_a = 3
-	N_z = 2
-	ȧ = randn(N_a, N_z)
-	ȧb = ȧ .* (ȧ .< 0)
-	ȧf = ȧ .* (ȧ .> 0)
-
-	da = 0.01
-
-	A1 = construct_A(ȧb, ȧf, da, N_a)
-	A2 = construct_A_alt(ȧb, ȧf, da, N_a, 2)
-
-	Matrix(A1), Matrix(A2), ȧ
-
-#	Matrix(A1)
-	A1 - A2 |> Matrix
-	
-end
+# ╔═╡ cf116acb-47ed-4631-8831-4321842abf6b
+solve_HJB_implicit_julian(m, 0.03, maxit=1000)
 
 # ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
 md"""
@@ -2215,14 +2210,14 @@ version = "3.5.0+0"
 # ╠═01234bcc-a428-4922-969f-9a1ba49c8d62
 # ╠═e57a2dfa-0937-49cf-9161-fa1e39fb5e80
 # ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
-# ╠═d10a14a7-d479-46e7-b707-618126e5c5de
 # ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
 # ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
 # ╠═e204ae15-fefd-4f01-8d5e-3772aefe9b0f
+# ╠═cf116acb-47ed-4631-8831-4321842abf6b
 # ╠═b57ea0a2-bee4-450f-99fa-cc79054fc963
+# ╠═8777505c-6db4-4e75-a57b-59f4620b0051
 # ╠═434ecb8d-eae2-4913-97f8-3bdbefbf78ff
 # ╠═b77b52ac-73ad-456c-94e5-5f72e310268f
-# ╠═6ed1d91c-ed9b-48af-bfeb-2af5b8e35889
 # ╟─518eec58-eb4b-4294-9090-b6645f51a337
 # ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
 # ╠═6f92c837-1760-423e-9777-9db9ad758475
