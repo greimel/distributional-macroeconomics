@@ -25,21 +25,21 @@ using DataFrames
 # ╔═╡ 9353566b-a70e-4dbe-8f02-b16d2c0570d2
 using Chain: @chain
 
-# ╔═╡ 2f0b93c4-2b95-4166-9003-83f226ba0b39
-using Statistics: mean
-
-# ╔═╡ c2d11548-6c33-4c84-ac66-85ff316c5323
-using StatsBase: weights
-
 # ╔═╡ 0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
 using Roots: find_zero, Brent
+
+# ╔═╡ cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
+md"""
+`continuous-time-moll.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+"""
 
 # ╔═╡ 0edf9214-7213-4b1d-8fa6-54a365525d29
 md"""
 # Huggett model in continuous time
 
-In this tutorial, we consider a Huggett economy in continuous time. Income is a Poisson process with two states. The notebook follows the [Online Appendix of Achdou et al. (2021)](https://benjaminmoll.com/wp-content/uploads/2020/02/HACT_Numerical_Appendix.pdf) very closely. 
-"""
+In this notebook, we consider a Huggett economy in continuous time. Income is a Poisson process with two states. 
+
+More information on the algorithms can be found in the [Online Appendix of Achdou et al. (2021)](https://benjaminmoll.com/wp-content/uploads/2020/02/HACT_Numerical_Appendix.pdf). The Julia code in this notebook follows the closely the [Matlab code snippets](https://benjaminmoll.com/codes/) that Ben Moll uploaded on his website."""
 
 # ╔═╡ 1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
 md"""
@@ -49,17 +49,29 @@ md"""
 # ╔═╡ 64d44910-988c-4e24-baf6-6408da65bd21
 @with_kw struct HuggettPoisson
 	
-	σ::Float64 = 2.
-	ρ::Float64 = 0.05
+	σ::Float64 = 2.   # risk aversion coefficient u'(c) = c^(-σ)
+	ρ::Float64 = 0.05 # rate of time preference
 
-	z::Matrix{Float64} = reshape([0.1, 0.2], 1, :)   # as row vector
-	λ::Matrix{Float64} = reshape([0.02, 0.03], 1, :) # as row vector
+	z::Matrix{Float64} = reshape([0.1, 0.2], 1, :)   # income state (row vector)
+	λ::Matrix{Float64} = reshape([0.02, 0.03], 1, :) # intensities (row vector)
 
+	# asset grid parameters
 	N_a::Int64 = 500
 	aₘᵢₙ::Float64 = - 0.1
 	aₘₐₓ::Float64 = 1.
 	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
 	
+end
+
+# ╔═╡ ac27dd69-1216-4a02-ba62-ebb098b33fa1
+md"""
+We work with an equi-spaced asset grid with $N_a$ grid points. The difference between two grid points is denoted by $\Delta a$. (Section 7 in the online appendix explains how to deal with non-uniform grids.)
+"""
+
+# ╔═╡ 3dd0c186-04f0-425c-93dc-825c7d4b606e
+function construct_a(m)
+	(; N_a, aₘᵢₙ, aₘₐₓ) = m
+	[aᵢ for aᵢ in range(aₘᵢₙ, aₘₐₓ, N_a)] |> hcat # asset grid (column vector)
 end
 
 # ╔═╡ 23a991be-7c8b-45e2-bd75-af5e146fc6b0
@@ -70,80 +82,78 @@ md"""
 ## HJB equation (implicit method)
 """
 
-# ╔═╡ 1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
+# ╔═╡ 0caee0bf-77c0-4542-a68e-9052d230ca74
 md"""
-## KF equation
+$$\rho v_1(a) = \max_c u(c) + v_1'(a) (z_1 + ra - c) + \lambda_1(v_2(a) - v_1(a))$$
+$$\rho v_2(a) = \max_c u(c) + v_2'(a) (z_2 + ra - c) + \lambda_2(v_1(a) - v_2(a))$$
 """
 
-# ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
-function solve_KF(m::HuggettPoisson, A)
-
-	(; N_a, da) = m
-	
-	AT = transpose(A)
-	b = zeros(2*N_a, 1)
-	
-	i_fix = 1
-	b[i_fix] = .1
-	AT[i_fix,:] = hcat(zeros(1, i_fix-1), 1., zeros(1,2*N_a-i_fix))
-
-	g_stacked = AT\b
-	g_sum = sum(g_stacked) # * da ??
-	g_stacked_norm = g_stacked ./ g_sum
-	g = reshape(g_stacked_norm, N_a, 2)
-	
-	# TODO: check if g is proper density
-
-end
-
-# ╔═╡ e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
+# ╔═╡ 38555a5e-5d39-4c61-9381-94c8fb67a257
 md"""
-## Putting everything together
+**Algorithm**
+
+(Notation: $v_{i,j}$ is short-hand notation for $v_j(a_i)$.)
+
+Start with an initial guess for the value function $v_{i,j}^0$. A natural choice is
+$$v_{i,j}^0 = \frac{u(z_j + ra_i)}{\rho}$$.
+
+For i = 1, ... maxit 
+
+(1) Approximate $(v_{i,j}^n)'$, $j=1,2$ using a finite difference method:
+
+(Notation: Superscript $n$ is omitted.) 
+
+- forward difference $v_{i,j,F}' = \frac{v_{i+1,j} - v_{i,j}}{\Delta a}$
+- backward diffrence $v_{i,j,B}' = \frac{v_{i,j} - v_{i-1,j}}{\Delta a}$
+
+The state constraint $a \ge a_\text{min}$ needs to be enforced by setting $v'_{1,j,B} = u'(z_j + ra_\text{min})$.
+
+- savings according to forward difference $s_{i,j,F} = z_j + ra_i - (u')^{-1}(v'_{i,j,F})$
+- savings according to backward difference $s_{i,j,B} = z_j + ra_i - (u')^{-1}(v'_{i,j,B})$
+
+The finite difference approximation of $(v_{i,j}^n)'$ is
+
+$$v'_{i,j} = v'_{i,j,F} 1_{s_{i,j,F}>0} + v'_{i,j,B} 1_{s_{i,j,B}<0} + \bar{v}_{i,j} 1_{s_{i,j,F} \le 0 \le s_{i,j,B}}$$
+
+where $\bar{v}_{i,j} = u'(s_j + r a_i)$.
+
+(We assume concavity of the value function here so that the case $s_{i,j,F}>0$ and $s_{i,j,B}<0$ cannot occur.)
+
+(2) Compute the consumption policy implied by the value function $c_{i,j}^n = (u')^{-1}[(v_{i,j}^n)']$
+
+(3) Find updated value function $v^{n+1}$:
+
+```math
+\begin{align}
+&\frac{v_{i,j}^{n+1} - v_{i,j}^{n}}{\Delta} + \rho v_{i,j}^{n+1} = \\
+&u(c_{i,j}^n) + (v_{i,j,F}^{n+1})'[z_j + ra_i - c_{i,j,F}^n]^+ + (v_{i,j,B}^{n+1})'[z_j + ra_i - c_{i,j,B}^n]^- + \lambda_j (v_{i,-j}^{n+1} - v_{i,j}^{n+1})
+\end{align}
+```
+
+where $\Delta$ is the step size.
+
+This is a system of $2N_a$ linear equations. Since $v^{n+1}$ is implicitly defined by the equations above, this approach is referred to as the implicit method.
+
+The system of equations can be written in matrix notation as 
+
+$$\frac{1}{\Delta} (v^{n+1} - v^n) + \rho v^{n+1} = u^n + A^n v^{n+1}$$
+
+The $2N_a \times 2N_a$ matrix $A^n$ can be written as a sum of two matrices $\bar{A}^n$ and $A_\text{switch}$:
+
+$A^n = \bar{A}^n + A_\text{switch} = \begin{pmatrix} \bar{A}_{11}^n & 0 \\ 0 & \bar{A}_{22}^n \end{pmatrix} + \begin{pmatrix} -\lambda_1 I & \lambda_1 I \\ \lambda_2 I & -\lambda_2 I \end{pmatrix}$
+
+where $I$ is a $N_a \times N_a$ identity matrix. Since $A_\text{switch}$ stays unchanged, it can be pre-computed outside the for-loop.
+
+The $N_a \times N_a$ submatrices $\bar{A}_{11}^n$ and $\bar{A}_{22}^n$ are tri-diagonal:
+- The -1 diagonal is filled with $x_{i,j} = - \frac{(s^n_{i,j,B})^-}{\Delta a}$, $i=2, \dots N_a$
+- The main diagonal is filled with $y_{i,j} = - \frac{(s^n_{i,j,F})^+}{\Delta a} + \frac{(s^n_{i,j,B})^-}{\Delta a}$, $i=1, \dots N_a$
+- The +1 diagonal is filled with $z_{i,j} = \frac{(s^n_{i,j,F})^+}{\Delta a}$, $i=1, \dots N_a - 1$
+
+Since $A^n$ is a sparse matrix, computers can solve the system of linear equations quickly even for large $N_a$.
+
+(4) Stop if $v^{n+1}$ is close enough to $v^n$. 
+
 """
-
-# ╔═╡ deeff3d5-3856-43cb-8469-2a4d6d7fca4f
-md"""
-## Equilibrium interest rate
-"""
-
-# ╔═╡ a8f1dc13-b73c-44b0-8e63-82431f904313
-initial_bracket = (0.01, 0.03)
-
-# ╔═╡ e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
-md"""
-# Appendix 
-"""
-
-# ╔═╡ fd0fb774-a805-4739-b570-0d2e191a3294
-md"""
-## Convergence of the solution methods
-"""
-
-# ╔═╡ eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
-md"""
-**Implicit method**
-"""
-
-# ╔═╡ bd2e4d28-c68b-45c9-b68e-b477b44fcd75
-md"""
-**Explicit method**
-"""
-
-# ╔═╡ ab69ab43-99bf-4a92-9698-70e170761e82
-md"""
-## HJB equation (explicit method)
-"""
-
-# ╔═╡ 6e607792-e297-483f-8917-c871fa0c26d0
-md"""
-## Helper functions
-"""
-
-# ╔═╡ 41a7cf6b-ad57-42df-9415-f8f4cee7cf4d
-function construct_a(m)
-	(; N_a, aₘᵢₙ, aₘₐₓ) = m
-	[aᵢ for aᵢ in range(aₘᵢₙ, aₘₐₓ, N_a)] |> hcat # as column vector
-end
 
 # ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
 function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
@@ -156,12 +166,6 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 	# initialize arrays for forward and backward difference
 	dvf = zeros(N_a, 2)
 	dvb = zeros(N_a, 2)
-
-	# initialize policy function arrays	
-	c = zeros(N_a, 2)
-
-	# initialize A matrix
-	A = zeros(2*N_a, 2*N_a)
 
 	# precompute A_switch matrix
 	id = sparse(I, N_a, N_a)
@@ -180,6 +184,8 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 	dist = - ones(maxit)
 
 	for it in range(1, maxit)
+
+		# STEP 1
 
 		# forward difference
 		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
@@ -210,11 +216,13 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 		I0 = (1 .- If .- Ib) # steady state
 	
 		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
+
+		# STEP 2
 	
-		c[:,:] = dv_upwind .^ (-1/σ)
+		c = dv_upwind .^ (-1/σ)
 		u = c.^(1-σ)/(1-σ)
 
-		# TODO documentation
+		# STEP 3
 
 		X = - min.(ȧb,0)/da
 		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
@@ -224,14 +232,14 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
 		A1 = hcat(A11, spzeros(N_a, N_a))
 		A2 = hcat(spzeros(N_a, N_a), A22)
-		A[:,:] = vcat(A1, A2) + A_switch
-
-		# TODO: check transition matrix
+		A = vcat(A1, A2) + A_switch
 
 		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
 		v_new = reshape(v_new_stacked, N_a, 2)
+
+		# STEP 4
 
 		v_change = v_new - v
 		dist[it] = maximum(abs.(v_change))
@@ -239,21 +247,106 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 		v = v_new
 
 		if dist[it] < crit
-			break
+
+			ȧ = z .+ r.*a - c
+
+			return v, c, ȧ, A, it, dist
+
 		end
 
 	end
 
-	ȧ = z .+ r.*a - c
-
-	it_last = sum(dist .> 0)
-
-	return v, c, ȧ, A, it_last, dist
+	error("Algorithm did not converge")
 
 end
 
+# ╔═╡ 1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
+md"""
+## KF equation
+"""
+
+# ╔═╡ 2e09462e-6030-4e33-bc7a-9d2faed4ca74
+md"""
+$$0 = - \frac{d}{da}[s_1(a)g_1(a)] - \lambda_1 g_1(a) + \lambda_2 g_2(a)$$
+$$0 = - \frac{d}{da}[s_2(a)g_2(a)] - \lambda_2 g_2(a) + \lambda_1 g_1(a)$$
+
+where $s_j(a) + z_j + ra - c_j(a)$
+
+$$1 = \int_{\bar{a}}^\infty g_1(a)da + \int_{\bar{a}}^\infty g_2(a)da$$
+
+**Algorithm**
+
+A finite difference approximation of the KF equation results into the matrix equation $A^T g = 0$ where $A$ is the matrix from implicit algorithm for the HJB equation.
+"""
+
+# ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
+function solve_KF(m::HuggettPoisson, A)
+
+	(; N_a, da) = m
+	
+	AT = transpose(A)
+	b = zeros(2*N_a, 1)
+	
+	i_fix = 1
+	b[i_fix] = .1
+	AT[i_fix,:] = hcat(zeros(1, i_fix-1), 1., zeros(1,2*N_a-i_fix))
+
+	g_stacked = AT\b
+	g_sum = sum(g_stacked) * da
+	g_stacked_norm = g_stacked ./ g_sum
+
+	@assert sum(g_stacked_norm) * da ≈ 1
+	
+	g = reshape(g_stacked_norm, N_a, 2)
+
+end
+
+# ╔═╡ e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
+md"""
+## Putting everything together
+"""
+
+# ╔═╡ 98a7d8e0-1741-4447-b612-e40491fa8673
+t_impl = @elapsed solve_HJB_implicit(m, 0.03)
+
+# ╔═╡ deeff3d5-3856-43cb-8469-2a4d6d7fca4f
+md"""
+## Equilibrium interest rate
+"""
+
+# ╔═╡ b6101102-2054-4932-b6b6-5070cd84f2be
+md"""
+$$0 = \int_{\bar{a}}^\infty ag_1(a)da + \int_{\bar{a}}^\infty ag_2(a)da = S(r)$$
+"""
+
+# ╔═╡ a8f1dc13-b73c-44b0-8e63-82431f904313
+initial_bracket = (0.01, 0.03)
+
+# ╔═╡ e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
+md"""
+# Appendix 
+"""
+
+# ╔═╡ ab69ab43-99bf-4a92-9698-70e170761e82
+md"""
+## HJB equation (explicit method)
+"""
+
+# ╔═╡ 5c7c3dc0-7848-4431-829e-508664d9c5af
+md"""
+**Basic dea**
+
+Start with some initial guess $v_{i,j}^0$ and update $v_{i,j}^n$ as follows:
+
+$$\frac{v_{i,j}^{n+1} - v_{i,j}^n}{\Delta} + \rho v_{i,j}^n = u(c_{i,j}^n) + (v_{i,j}^n)'(z_j + ra_i - c_{i,j}^n) + \lambda_i (v_{i,-j}^n - v_{i,j}^n)$$
+
+In contrast to the implicit method, we can rearrange for $v_{i,j}^{n+1}$ in the equation above.
+
+The disadvantage of the explicit method is that it converges only if $\Delta$ is not too large.
+"""
+
 # ╔═╡ b099dbbf-9648-44c5-984c-fdd80ee81469
-function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 20000, crit = 1e-6)
+function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
 
 	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
@@ -263,10 +356,6 @@ function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 20000, crit = 1e-6)
 	# initialize arrays for forward and backward difference
 	dvf = zeros(N_a, 2)
 	dvb = zeros(N_a, 2)
-
-	# initialize policy function arrays	
-	c = zeros(N_a, 2)
-	ȧ = zeros(N_a, 2)
 
 	# initial guess for value function
 	v₀ = zeros(N_a, 2)
@@ -313,8 +402,8 @@ function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 20000, crit = 1e-6)
 	
 		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
 	
-		c[:,:] = dv_upwind .^ (-1/σ)
-		ȧ[:,:] = z .+ r.*a - c
+		c = dv_upwind .^ (-1/σ)
+		ȧ = z .+ r.*a - c
 		
 		v_switch = zeros(N_a, 2)
 		v_switch[:,2] = v[:,1]
@@ -329,16 +418,44 @@ function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 20000, crit = 1e-6)
 		dist[it] = maximum(abs.(v_change))
 
 		if dist[it] < crit
-			break
+			
+			return v, c, ȧ, it, dist
+
 		end
-		
+
 	end
 
-	it_last = sum(dist .> 0)
-
-	return v, c, ȧ, it_last, dist
+	error("Algorithm did not converge")
 
 end
+
+# ╔═╡ 4bfa5d92-b177-4442-b045-e05cc48b6cc4
+t_expl = @elapsed solve_HJB_explicit(m, 0.03; crit=1e-6)
+
+# ╔═╡ fd0fb774-a805-4739-b570-0d2e191a3294
+md"""
+## Implicit vs. explicit method
+"""
+
+# ╔═╡ 8987f1ce-e290-4930-909a-3e09a9113a7a
+md"""
+On my computer, it takes 0.4 seconds to reach convergence with the implicit method (assuming a tolerance of $10^{-6}$), while it takes approximately 6 seconds with the explicit method.
+"""
+
+# ╔═╡ eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
+md"""
+**Implicit method**
+"""
+
+# ╔═╡ bd2e4d28-c68b-45c9-b68e-b477b44fcd75
+md"""
+**Explicit method**
+"""
+
+# ╔═╡ 6e607792-e297-483f-8917-c871fa0c26d0
+md"""
+## Helper functions
+"""
 
 # ╔═╡ 532d0b24-6ace-4579-bf2a-d12c07ee9436
 function results_to_df(m; v, c, ȧ, g=nothing)
@@ -393,20 +510,23 @@ end
 
 # ╔═╡ ae8fd43c-f658-47b1-8781-6f699ade6bdb
 let 
-	df_dist = DataFrame(iteration = range(1, it_last), log10_dist = log10.(dist[1:it_last]))
-	figure = (; resolution = (600, 300))
+	df_dist = DataFrame(
+		iteration = range(1, it_last), 
+		time = range(0, t_impl, it_last),
+		log10_dist = log10.(dist[1:it_last])
+		)
+	figure = (; resolution = (500, 250))
 	@chain df_dist begin
-		data(_) * mapping(:iteration, :log10_dist) * visual(Lines)
+		data(_) * mapping(:time, :log10_dist) * visual(Lines)
 		draw(; figure)
 	end
 end
 
 # ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
 function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-
+	(; da) = m
 	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
-
-	A = mean(df.a, weights(df.g))
+	A = dot(df.a, df.g) * da
 
 end
 
@@ -414,7 +534,7 @@ end
 r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
 
 # ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-function solve_explicit_df(m::HuggettPoisson, r; maxit = 20000, crit = 1e-6)
+function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
 	
 	v, c, ȧ, it_last, dist = solve_HJB_explicit(m, r; maxit, crit)
 	df = results_to_df(m; v, c, ȧ)
@@ -424,20 +544,24 @@ function solve_explicit_df(m::HuggettPoisson, r; maxit = 20000, crit = 1e-6)
 end
 
 # ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
-(df2, it_last2, dist2) = solve_explicit_df(m, 0.03);
-
-# ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
-let 
-	df_dist = DataFrame(iteration = range(1, it_last2), log10_dist = log10.(dist2[1:it_last2]))
-	figure = (; resolution = (600, 300))
-	@chain df_dist begin
-		data(_) * mapping(:iteration, :log10_dist) * visual(Lines)
-		draw(; figure)
-	end
-end
+(df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=1e-6);
 
 # ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
 (df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]])
+
+# ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
+let 
+	df_dist = DataFrame(
+		iteration = range(1, it_last2), 
+		time = range(0, t_expl, it_last2),
+		log10_dist = log10.(dist2[1:it_last2])
+		)
+	figure = (; resolution = (500, 250))
+	@chain df_dist begin
+		data(_) * mapping(:time, :log10_dist) * visual(Lines)
+		draw(; figure)
+	end
+end
 
 # ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
 md"""
@@ -459,8 +583,6 @@ Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 AlgebraOfGraphics = "~0.6.8"
@@ -470,7 +592,6 @@ DataFrames = "~1.3.4"
 Parameters = "~0.12.3"
 PlutoUI = "~0.7.39"
 Roots = "~2.0.1"
-StatsBase = "~0.33.16"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1755,36 +1876,46 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
 # ╟─0edf9214-7213-4b1d-8fa6-54a365525d29
 # ╟─1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
 # ╠═64d44910-988c-4e24-baf6-6408da65bd21
+# ╟─ac27dd69-1216-4a02-ba62-ebb098b33fa1
+# ╠═3dd0c186-04f0-425c-93dc-825c7d4b606e
 # ╠═23a991be-7c8b-45e2-bd75-af5e146fc6b0
 # ╟─2289c7a7-3493-4bfb-8ffe-31b074d17b14
+# ╟─0caee0bf-77c0-4542-a68e-9052d230ca74
+# ╟─38555a5e-5d39-4c61-9381-94c8fb67a257
 # ╠═4d7ee33f-ff78-4ea9-838b-a8320df4651f
 # ╟─1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
+# ╟─2e09462e-6030-4e33-bc7a-9d2faed4ca74
 # ╠═eb565042-1823-4d5a-b4d1-ee314dccd4e0
 # ╟─e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
 # ╠═e1376e99-a636-4d28-b711-2dd4be66374f
 # ╠═4de350bb-d2be-46b1-8558-a49f54a29dd1
+# ╠═98a7d8e0-1741-4447-b612-e40491fa8673
 # ╠═1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
 # ╟─deeff3d5-3856-43cb-8469-2a4d6d7fca4f
+# ╟─b6101102-2054-4932-b6b6-5070cd84f2be
 # ╠═19e28c66-a389-4903-82a5-c963cf0b90b9
 # ╠═a8f1dc13-b73c-44b0-8e63-82431f904313
 # ╠═bd353706-be2d-480d-8ebb-cf20cab0dbec
 # ╟─e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
+# ╟─ab69ab43-99bf-4a92-9698-70e170761e82
+# ╟─5c7c3dc0-7848-4431-829e-508664d9c5af
+# ╠═b099dbbf-9648-44c5-984c-fdd80ee81469
+# ╠═f8fbff0d-15d4-43ca-9f9c-29788ff793ec
+# ╠═4894a323-c8c8-4f34-b311-20c64176b89d
+# ╠═4bfa5d92-b177-4442-b045-e05cc48b6cc4
+# ╠═ebd88b43-e277-4c79-b443-1661a3c438b8
 # ╟─fd0fb774-a805-4739-b570-0d2e191a3294
+# ╟─8987f1ce-e290-4930-909a-3e09a9113a7a
 # ╟─eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
 # ╟─ae8fd43c-f658-47b1-8781-6f699ade6bdb
 # ╟─bd2e4d28-c68b-45c9-b68e-b477b44fcd75
 # ╟─264fc65e-d09a-4c67-94de-f845d42d18a3
-# ╟─ab69ab43-99bf-4a92-9698-70e170761e82
-# ╠═b099dbbf-9648-44c5-984c-fdd80ee81469
-# ╠═f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-# ╠═4894a323-c8c8-4f34-b311-20c64176b89d
-# ╠═ebd88b43-e277-4c79-b443-1661a3c438b8
 # ╟─6e607792-e297-483f-8917-c871fa0c26d0
 # ╠═532d0b24-6ace-4579-bf2a-d12c07ee9436
-# ╠═41a7cf6b-ad57-42df-9415-f8f4cee7cf4d
 # ╟─518eec58-eb4b-4294-9090-b6645f51a337
 # ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
 # ╠═6f92c837-1760-423e-9777-9db9ad758475
@@ -1794,8 +1925,6 @@ version = "3.5.0+0"
 # ╠═276e171b-271d-4610-b9bb-01b212193123
 # ╠═aecea3fe-f0ee-4953-857b-29d6a5640530
 # ╠═9353566b-a70e-4dbe-8f02-b16d2c0570d2
-# ╠═2f0b93c4-2b95-4166-9003-83f226ba0b39
-# ╠═c2d11548-6c33-4c84-ac66-85ff316c5323
 # ╠═0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
