@@ -85,7 +85,7 @@
             },
             {
                 "name": "Redistributive Growth",
-                "notebook_path": "notebooks/redistributive-growth.jl",
+                "notebook_path": "notebooks/redistributive-growth_solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
@@ -172,14 +172,14 @@
                 "preview_image_url": ""
             },
             {
-                "name": "Assignment 2 Solution (Growth)",
-                "notebook_path": "notebooks/redistributive-growth_solution.jl",
-                "video_id": "",
-                "preview_image_url": ""
-            },
-            {
                 "name": "Tutorial 2 Solution",
                 "notebook_path": "notebooks/welfare_huggett_solution.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },            
+            {
+                "name": "Tutorial 3 (Part 1)",
+                "notebook_path": "notebooks/continuous-time-moll.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
