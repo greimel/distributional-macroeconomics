@@ -1,8 +1,11 @@
 ### A Pluto.jl notebook ###
-# v0.19.4
+# v0.19.9
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ 70930f84-fe69-4fa3-a37c-eec9a377526c
+using StructArrays
 
 # ╔═╡ 6f92c837-1760-423e-9777-9db9ad758475
 using PlutoUI
@@ -234,7 +237,7 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 		A2 = hcat(spzeros(N_a, N_a), A22)
 		A = vcat(A1, A2) + A_switch
 
-		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
+		B = (ρ + 1/Δ) * I - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
 		v_new = reshape(v_new_stacked, N_a, 2)
@@ -481,10 +484,199 @@ function results_to_df(m; v, c, ȧ, g=nothing)
 	
 end
 
+# ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
+function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
+	
+	v, c, ȧ, it_last, dist = solve_HJB_explicit(m, r; maxit, crit)
+	df = results_to_df(m; v, c, ȧ)
+	
+	return df, it_last, dist
+	
+end
+
+# ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
+(df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=1e-6);
+
+# ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
+let 
+	df_dist = DataFrame(
+		iteration = range(1, it_last2), 
+		time = range(0, t_expl, it_last2),
+		log10_dist = log10.(dist2[1:it_last2])
+		)
+	figure = (; resolution = (500, 250))
+	@chain df_dist begin
+		data(_) * mapping(:time, :log10_dist) * visual(Lines)
+		draw(; figure)
+	end
+end
+
+# ╔═╡ f3e0b42f-370d-4887-b6a1-d9ecd83c6275
+md"""
+## Julification of the code
+"""
+
+# ╔═╡ b9efca1a-b978-4794-b421-ee9df889a6a8
+function statespace(m)
+	(; N_a, aₘᵢₙ, aₘₐₓ, z) = m
+	a_grid = range(aₘᵢₙ, aₘₐₓ, N_a)
+	z_grid = z |> vec
+
+	[(; a, z) for a ∈ a_grid, z ∈ z_grid]
+end
+
+# ╔═╡ 36d5c62e-8ab6-43c2-88cf-ed1ce76dd47d
+m
+
+# ╔═╡ 32f9b9e6-5026-4b29-abab-dcd0fa5b7509
+statespace(m)
+
+# ╔═╡ 00d5313a-ca02-46aa-9e7c-a262b4d83c15
+construct_a(m)
+
+# ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
+function consumption_and_drift((; a, z), dv, (; r, σ))
+	dv = max(dv, eps(0.0))
+	c = dv ^ (-1/σ)
+	ȧ = z + r * a - c
+
+	(; c, ȧ, dv)
+end
+
+# ╔═╡ 91c8dce8-07b8-46d2-8c61-e6bccced64e4
+function consumption_and_drift₀((; a, z), (; r, σ))
+	ȧ = 0
+	c = z + r * a
+
+	dv = c^(-σ)
+
+	(; c, ȧ, dv)
+end
+
+# ╔═╡ d10a14a7-d479-46e7-b707-618126e5c5de
+const T = typeof((; dv=0.0, ȧf=0.0, ȧb=0.0, c=0.0))
+
+# ╔═╡ 7734c75e-5f2b-4807-8b9a-82e7e010edac
+function consumption_and_drift_upwind(state, dvf, dvb, par)
+	# consumption and savings with forward difference
+	outf = consumption_and_drift(state, dvf, par)
+	# consumption and savings with backward difference
+	outb = consumption_and_drift(state, dvb, par)
+	# consumption and derivate of value function at steady state
+	out0 = consumption_and_drift₀(state, par)
+
+		
+	if outf.ȧ > 0 
+		return (; outf.dv, ȧf = outf.ȧ, ȧb = 0.0, outf.c) |> T
+	end
+	if outb.ȧ < 0 
+		return (; outb.dv, ȧf = 0.0, ȧb = outb.ȧ, outb.c) |> T
+	end
+	if outf.ȧ ≤ 0 && outb.ȧ ≥ 0
+		return (; dv = out0.dv, ȧf = 0.0, ȧb = 0.0, out0.c) |> T
+	end
+	#if outf.ȧ > 0 && outb.ȧ < 0
+	#	dv =  outf.dv + outb.dv
+	#	return (; dv, ȧf = outf.ȧ, ȧb = outb.ȧ, c = dv^(-1/par.σ)) |> T
+	#end
+end
+
+# ╔═╡ 3e4b82aa-a6ec-4097-afb5-927b7e16262a
+function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
+	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
+end
+
+# ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
+function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+
+	# construct asset grid
+	a = construct_a(m)
+
+	ss = statespace(m)
+	
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
+
+	# precompute A_switch matrix
+	id = sparse(I, N_a, N_a)
+	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
+	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
+	A_switch   = vcat(A_switch_1, A_switch_2)
+
+	# initial guess for value function
+	v₀ = zeros(N_a, 2)
+	for (i, zᵢ) in enumerate(z)
+		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
+	end
+	v = v₀
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	for it in range(1, maxit)
+
+		# STEP 1
+
+		# forward difference
+		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+		I_concave = dvb .> dvf # problems if value function not concave
+
+		# consumption and savings with forward difference
+		(; c, ȧf, ȧb) = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; r, σ))
+		
+		u = c.^(1-σ)/(1-σ)
+
+		# STEP 3
+
+		X = - min.(ȧb,0)/da
+		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+		Z =   max.(ȧf,0)/da
+
+		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+		A1 = hcat(A11, spzeros(N_a, N_a))
+		A2 = hcat(spzeros(N_a, N_a), A22)
+		A = vcat(A1, A2) + A_switch
+
+		B = (ρ + 1/Δ) * I - A
+		b = vec(u) + vec(v)/Δ
+		v_new_stacked = B \ b
+		v_new = reshape(v_new_stacked, N_a, 2)
+
+		# STEP 4
+
+		v_change = v_new - v
+		dist[it] = maximum(abs.(v_change))
+		
+		v = v_new
+
+		if dist[it] < crit
+
+			ȧ = z .+ r.*a - c
+
+			return v, c, ȧ, A, it, dist
+
+		end
+
+	end
+
+	error("Algorithm did not converge")
+
+end
+
 # ╔═╡ e1376e99-a636-4d28-b711-2dd4be66374f
 function solve_df(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
 	
-	v, c, ȧ, A, it_last, dist = solve_HJB_implicit(m, r; maxit, crit, Δ)
+	v, c, ȧ, A, it_last, dist = solve_HJB_implicit_julian(m, r; maxit, crit, Δ)
 	g = solve_KF(m, A)
 	df = results_to_df(m; v, c, ȧ, g)
 	
@@ -507,6 +699,9 @@ let
 	end
 
 end
+
+# ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
+(df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]])
 
 # ╔═╡ ae8fd43c-f658-47b1-8781-6f699ade6bdb
 let 
@@ -533,36 +728,6 @@ end
 # ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
 r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
 
-# ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
-	
-	v, c, ȧ, it_last, dist = solve_HJB_explicit(m, r; maxit, crit)
-	df = results_to_df(m; v, c, ȧ)
-	
-	return df, it_last, dist
-	
-end
-
-# ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
-(df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=1e-6);
-
-# ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
-(df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]])
-
-# ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
-let 
-	df_dist = DataFrame(
-		iteration = range(1, it_last2), 
-		time = range(0, t_expl, it_last2),
-		log10_dist = log10.(dist2[1:it_last2])
-		)
-	figure = (; resolution = (500, 250))
-	@chain df_dist begin
-		data(_) * mapping(:time, :log10_dist) * visual(Lines)
-		draw(; figure)
-	end
-end
-
 # ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
 md"""
 ## Imported packages
@@ -583,6 +748,7 @@ Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 AlgebraOfGraphics = "~0.6.8"
@@ -592,14 +758,16 @@ DataFrames = "~1.3.4"
 Parameters = "~0.12.3"
 PlutoUI = "~0.7.39"
 Roots = "~2.0.1"
+StructArrays = "~0.6.8"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.2"
+julia_version = "1.8.0-rc1"
 manifest_format = "2.0"
+project_hash = "d5cf51db8dc7567f5978935ed8c0900fe34e7ee0"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -638,6 +806,7 @@ version = "0.4.1"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
+version = "1.1.1"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -753,6 +922,7 @@ version = "3.45.0"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
+version = "0.5.2+0"
 
 [[deps.ConstructionBase]]
 deps = ["LinearAlgebra"]
@@ -836,8 +1006,9 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.8.6"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+version = "1.6.0"
 
 [[deps.DualNumbers]]
 deps = ["Calculus", "NaNMath", "SpecialFunctions"]
@@ -858,9 +1029,9 @@ uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.4.8+0"
 
 [[deps.Extents]]
-git-tree-sha1 = "5e1e4c53fa39afe63a7d356e30452249365fba99"
+git-tree-sha1 = "a087a23129ac079d43ba6b534c6350325fcd41c9"
 uuid = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
-version = "0.1.1"
+version = "0.1.0"
 
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -891,6 +1062,9 @@ deps = ["Pkg", "Requires", "UUIDs"]
 git-tree-sha1 = "9267e5f50b0e12fdfd5a2455534345c4cf2c7f7a"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.14.0"
+
+[[deps.FileWatching]]
+uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -1173,10 +1347,12 @@ version = "0.3.1"
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
 uuid = "b27032c2-a3e7-50c8-80cd-2d36dbcbfd21"
+version = "0.6.3"
 
 [[deps.LibCURL_jll]]
 deps = ["Artifacts", "LibSSH2_jll", "Libdl", "MbedTLS_jll", "Zlib_jll", "nghttp2_jll"]
 uuid = "deac9b47-8bc7-5906-a0fe-35ac56dc84c0"
+version = "7.81.0+0"
 
 [[deps.LibGit2]]
 deps = ["Base64", "NetworkOptions", "Printf", "SHA"]
@@ -1185,6 +1361,7 @@ uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
 [[deps.LibSSH2_jll]]
 deps = ["Artifacts", "Libdl", "MbedTLS_jll"]
 uuid = "29816b5a-b9ab-546f-933c-edad1886dfa8"
+version = "1.10.2+0"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -1291,6 +1468,7 @@ version = "0.4.2"
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
+version = "2.28.0+0"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1309,6 +1487,7 @@ version = "0.3.3"
 
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
+version = "2022.2.1"
 
 [[deps.NaNMath]]
 git-tree-sha1 = "737a5957f387b17e74d4ad2f440eb330b39a62c5"
@@ -1323,6 +1502,7 @@ version = "1.0.2"
 
 [[deps.NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
+version = "1.2.0"
 
 [[deps.Observables]]
 git-tree-sha1 = "dfd8d34871bc3ad08cd16026c1828e271d554db9"
@@ -1344,6 +1524,7 @@ version = "1.3.5+1"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
+version = "0.3.20+0"
 
 [[deps.OpenEXR]]
 deps = ["Colors", "FileIO", "OpenEXR_jll"]
@@ -1360,6 +1541,7 @@ version = "3.1.1+0"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
+version = "0.8.1+0"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1441,6 +1623,7 @@ version = "0.40.1+0"
 [[deps.Pkg]]
 deps = ["Artifacts", "Dates", "Downloads", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "Serialization", "TOML", "Tar", "UUIDs", "p7zip_jll"]
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+version = "1.8.0"
 
 [[deps.PkgVersion]]
 deps = ["Pkg"]
@@ -1526,9 +1709,9 @@ version = "1.2.2"
 
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
-git-tree-sha1 = "cdbd3b1338c72ce29d9584fdbe9e9b70eeb5adca"
+git-tree-sha1 = "22c5201127d7b243b9ee1de3b43c408879dff60f"
 uuid = "05181044-ff0b-4ac5-8273-598c1e38db00"
-version = "0.1.3"
+version = "0.3.0"
 
 [[deps.Requires]]
 deps = ["UUIDs"]
@@ -1556,6 +1739,7 @@ version = "2.0.1"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+version = "0.7.0"
 
 [[deps.SIMD]]
 git-tree-sha1 = "7dbc15af7ed5f751a82bf3ed37757adf76c32402"
@@ -1682,6 +1866,7 @@ uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 [[deps.TOML]]
 deps = ["Dates"]
 uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+version = "1.0.0"
 
 [[deps.TableTraits]]
 deps = ["IteratorInterfaceExtensions"]
@@ -1698,6 +1883,7 @@ version = "1.7.0"
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
+version = "1.10.0"
 
 [[deps.TensorCore]]
 deps = ["LinearAlgebra"]
@@ -1813,6 +1999,7 @@ version = "1.4.0+3"
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
+version = "1.2.12+3"
 
 [[deps.isoband_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1829,6 +2016,7 @@ version = "0.15.1+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl", "OpenBLAS_jll"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
+version = "5.1.0+0"
 
 [[deps.libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1857,10 +2045,12 @@ version = "1.3.7+1"
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
+version = "1.41.0+1"
 
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
+version = "17.4.0+0"
 
 [[deps.x264_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1916,6 +2106,18 @@ version = "3.5.0+0"
 # ╟─264fc65e-d09a-4c67-94de-f845d42d18a3
 # ╟─6e607792-e297-483f-8917-c871fa0c26d0
 # ╠═532d0b24-6ace-4579-bf2a-d12c07ee9436
+# ╟─f3e0b42f-370d-4887-b6a1-d9ecd83c6275
+# ╠═70930f84-fe69-4fa3-a37c-eec9a377526c
+# ╠═b9efca1a-b978-4794-b421-ee9df889a6a8
+# ╠═36d5c62e-8ab6-43c2-88cf-ed1ce76dd47d
+# ╠═32f9b9e6-5026-4b29-abab-dcd0fa5b7509
+# ╠═00d5313a-ca02-46aa-9e7c-a262b4d83c15
+# ╠═e57a2dfa-0937-49cf-9161-fa1e39fb5e80
+# ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
+# ╠═d10a14a7-d479-46e7-b707-618126e5c5de
+# ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
+# ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
+# ╠═e204ae15-fefd-4f01-8d5e-3772aefe9b0f
 # ╟─518eec58-eb4b-4294-9090-b6645f51a337
 # ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
 # ╠═6f92c837-1760-423e-9777-9db9ad758475
