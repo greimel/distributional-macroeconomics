@@ -6,11 +6,12 @@ using InteractiveUtils
 
 # ╔═╡ c3bf5880-f169-11ec-20e3-bf9092156abf
 md"""
-`stopping-time-problem.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`stopping-time-problem-solution.jl` | **Version 1.0** | *last updated: June 22, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 23df23ca-df80-4789-ac79-fc777d258beb
 md"""
+# Optimal stopping problems
 # Durable good
 """
 
@@ -121,7 +122,26 @@ Then we can use the LCP solver from the ```LCPsolve.jl``` package to solve for $
 
 # ╔═╡ e461b94e-703b-43bf-9e30-56c2b0e2ee3e
 md"""
-...
+
+Writing as Linear Complementarity Problem $\implies$
+
+```math
+\begin{align}
+(v^{n+1} - (v^*)^n)'(\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1}) &= 0 \\
+v^{n+1} - (v^*)^n &\ge 0 \\
+\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1} &\ge 0
+\end{align}
+```
+
+Convert into ```LCPsolve.jl``` parameterization $\implies$ 
+
+$z = v^{n+1} - (v_0^*)^n$
+
+$B = ((1/\Delta + \rho) I - A)$
+
+$q = -u - v^n/\Delta + B (v^*)^n$
+
+This means that after finding the correct $z$ from the LCP solver, we can obtain the updated value function as follows: $v^{n+1} = z + (v^*)^n$
 """
 
 # ╔═╡ 953f1f64-f8a7-4ca4-bf23-39ccf74db272
@@ -209,9 +229,9 @@ function solve_HJBVI(m::DurableModel; maxit = 100, crit = 1e-6, Δ = 1000)
 
 		### YOUR CODE ###
 		
-		# B = ...
-		# q = ...
-		# z₀ = ...
+		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
+		q = - (vec(u) + vec(v)/Δ) + B * vec(v_star)
+		z₀ = vec(v) - vec(v_star)
 
 		#################
 		
@@ -289,7 +309,7 @@ md"""
 m = DurableModel();
 
 # ╔═╡ abd5e562-03ff-43a4-b4d0-146f2cf69717
-#df = solve_df(m);
+df = solve_df(m);
 
 # ╔═╡ edf44a54-baeb-4139-9545-eb9fbb89d561
 md"""
@@ -298,7 +318,15 @@ md"""
 
 # ╔═╡ 054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
 md"""
-...
+Left panel: agent does not own car $d=0$
+- low wealth: $v_0 > v_0^*$ $\implies$ agents does not buy car
+- sufficiently high wealth: $v_0 = v_0^*$ $\implies$ agent buys car
+
+Right panel: agent owns car $d=1$
+- high wealth: $v_1 > v_1^*$ $\implies$ agents does not sell car
+- sufficiently low wealth: $v_1 = v_1^*$ $\implies$ agent sells car
+
+Note that "value matching" and "smooth pasting" hold even though we did not impose them.
 """
 
 # ╔═╡ cbfc715f-83ff-4700-b49f-ce623b43b7db
@@ -321,7 +349,7 @@ md"""
 
 # ╔═╡ 99d92b37-1bfe-44a6-ab12-5f511c97d6a3
 md"""
-...
+There is a large range of wealth values for which owners do not sell but non-owners do not buy. This is because of the difference between the selling and the buying price.
 """
 
 # ╔═╡ ea368b73-478a-4029-844a-e1beb759fcff
@@ -331,17 +359,19 @@ md"""
 	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 end
 
-# ╔═╡ e07b16e2-f3ff-4242-a46c-352464806cec
+# ╔═╡ 48eac71a-62bb-40cf-bb6b-de36f3656045
 md"""
 # Retirement
+
+see [Fahri and Panageas (2007)](https://www.sciencedirect.com/science/article/pii/S0304405X06001127) and [Grochulski and Zhang (2020)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3473117)
 """
 
-# ╔═╡ 2a230d6e-fbf1-43c0-a114-c51fdc99f33c
+# ╔═╡ f10488d3-6bb4-4b34-9e7d-04d961fa31b4
 md"""
 ## Model
 """
 
-# ╔═╡ 8c377577-de22-4961-baf0-23a0b113a112
+# ╔═╡ 67bb6a7a-df20-49ec-98cf-ed87e2381b87
 @with_kw struct RetirementModel
 	
 	σ::Float64 = 2.    # risk aversion coefficient u'(c) = c^(-σ)
@@ -359,7 +389,7 @@ md"""
 	
 end
 
-# ╔═╡ 6ae34f8c-779b-4b75-9e0c-111fe5fea4ab
+# ╔═╡ 048b0bb9-09b6-49d4-9723-4572e3f24de5
 md"""
 The value function for working agents is 
 
@@ -367,11 +397,17 @@ $v(a) = \max_{c(t)}\int_0^\tau e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigm
 
 subject to $\dot{a} = y + ra - c$.
 
+Working agents have the option to retire. $\tau$ is the stopping time.
+
 The value function for retired agents is
 
 $v^*(a) = \max_{c(t)}\int_0^\infty e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} + \kappa \Big) dt$ 
 
 subject to $\dot{a} = ra - c$.
+
+Retired agents do not have the option to start working again.
+
+Trade-off: Retired agents receive utility from leisure $\kappa$, but do no longer receive any income $y$.
 
 If $r = \rho$, $c(t) = ra$ and hence
 
@@ -381,44 +417,41 @@ HJB variational inequality:
 
 ```math
 \begin{align}
-0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\} + \lambda(v^*(a) - v(a)), v(a) - v^*(a))\}
+0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\}, v(a) - v^*(a))\}
 \end{align}
 ```
 """
 
-# ╔═╡ 32d2155c-a135-47f5-b50c-0d271982de6a
+# ╔═╡ 20433385-479c-4d92-b8d2-fc1d768e7d30
 md"""
 ## Exercise 3: Solution algorithm
 """
 
-# ╔═╡ 1e598c8a-4504-4a11-9e0b-3e60862fbace
+# ╔═╡ f2c23a3f-0544-40ab-9b72-6331a0c5ee16
 md"""
 👉 Adapt the solution algorithm for the durable goods model to solve the retirement model.
 """
 
-# ╔═╡ 17f9e137-2d92-46f4-865e-4aeb3da4a2ce
+# ╔═╡ 33734e2e-a197-4c02-96e6-720996cb8108
 function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
 
-	(; σ, ρ, r, y, κ, p₀, p₁, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+	(; σ, ρ, r, y, κ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
 	# construct asset grid
 	a = construct_a(m)
 
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-	v_star = zeros(N_a, 2)
+	v_star = 1/ρ * ((r*a).^(1-σ)/(1-σ) .+ κ)
 
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 1)
+	dvb = zeros(N_a, 1)
+	
 	# initial guess for value function
-	v₀ = zeros(N_a, 2)
-	v₀[:,:] .= (y .+ r * a).^(1-σ) / (1-σ) / ρ
+	v₀ = 1/ρ * (y .+ r*a) .^ (1-σ) / (1-σ)
 	v = v₀
 
 	# initialize vector that keeps track of convergence
 	dist = - ones(maxit)
-
-	i_buy  = ceil(Int, p₀/da) #p₀ equals i_buy grid points
-	i_sell = ceil(Int, p₁/da) #p₁ equals i_sell grid points
 
 	for it in range(1, maxit)
 
@@ -441,7 +474,7 @@ function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
 		ȧb = y .+ r .* a .- cb
 
 		# consumption and derivate of value function at steady state
-		c0 = y .+ r .* a .+ zeros(N_a, 2)
+		c0 = y .+ r .* a
 		dv0 = c0 .^ (-σ)
 
 		If = ȧf .> 0 # positive drift => forward difference
@@ -452,36 +485,17 @@ function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
 
 		c = cf .* If + cb .* Ib + c0 .* I0
 		
-		u = zeros(N_a, 2)
-		u[:,1] = c[:,1] .^ (1-σ) / (1-σ)
-		u[:,2] = c[:,2] .^ (1-σ) / (1-σ) .+ κ
+		u = c .^ (1-σ) / (1-σ)
 
 		X = - min.(ȧb,0)/da
 		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
 		Z =   max.(ȧf,0)/da
 
-		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-		A = blockdiag(A11, A22)
+		A = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
 
-    	# value of buying car if currently, don't own car
-	    v_star[i_buy+1:N_a,1] = v[1:N_a-i_buy,2]
-	    # instead of setting Vstar[1:i_buy,1]=-Inf, do something smoother
-	    slope = (v_star[i_buy+2,1] - v_star[i_buy+1,1]) / da
-	    v_star[1:i_buy,1] = v_star[i_buy+1,1] .+ slope * (a[1:i_buy] .- a[i_buy+1])
-
-	    # value of selling car if currently own car
-	    v_star[1:N_a-i_sell,2] = v[i_sell+1:N_a,1]
-	    v_star[N_a-i_sell+1:N_a,2] .= v[N_a,1] # assume p = min(p,amax - a)
-
-		### YOUR CODE ###
-		
-		# B = ...
-		# q = ...
-		# z₀ = ...
-
-		#################
-		
+		B = (ρ + 1/Δ) * sparse(I, N_a, N_a) - A
+		q = - (vec(u) + vec(v)/Δ) + B * vec(v_star)
+		z₀ = vec(v) - vec(v_star)
 		res = solve!(LCP(B, q), z₀)
 		z = res.sol
 
@@ -490,7 +504,7 @@ function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
 			error("LCP not solved")
 		end
 
-	    v_new = reshape(z + vec(v_star), N_a, 2)
+	    v_new = z + v_star
 	    
 	    v_change = v_new - v
 		dist[it] = maximum(abs.(v_change))
@@ -511,23 +525,52 @@ function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
 	
 end
 
-# ╔═╡ a696e13e-520c-4bf5-a87c-a0b094975ba8
+# ╔═╡ 21be9783-5006-4ba9-be5d-4d7c3cbde54b
+function results_to_df(m::RetirementModel; v, v_star, c, ȧ)
+	
+	(; N_a) = m
+
+	a = construct_a(m)
+
+	df = DataFrame()
+	df.a = a |> vec
+	df.c = c |> vec
+	df.ȧ = ȧ |> vec
+	df.v = v |> vec
+	df.v_star = v_star |> vec
+	df.action = (v_star .≈ v) |> vec
+
+	df.c[df.action] .= NaN
+	df.ȧ[df.action] .= NaN
+
+	df
+	
+end
+
+# ╔═╡ 2ae35394-380f-475a-ba5d-c2b8b3dcb81c
 md"""
 ## Exercise 4: Results
 """
 
-# ╔═╡ 43c21b66-098e-43a2-a6c5-3b712ac8af38
+# ╔═╡ e522913b-7bf4-4239-addf-7562c3335f4c
 m2 = RetirementModel();
 
-# ╔═╡ d414b8ac-dbea-479e-b71f-c935826a21bf
-#df2 = solve_df(m2);
+# ╔═╡ 7f188890-8104-4168-ab5b-4f10ffebe5d6
+df2 = solve_df(m2);
 
-# ╔═╡ eb20ebe8-5b9d-4e76-aaec-527c6c7b7bbe
+# ╔═╡ 0e6bb6da-c574-4a38-8c7a-530617672480
 md"""
 👉 Interpret the diagrams below.
 """
 
-# ╔═╡ 1643da29-da83-4ef2-97ef-b3aa8bd6df68
+# ╔═╡ 41546b84-a1d3-4df2-a74f-17bd84db51d1
+md"""
+- high wealth: Household chooses to retire
+- intermediate wealth: Household saves in order to reach retirement threshold in the future
+- low wealth: Household never reaches retirement threshold because $\dot{a}$
+"""
+
+# ╔═╡ 2160548c-6ce7-4585-b834-925b7f31ebc7
 let
 
 	figure = (; resolution = (600, 300))
@@ -540,7 +583,7 @@ let
 
 end
 
-# ╔═╡ 28480bd8-4b24-4899-93f3-0eb021a94979
+# ╔═╡ 2e6992df-db62-425e-b4b4-4f8e30ced0ae
 @chain df2 begin
 	stack([:c, :ȧ, :action])
 	data(_) * mapping(:a, :value, layout = :variable) * visual(Lines)
@@ -1877,7 +1920,7 @@ version = "3.5.0+0"
 # ╟─eee0de53-9e36-42f4-88d9-7a8ee25ea13a
 # ╟─0834be20-1a8d-4498-9019-ebfcc4769711
 # ╟─7b2a66b2-cec7-40c2-b90e-e8064d2e6be8
-# ╠═e461b94e-703b-43bf-9e30-56c2b0e2ee3e
+# ╟─e461b94e-703b-43bf-9e30-56c2b0e2ee3e
 # ╟─953f1f64-f8a7-4ca4-bf23-39ccf74db272
 # ╠═588e0247-65ef-4d98-88f7-b80a76b695ce
 # ╠═0923cba9-0286-459f-aa6a-f0df0b3196c7
@@ -1886,24 +1929,26 @@ version = "3.5.0+0"
 # ╠═3f509c06-dfb6-4373-ae94-1aef74578ffa
 # ╠═abd5e562-03ff-43a4-b4d0-146f2cf69717
 # ╟─edf44a54-baeb-4139-9545-eb9fbb89d561
-# ╠═054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
+# ╟─054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
 # ╠═cbfc715f-83ff-4700-b49f-ce623b43b7db
 # ╟─231ce8ae-1219-48a5-b829-a07093322221
-# ╠═99d92b37-1bfe-44a6-ab12-5f511c97d6a3
+# ╟─99d92b37-1bfe-44a6-ab12-5f511c97d6a3
 # ╠═ea368b73-478a-4029-844a-e1beb759fcff
-# ╟─e07b16e2-f3ff-4242-a46c-352464806cec
-# ╟─2a230d6e-fbf1-43c0-a114-c51fdc99f33c
-# ╠═8c377577-de22-4961-baf0-23a0b113a112
-# ╟─6ae34f8c-779b-4b75-9e0c-111fe5fea4ab
-# ╟─32d2155c-a135-47f5-b50c-0d271982de6a
-# ╟─1e598c8a-4504-4a11-9e0b-3e60862fbace
-# ╠═17f9e137-2d92-46f4-865e-4aeb3da4a2ce
-# ╟─a696e13e-520c-4bf5-a87c-a0b094975ba8
-# ╠═43c21b66-098e-43a2-a6c5-3b712ac8af38
-# ╠═d414b8ac-dbea-479e-b71f-c935826a21bf
-# ╟─eb20ebe8-5b9d-4e76-aaec-527c6c7b7bbe
-# ╠═1643da29-da83-4ef2-97ef-b3aa8bd6df68
-# ╠═28480bd8-4b24-4899-93f3-0eb021a94979
+# ╟─48eac71a-62bb-40cf-bb6b-de36f3656045
+# ╟─f10488d3-6bb4-4b34-9e7d-04d961fa31b4
+# ╠═67bb6a7a-df20-49ec-98cf-ed87e2381b87
+# ╟─048b0bb9-09b6-49d4-9723-4572e3f24de5
+# ╟─20433385-479c-4d92-b8d2-fc1d768e7d30
+# ╟─f2c23a3f-0544-40ab-9b72-6331a0c5ee16
+# ╠═33734e2e-a197-4c02-96e6-720996cb8108
+# ╠═21be9783-5006-4ba9-be5d-4d7c3cbde54b
+# ╟─2ae35394-380f-475a-ba5d-c2b8b3dcb81c
+# ╠═e522913b-7bf4-4239-addf-7562c3335f4c
+# ╠═7f188890-8104-4168-ab5b-4f10ffebe5d6
+# ╟─0e6bb6da-c574-4a38-8c7a-530617672480
+# ╟─41546b84-a1d3-4df2-a74f-17bd84db51d1
+# ╠═2160548c-6ce7-4585-b834-925b7f31ebc7
+# ╠═2e6992df-db62-425e-b4b4-4f8e30ced0ae
 # ╟─b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
 # ╟─7513b208-c92a-43f3-9b00-439a1f49ded8
 # ╠═3836dcce-1b4e-4e2c-98a4-2a8d41e70625
