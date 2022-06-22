@@ -589,9 +589,9 @@ md"""
 
 # ╔═╡ 41546b84-a1d3-4df2-a74f-17bd84db51d1
 md"""
-- high wealth: Household chooses to retire
-- intermediate wealth: Household saves in order to reach retirement threshold in the future
-- low wealth: Household never reaches retirement threshold because $\dot{a}$
+- high wealth: household chooses to retire
+- intermediate wealth: household saves in order to reach retirement wealth threshold in the future
+- low wealth: household never reaches retirement threshold because $\dot{a} 0$
 """
 
 # ╔═╡ 2160548c-6ce7-4585-b834-925b7f31ebc7
