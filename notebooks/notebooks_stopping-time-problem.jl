@@ -331,6 +331,222 @@ md"""
 	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 end
 
+# ╔═╡ e07b16e2-f3ff-4242-a46c-352464806cec
+md"""
+# Retirement
+"""
+
+# ╔═╡ 2a230d6e-fbf1-43c0-a114-c51fdc99f33c
+md"""
+## Model
+"""
+
+# ╔═╡ 8c377577-de22-4961-baf0-23a0b113a112
+@with_kw struct RetirementModel
+	
+	σ::Float64 = 2.    # risk aversion coefficient u'(c) = c^(-σ)
+	ρ::Float64 = 0.05  # rate of time preference
+	r::Float64 = 0.05  # interest rate
+	y::Float64 = 0.1   # income
+
+	κ::Float64 = 0.25  # utility from leisure in retirement
+
+	# asset grid parameters
+	N_a::Int64 = 500
+	aₘᵢₙ::Float64 = 5.
+	aₘₐₓ::Float64 = 20.
+	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
+	
+end
+
+# ╔═╡ 6ae34f8c-779b-4b75-9e0c-111fe5fea4ab
+md"""
+The value function for working agents is 
+
+$v(a) = \max_{c(t)}\int_0^\tau e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} \Big) dt + e^{-\rho \tau} v^*(a)$
+
+subject to $\dot{a} = y + ra - c$.
+
+The value function for retired agents is
+
+$v^*(a) = \max_{c(t)}\int_0^\infty e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} + \kappa \Big) dt$ 
+
+subject to $\dot{a} = ra - c$.
+
+If $r = \rho$, $c(t) = ra$ and hence
+
+$v^*(a) = \frac{1}{\rho}\Big(\frac{(ra)^{1-\sigma}}{1-\sigma} + \kappa \Big)$
+
+HJB variational inequality:
+
+```math
+\begin{align}
+0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\} + \lambda(v^*(a) - v(a)), v(a) - v^*(a))\}
+\end{align}
+```
+"""
+
+# ╔═╡ 32d2155c-a135-47f5-b50c-0d271982de6a
+md"""
+## Exercise 3: Solution algorithm
+"""
+
+# ╔═╡ 1e598c8a-4504-4a11-9e0b-3e60862fbace
+md"""
+👉 Adapt the solution algorithm for the durable goods model to solve the retirement model.
+"""
+
+# ╔═╡ 17f9e137-2d92-46f4-865e-4aeb3da4a2ce
+function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	(; σ, ρ, r, y, κ, p₀, p₁, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+
+	# construct asset grid
+	a = construct_a(m)
+
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
+	v_star = zeros(N_a, 2)
+
+	# initial guess for value function
+	v₀ = zeros(N_a, 2)
+	v₀[:,:] .= (y .+ r * a).^(1-σ) / (1-σ) / ρ
+	v = v₀
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	i_buy  = ceil(Int, p₀/da) #p₀ equals i_buy grid points
+	i_sell = ceil(Int, p₁/da) #p₁ equals i_sell grid points
+
+	for it in range(1, maxit)
+
+		# forward difference
+		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] .= (y .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] .= (y .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+		I_concave = dvb .> dvf # problems if value function not concave
+
+		# consumption and savings with forward difference
+		cf = dvf .^ (-1/σ)
+		ȧf = y .+ r .* a .- cf
+
+		# consumption and savings with backward difference
+		cb = dvb .^ (-1/σ)
+		ȧb = y .+ r .* a .- cb
+
+		# consumption and derivate of value function at steady state
+		c0 = y .+ r .* a .+ zeros(N_a, 2)
+		dv0 = c0 .^ (-σ)
+
+		If = ȧf .> 0 # positive drift => forward difference
+		Ib = ȧb .< 0 # negative drift => backward difference
+		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
+		If[N_a,:] .= 0.
+		I0 = (1 .- If .- Ib) # steady state
+
+		c = cf .* If + cb .* Ib + c0 .* I0
+		
+		u = zeros(N_a, 2)
+		u[:,1] = c[:,1] .^ (1-σ) / (1-σ)
+		u[:,2] = c[:,2] .^ (1-σ) / (1-σ) .+ κ
+
+		X = - min.(ȧb,0)/da
+		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+		Z =   max.(ȧf,0)/da
+
+		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+		A = blockdiag(A11, A22)
+
+    	# value of buying car if currently, don't own car
+	    v_star[i_buy+1:N_a,1] = v[1:N_a-i_buy,2]
+	    # instead of setting Vstar[1:i_buy,1]=-Inf, do something smoother
+	    slope = (v_star[i_buy+2,1] - v_star[i_buy+1,1]) / da
+	    v_star[1:i_buy,1] = v_star[i_buy+1,1] .+ slope * (a[1:i_buy] .- a[i_buy+1])
+
+	    # value of selling car if currently own car
+	    v_star[1:N_a-i_sell,2] = v[i_sell+1:N_a,1]
+	    v_star[N_a-i_sell+1:N_a,2] .= v[N_a,1] # assume p = min(p,amax - a)
+
+		### YOUR CODE ###
+		
+		# B = ...
+		# q = ...
+		# z₀ = ...
+
+		#################
+		
+		res = solve!(LCP(B, q), z₀)
+		z = res.sol
+
+		LCP_error = maximum(abs.(z.*(B*z + q)))
+	    if LCP_error > 1e-5
+			error("LCP not solved")
+		end
+
+	    v_new = reshape(z + vec(v_star), N_a, 2)
+	    
+	    v_change = v_new - v
+		dist[it] = maximum(abs.(v_change))
+		
+	    v = v_new
+
+		if dist[it] < crit
+
+			ȧ = y .+ r .* a .- c
+
+			return v, v_star, c, ȧ, it, dist
+
+		end
+
+	end
+
+	error("Algorithm did not converge")
+	
+end
+
+# ╔═╡ a696e13e-520c-4bf5-a87c-a0b094975ba8
+md"""
+## Exercise 4: Results
+"""
+
+# ╔═╡ 43c21b66-098e-43a2-a6c5-3b712ac8af38
+m2 = RetirementModel();
+
+# ╔═╡ d414b8ac-dbea-479e-b71f-c935826a21bf
+#df2 = solve_df(m2);
+
+# ╔═╡ eb20ebe8-5b9d-4e76-aaec-527c6c7b7bbe
+md"""
+👉 Interpret the diagrams below.
+"""
+
+# ╔═╡ 1643da29-da83-4ef2-97ef-b3aa8bd6df68
+let
+
+	figure = (; resolution = (600, 300))
+	
+	@chain df2 begin
+		stack([:v_star, :v])
+		data(_) * mapping(:a, :value, color = :variable => nonnumeric) * visual(Lines)
+		draw(; figure)
+	end
+
+end
+
+# ╔═╡ 28480bd8-4b24-4899-93f3-0eb021a94979
+@chain df2 begin
+	stack([:c, :ȧ, :action])
+	data(_) * mapping(:a, :value, layout = :variable) * visual(Lines)
+	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+end
+
 # ╔═╡ b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
 md"""
 # Appendix
@@ -1675,6 +1891,19 @@ version = "3.5.0+0"
 # ╟─231ce8ae-1219-48a5-b829-a07093322221
 # ╠═99d92b37-1bfe-44a6-ab12-5f511c97d6a3
 # ╠═ea368b73-478a-4029-844a-e1beb759fcff
+# ╟─e07b16e2-f3ff-4242-a46c-352464806cec
+# ╟─2a230d6e-fbf1-43c0-a114-c51fdc99f33c
+# ╠═8c377577-de22-4961-baf0-23a0b113a112
+# ╟─6ae34f8c-779b-4b75-9e0c-111fe5fea4ab
+# ╟─32d2155c-a135-47f5-b50c-0d271982de6a
+# ╟─1e598c8a-4504-4a11-9e0b-3e60862fbace
+# ╠═17f9e137-2d92-46f4-865e-4aeb3da4a2ce
+# ╟─a696e13e-520c-4bf5-a87c-a0b094975ba8
+# ╠═43c21b66-098e-43a2-a6c5-3b712ac8af38
+# ╠═d414b8ac-dbea-479e-b71f-c935826a21bf
+# ╟─eb20ebe8-5b9d-4e76-aaec-527c6c7b7bbe
+# ╠═1643da29-da83-4ef2-97ef-b3aa8bd6df68
+# ╠═28480bd8-4b24-4899-93f3-0eb021a94979
 # ╟─b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
 # ╟─7513b208-c92a-43f3-9b00-439a1f49ded8
 # ╠═3836dcce-1b4e-4e2c-98a4-2a8d41e70625
