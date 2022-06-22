@@ -178,14 +178,14 @@
                 "preview_image_url": ""
             },            
             {
-                "name": "Tutorial 3 (Part 1)",
-                "notebook_path": "notebooks/continuous-time-moll.jl",
+                "name": "Tutorial 3 (Part 1) Solution",
+                "notebook_path": "notebooks/continuous-time-moll-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
             {
-                "name": "Tutorial 3 (Part 2)",
-                "notebook_path": "notebooks/stopping-time-problem.jl",
+                "name": "Tutorial 3 (Part 2) Solution",
+                "notebook_path": "notebooks/stopping-time-problem-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }

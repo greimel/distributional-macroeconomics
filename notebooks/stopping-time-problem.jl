@@ -30,11 +30,12 @@ using Chain: @chain
 
 # ╔═╡ c3bf5880-f169-11ec-20e3-bf9092156abf
 md"""
-`stopping-time-problem.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`stopping-time-problem.jl` | **Version 1.0** | *last updated: June 22, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 23df23ca-df80-4789-ac79-fc777d258beb
 md"""
+# Optimal stopping problems
 # Durable good
 """
 
@@ -347,6 +348,8 @@ end
 # ╔═╡ e07b16e2-f3ff-4242-a46c-352464806cec
 md"""
 # Retirement
+
+see [Fahri and Panageas (2007)](https://www.sciencedirect.com/science/article/pii/S0304405X06001127) and [Grochulski and Zhang (2020)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3473117)
 """
 
 # ╔═╡ 2a230d6e-fbf1-43c0-a114-c51fdc99f33c
@@ -380,11 +383,17 @@ $v(a) = \max_{c(t)}\int_0^\tau e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigm
 
 subject to $\dot{a} = y + ra - c$.
 
+Working agents have the option to retire. $\tau$ is the stopping time.
+
 The value function for retired agents is
 
 $v^*(a) = \max_{c(t)}\int_0^\infty e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} + \kappa \Big) dt$ 
 
 subject to $\dot{a} = ra - c$.
+
+Retired agents do not have the option to start working again.
+
+Trade-off: Retired agents receive utility from leisure $\kappa$, but do no longer receive any income $y$.
 
 If $r = \rho$, $c(t) = ra$ and hence
 
@@ -394,7 +403,7 @@ HJB variational inequality:
 
 ```math
 \begin{align}
-0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\} + \lambda(v^*(a) - v(a)), v(a) - v^*(a))\}
+0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\}, v(a) - v^*(a))\}
 \end{align}
 ```
 """
@@ -524,6 +533,28 @@ function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
 	
 end
 
+# ╔═╡ 466b2494-3296-4865-bd98-fcdaf73e592d
+function results_to_df(m::RetirementModel; v, v_star, c, ȧ)
+	
+	(; N_a) = m
+
+	a = construct_a(m)
+
+	df = DataFrame()
+	df.a = a |> vec
+	df.c = c |> vec
+	df.ȧ = ȧ |> vec
+	df.v = v |> vec
+	df.v_star = v_star |> vec
+	df.action = (v_star .≈ v) |> vec
+
+	df.c[df.action] .= NaN
+	df.ȧ[df.action] .= NaN
+
+	df
+	
+end
+
 # ╔═╡ e701b4c7-2e55-443e-a37e-34b10c831095
 function solve_df(m; maxit = 100, crit = 1e-6, Δ = 1000)
 
@@ -549,6 +580,11 @@ m2 = RetirementModel();
 # ╔═╡ eb20ebe8-5b9d-4e76-aaec-527c6c7b7bbe
 md"""
 👉 Interpret the diagrams below.
+"""
+
+# ╔═╡ 7498fee3-fbb2-4e8e-a1bd-1ee7bd5f2c78
+md"""
+...
 """
 
 # ╔═╡ 1643da29-da83-4ef2-97ef-b3aa8bd6df68
@@ -1897,10 +1933,12 @@ version = "3.5.0+0"
 # ╟─32d2155c-a135-47f5-b50c-0d271982de6a
 # ╟─1e598c8a-4504-4a11-9e0b-3e60862fbace
 # ╠═17f9e137-2d92-46f4-865e-4aeb3da4a2ce
+# ╠═466b2494-3296-4865-bd98-fcdaf73e592d
 # ╟─a696e13e-520c-4bf5-a87c-a0b094975ba8
 # ╠═43c21b66-098e-43a2-a6c5-3b712ac8af38
 # ╠═d414b8ac-dbea-479e-b71f-c935826a21bf
 # ╟─eb20ebe8-5b9d-4e76-aaec-527c6c7b7bbe
+# ╠═7498fee3-fbb2-4e8e-a1bd-1ee7bd5f2c78
 # ╠═1643da29-da83-4ef2-97ef-b3aa8bd6df68
 # ╠═28480bd8-4b24-4899-93f3-0eb021a94979
 # ╟─b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d

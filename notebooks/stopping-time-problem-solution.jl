@@ -30,11 +30,12 @@ using Chain: @chain
 
 # ╔═╡ c3bf5880-f169-11ec-20e3-bf9092156abf
 md"""
-`stopping-time-problem-solution.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`stopping-time-problem-solution.jl` | **Version 1.0** | *last updated: June 22, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 23df23ca-df80-4789-ac79-fc777d258beb
 md"""
+# Optimal stopping problems
 # Durable good
 """
 
@@ -312,17 +313,6 @@ function results_to_df(m::DurableModel; v, v_star, c, ȧ)
 	
 end
 
-# ╔═╡ e701b4c7-2e55-443e-a37e-34b10c831095
-function solve_df(m; maxit = 100, crit = 1e-6, Δ = 1000)
-
-	v, v_star, c, ȧ, it, dist = solve_HJBVI(m; maxit, crit, Δ)
-
-	df = results_to_df(m; v, v_star, c, ȧ)
-
-	return df
-	
-end
-
 # ╔═╡ dc7da594-5213-42da-9962-2b7f899cb192
 md"""
 ## Exercise 2: Results
@@ -330,9 +320,6 @@ md"""
 
 # ╔═╡ 3f509c06-dfb6-4373-ae94-1aef74578ffa
 m = DurableModel();
-
-# ╔═╡ abd5e562-03ff-43a4-b4d0-146f2cf69717
-df = solve_df(m);
 
 # ╔═╡ edf44a54-baeb-4139-9545-eb9fbb89d561
 md"""
@@ -352,6 +339,218 @@ Right panel: agent owns car $d=1$
 Note that "value matching" and "smooth pasting" hold even though we did not impose them.
 """
 
+# ╔═╡ 231ce8ae-1219-48a5-b829-a07093322221
+md"""
+👉 Interpret the diagram below.
+"""
+
+# ╔═╡ 99d92b37-1bfe-44a6-ab12-5f511c97d6a3
+md"""
+There is a large range of wealth values for which owners do not sell but non-owners do not buy. This is because of the difference between the selling and the buying price.
+"""
+
+# ╔═╡ 48eac71a-62bb-40cf-bb6b-de36f3656045
+md"""
+# Retirement
+
+see [Fahri and Panageas (2007)](https://www.sciencedirect.com/science/article/pii/S0304405X06001127) and [Grochulski and Zhang (2020)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3473117)
+"""
+
+# ╔═╡ f10488d3-6bb4-4b34-9e7d-04d961fa31b4
+md"""
+## Model
+"""
+
+# ╔═╡ 67bb6a7a-df20-49ec-98cf-ed87e2381b87
+@with_kw struct RetirementModel
+	
+	σ::Float64 = 2.    # risk aversion coefficient u'(c) = c^(-σ)
+	ρ::Float64 = 0.05  # rate of time preference
+	r::Float64 = 0.05  # interest rate
+	y::Float64 = 0.1   # income
+
+	κ::Float64 = 0.25  # utility from leisure in retirement
+
+	# asset grid parameters
+	N_a::Int64 = 500
+	aₘᵢₙ::Float64 = 5.
+	aₘₐₓ::Float64 = 20.
+	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
+	
+end
+
+# ╔═╡ 048b0bb9-09b6-49d4-9723-4572e3f24de5
+md"""
+The value function for working agents is 
+
+$v(a) = \max_{c(t)}\int_0^\tau e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} \Big) dt + e^{-\rho \tau} v^*(a)$
+
+subject to $\dot{a} = y + ra - c$.
+
+Working agents have the option to retire. $\tau$ is the stopping time.
+
+The value function for retired agents is
+
+$v^*(a) = \max_{c(t)}\int_0^\infty e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} + \kappa \Big) dt$ 
+
+subject to $\dot{a} = ra - c$.
+
+Retired agents do not have the option to start working again.
+
+Trade-off: Retired agents receive utility from leisure $\kappa$, but do no longer receive any income $y$.
+
+If $r = \rho$, $c(t) = ra$ and hence
+
+$v^*(a) = \frac{1}{\rho}\Big(\frac{(ra)^{1-\sigma}}{1-\sigma} + \kappa \Big)$
+
+HJB variational inequality:
+
+```math
+\begin{align}
+0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\}, v(a) - v^*(a))\}
+\end{align}
+```
+"""
+
+# ╔═╡ 20433385-479c-4d92-b8d2-fc1d768e7d30
+md"""
+## Exercise 3: Solution algorithm
+"""
+
+# ╔═╡ f2c23a3f-0544-40ab-9b72-6331a0c5ee16
+md"""
+👉 Adapt the solution algorithm for the durable goods model to solve the retirement model.
+"""
+
+# ╔═╡ 33734e2e-a197-4c02-96e6-720996cb8108
+function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	(; σ, ρ, r, y, κ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+
+	# construct asset grid
+	a = construct_a(m)
+
+	v_star = 1/ρ * ((r*a).^(1-σ)/(1-σ) .+ κ)
+
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 1)
+	dvb = zeros(N_a, 1)
+	
+	# initial guess for value function
+	v₀ = 1/ρ * (y .+ r*a) .^ (1-σ) / (1-σ)
+	v = v₀
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	for it in range(1, maxit)
+
+		# forward difference
+		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] .= (y .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] .= (y .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+		I_concave = dvb .> dvf # problems if value function not concave
+
+		# consumption and savings with forward difference
+		cf = dvf .^ (-1/σ)
+		ȧf = y .+ r .* a .- cf
+
+		# consumption and savings with backward difference
+		cb = dvb .^ (-1/σ)
+		ȧb = y .+ r .* a .- cb
+
+		# consumption and derivate of value function at steady state
+		c0 = y .+ r .* a
+		dv0 = c0 .^ (-σ)
+
+		If = ȧf .> 0 # positive drift => forward difference
+		Ib = ȧb .< 0 # negative drift => backward difference
+		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
+		If[N_a,:] .= 0.
+		I0 = (1 .- If .- Ib) # steady state
+
+		c = cf .* If + cb .* Ib + c0 .* I0
+		
+		u = c .^ (1-σ) / (1-σ)
+
+		X = - min.(ȧb,0)/da
+		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+		Z =   max.(ȧf,0)/da
+
+		A = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+
+		B = (ρ + 1/Δ) * sparse(I, N_a, N_a) - A
+		q = - (vec(u) + vec(v)/Δ) + B * vec(v_star)
+		z₀ = vec(v) - vec(v_star)
+		res = solve!(LCP(B, q), z₀)
+		z = res.sol
+
+		LCP_error = maximum(abs.(z.*(B*z + q)))
+	    if LCP_error > 1e-5
+			error("LCP not solved")
+		end
+
+	    v_new = z + v_star
+	    
+	    v_change = v_new - v
+		dist[it] = maximum(abs.(v_change))
+		
+	    v = v_new
+
+		if dist[it] < crit
+
+			ȧ = y .+ r .* a .- c
+
+			return v, v_star, c, ȧ, it, dist
+
+		end
+
+	end
+
+	error("Algorithm did not converge")
+	
+end
+
+# ╔═╡ 21be9783-5006-4ba9-be5d-4d7c3cbde54b
+function results_to_df(m::RetirementModel; v, v_star, c, ȧ)
+	
+	(; N_a) = m
+
+	a = construct_a(m)
+
+	df = DataFrame()
+	df.a = a |> vec
+	df.c = c |> vec
+	df.ȧ = ȧ |> vec
+	df.v = v |> vec
+	df.v_star = v_star |> vec
+	df.action = (v_star .≈ v) |> vec
+
+	df.c[df.action] .= NaN
+	df.ȧ[df.action] .= NaN
+
+	df
+	
+end
+
+# ╔═╡ e701b4c7-2e55-443e-a37e-34b10c831095
+function solve_df(m; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	v, v_star, c, ȧ, it, dist = solve_HJBVI(m; maxit, crit, Δ)
+
+	df = results_to_df(m; v, v_star, c, ȧ)
+
+	return df
+	
+end
+
+# ╔═╡ abd5e562-03ff-43a4-b4d0-146f2cf69717
+df = solve_df(m);
+
 # ╔═╡ cbfc715f-83ff-4700-b49f-ce623b43b7db
 let
 
@@ -365,20 +564,53 @@ let
 
 end
 
-# ╔═╡ 231ce8ae-1219-48a5-b829-a07093322221
-md"""
-👉 Interpret the diagram below.
-"""
-
-# ╔═╡ 99d92b37-1bfe-44a6-ab12-5f511c97d6a3
-md"""
-There is a large range of wealth values for which owners do not sell but non-owners do not buy. This is because of the difference between the selling and the buying price.
-"""
-
 # ╔═╡ ea368b73-478a-4029-844a-e1beb759fcff
 @chain df begin
 	stack([:c, :ȧ, :action])
 	data(_) * mapping(:a, :value, layout = :variable, color = :d => nonnumeric) * visual(Lines)
+	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+end
+
+# ╔═╡ 2ae35394-380f-475a-ba5d-c2b8b3dcb81c
+md"""
+## Exercise 4: Results
+"""
+
+# ╔═╡ e522913b-7bf4-4239-addf-7562c3335f4c
+m2 = RetirementModel();
+
+# ╔═╡ 7f188890-8104-4168-ab5b-4f10ffebe5d6
+df2 = solve_df(m2);
+
+# ╔═╡ 0e6bb6da-c574-4a38-8c7a-530617672480
+md"""
+👉 Interpret the diagrams below.
+"""
+
+# ╔═╡ 41546b84-a1d3-4df2-a74f-17bd84db51d1
+md"""
+- high wealth: Household chooses to retire
+- intermediate wealth: Household saves in order to reach retirement threshold in the future
+- low wealth: Household never reaches retirement threshold because $\dot{a}$
+"""
+
+# ╔═╡ 2160548c-6ce7-4585-b834-925b7f31ebc7
+let
+
+	figure = (; resolution = (600, 300))
+	
+	@chain df2 begin
+		stack([:v_star, :v])
+		data(_) * mapping(:a, :value, color = :variable => nonnumeric) * visual(Lines)
+		draw(; figure)
+	end
+
+end
+
+# ╔═╡ 2e6992df-db62-425e-b4b4-4f8e30ced0ae
+@chain df2 begin
+	stack([:c, :ȧ, :action])
+	data(_) * mapping(:a, :value, layout = :variable) * visual(Lines)
 	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 end
 
@@ -1701,6 +1933,21 @@ version = "3.5.0+0"
 # ╟─231ce8ae-1219-48a5-b829-a07093322221
 # ╟─99d92b37-1bfe-44a6-ab12-5f511c97d6a3
 # ╠═ea368b73-478a-4029-844a-e1beb759fcff
+# ╟─48eac71a-62bb-40cf-bb6b-de36f3656045
+# ╟─f10488d3-6bb4-4b34-9e7d-04d961fa31b4
+# ╠═67bb6a7a-df20-49ec-98cf-ed87e2381b87
+# ╟─048b0bb9-09b6-49d4-9723-4572e3f24de5
+# ╟─20433385-479c-4d92-b8d2-fc1d768e7d30
+# ╟─f2c23a3f-0544-40ab-9b72-6331a0c5ee16
+# ╠═33734e2e-a197-4c02-96e6-720996cb8108
+# ╠═21be9783-5006-4ba9-be5d-4d7c3cbde54b
+# ╟─2ae35394-380f-475a-ba5d-c2b8b3dcb81c
+# ╠═e522913b-7bf4-4239-addf-7562c3335f4c
+# ╠═7f188890-8104-4168-ab5b-4f10ffebe5d6
+# ╟─0e6bb6da-c574-4a38-8c7a-530617672480
+# ╟─41546b84-a1d3-4df2-a74f-17bd84db51d1
+# ╠═2160548c-6ce7-4585-b834-925b7f31ebc7
+# ╠═2e6992df-db62-425e-b4b4-4f8e30ced0ae
 # ╟─b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
 # ╟─7513b208-c92a-43f3-9b00-439a1f49ded8
 # ╠═3836dcce-1b4e-4e2c-98a4-2a8d41e70625
