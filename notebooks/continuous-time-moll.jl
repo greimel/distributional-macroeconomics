@@ -62,8 +62,15 @@ md"""
 	N_a::Int64 = 500
 	aₘᵢₙ::Float64 = - 0.1
 	aₘₐₓ::Float64 = 1.
-	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
+	Δa::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
 	
+end
+
+# ╔═╡ 95764a2a-0a92-447c-98a8-df22167abda6
+function generator(m)
+	λ₁₂, λ₂₁ = m.λ
+	Λ = [-λ₁₂ λ₁₂;
+	    λ₂₁ -λ₂₁]
 end
 
 # ╔═╡ ac27dd69-1216-4a02-ba62-ebb098b33fa1
@@ -183,7 +190,7 @@ A finite difference approximation of the KF equation results into the matrix equ
 # ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
 function solve_KF(m::HuggettPoisson, A)
 
-	(; N_a, da) = m
+	(; N_a, Δa) = m
 	
 	AT = transpose(A)
 	b = zeros(2*N_a, 1)
@@ -204,10 +211,10 @@ function solve_KF(m::HuggettPoisson, A)
 		end
 	end
 	
-	g_sum = sum(g_stacked) * da
+	g_sum = sum(g_stacked) * Δa
 	g_stacked_norm = g_stacked ./ g_sum
 
-	@assert sum(g_stacked_norm) * da ≈ 1
+	@assert sum(g_stacked_norm) * Δa ≈ 1
 	
 	g = reshape(g_stacked_norm, N_a, 2)
 
@@ -253,6 +260,97 @@ In contrast to the implicit method, we can rearrange for $v_{i,j}^{n+1}$ in the 
 
 The disadvantage of the explicit method is that it converges only if $\Delta$ is not too large.
 """
+
+# ╔═╡ b099dbbf-9648-44c5-984c-fdd80ee81469
+function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
+
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
+	da = Δa
+
+	# construct asset grid
+	a = construct_a(m)
+	Λ = generator(m)
+	
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
+
+	# initial guess for value function
+	v₀ = zeros(N_a, 2)
+	for (i, zᵢ) in enumerate(z)
+		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
+	end
+	v = v₀
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	# step size for updating the value function
+	Δ = .9 * da / (z[2] .+ r.*aₘₐₓ)
+
+	for it in range(1, maxit)
+
+		# forward difference
+		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+		I_concave = dvb .> dvf # problems if value function not concave
+
+		# consumption and savings with forward difference
+		cf = dvf .^ (-1/σ)
+		ȧf = z .+ r .* a - cf
+
+		# consumption and savings with backward difference
+		cb = dvb .^ (-1/σ)
+		ȧb = z .+ r .* a - cb
+
+		# consumption and derivate of value function at steady state
+		c0 = z .+ r .* a
+		dv0 = c0 .^ (-σ)
+
+		If = ȧf .> 0 # positive drift => forward difference
+		Ib = ȧb .< 0 # negative drift => backward difference
+		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
+		If[N_a,:] .= 0.
+		I0 = (1 .- If .- Ib) # steady state
+	
+		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
+	
+		c = dv_upwind .^ (-1/σ)
+		ȧ = z .+ r.*a - c
+		u = c.^(1-σ)/(1-σ)
+		
+		# HJB equation
+		v_change = u + dv_upwind .* ȧ + v * Λ' - ρ*v
+
+		#v_switch = zeros(N_a, 2)
+		#v_switch[:,2] = v[:,1]
+		#v_switch[:,1] = v[:,2]
+		#v_change = u + dv_upwind .* ȧ + ones(N_a,1)*λ.*(v_switch - v) - ρ*v
+
+		# updating the value function
+		v .= v + Δ * v_change
+
+		dist[it] = maximum(abs.(v_change))
+
+		if dist[it] < crit
+			
+			return v, c, ȧ, it, dist
+
+		end
+
+	end
+
+	error("Algorithm did not converge")
+
+end
+
+# ╔═╡ 4bfa5d92-b177-4442-b045-e05cc48b6cc4
+t_expl = @elapsed solve_HJB_explicit(m, 0.03; crit=1e-6)
 
 # ╔═╡ fd0fb774-a805-4739-b570-0d2e191a3294
 md"""
@@ -366,82 +464,57 @@ function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
 	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
 end
 
-# ╔═╡ 95764a2a-0a92-447c-98a8-df22167abda6
-function generator(m)
-	λ₁₂, λ₂₁ = m.λ
-	Λ = [-λ₁₂ λ₁₂;
-	    λ₂₁ -λ₂₁]
-end
+# ╔═╡ 1971dce8-ca39-4ced-88af-c65105977ac4
+v₀((; z, a), (; r, σ, ρ)) = (z + r*a)^(1-σ)/(1-σ)/ρ
 
-# ╔═╡ b099dbbf-9648-44c5-984c-fdd80ee81469
-function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
-
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
-
-	# construct asset grid
-	a = construct_a(m)
-	Λ = generator(m)
-	
+# ╔═╡ 90d6eba4-fa47-4717-b742-8b38f0b330ac
+function inner_function(ss, v, (; aₘₐₓ, aₘᵢₙ, r, σ, N_a, Δa, z))
 	# initialize arrays for forward and backward difference
 	dvf = zeros(N_a, 2)
 	dvb = zeros(N_a, 2)
 
+	# forward difference
+	dvf[1:N_a-1,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / Δa
+	dvf[N_a,:] .= (vec(z) .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+	# backward difference
+	dvb[2:N_a,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / Δa
+	dvb[1,:] .= (vec(z) .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+	#I_concave = dvb .> dvf # problems if value function not concave
+
+	out = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))	
+	u = out.c .^ (1-σ)/(1-σ)
+
+	(; u, out.c, out.dv, out.ȧ, out.ȧf, out.ȧb)
+end
+
+# ╔═╡ bf92e453-cea7-408e-9026-4d2f78995c85
+function solve_HJB_explicit_julian(m::HuggettPoisson, r; v₀=v₀, maxit = 100000, crit = 1e-6)
+
+	(; σ, ρ, z, N_a, aₘₐₓ, Δa) = m
+	par = (; σ, ρ, z, N_a, aₘₐₓ, m.aₘᵢₙ, Δa, r)
+	
+	# construct asset grid
+	ss = statespace(m)
+	
+	Λ = generator(m)
+	
 	# initial guess for value function
-	v₀ = zeros(N_a, 2)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
+	v = v₀.(ss, Ref((; r, σ, ρ)))
 
 	# initialize vector that keeps track of convergence
 	dist = - ones(maxit)
 
 	# step size for updating the value function
-	Δ = .9 * da / (z[2] .+ r.*aₘₐₓ)
+	Δ = .9 * Δa / (m.z[2] .+ r.*aₘₐₓ)
 
 	for it in range(1, maxit)
 
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-	
-		c = dv_upwind .^ (-1/σ)
-		ȧ = z .+ r.*a - c
-		u = c.^(1-σ)/(1-σ)
+		(; u, c, ȧ, dv) = inner_function(ss, v, par)
 		
 		# HJB equation
-		v_change = u + dv_upwind .* ȧ + v * Λ' - ρ*v
-
-		#v_switch = zeros(N_a, 2)
-		#v_switch[:,2] = v[:,1]
-		#v_switch[:,1] = v[:,2]
-		#v_change = u + dv_upwind .* ȧ + ones(N_a,1)*λ.*(v_switch - v) - ρ*v
+		v_change = u + dv .* ȧ + v * Λ' - ρ*v
 
 		# updating the value function
 		v .= v + Δ * v_change
@@ -463,7 +536,7 @@ end
 # ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
 function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
 	
-	v, c, ȧ, it_last, dist = solve_HJB_explicit(m, r; maxit, crit)
+	v, c, ȧ, it_last, dist = solve_HJB_explicit_julian(m, r; maxit, crit)
 	df = results_to_df(m; v, c, ȧ)
 	
 	return df, it_last, dist
@@ -472,9 +545,6 @@ end
 
 # ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
 (df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=1e-6);
-
-# ╔═╡ 4bfa5d92-b177-4442-b045-e05cc48b6cc4
-t_expl = @elapsed solve_HJB_explicit(m, 0.03; crit=1e-6)
 
 # ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
 let 
@@ -596,7 +666,8 @@ end
 # ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
 function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
 
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
+	da = Δa
 
 	# construct asset grid
 	a = construct_a(m)
@@ -661,7 +732,7 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 		u = c.^(1-σ)/(1-σ)
 
 		# STEP 3
-		A = construct_A_moll(ȧf, ȧb, da, N_a) + A_switch
+		A = construct_A_moll(ȧf, ȧb, Δa, N_a) + A_switch
 
 		B = (ρ + 1/Δ) * I - A
 		b = vec(u) + vec(v)/Δ
@@ -690,20 +761,14 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 end
 
 # ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
-function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+function solve_HJB_implicit_julian(m::HuggettPoisson, r; v₀=v₀, maxit = 100, crit = 1e-6, Δ = 1000)
 
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
-
-	# construct asset grid
-	a = construct_a(m)
-	ss = statespace(m)
-	ss_inds = statespace_inds(m)
-	lin_ind = LinearIndices((N_a, 2))
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
+	par = (; σ, ρ, z, N_a, aₘₐₓ, m.aₘᵢₙ, Δa, r)
 	
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-
+	# construct asset grid
+	ss = statespace(m)
+	
 	# precompute A_switch matrix
 	id = I(N_a)
 	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
@@ -711,37 +776,19 @@ function solve_HJB_implicit_julian(m::HuggettPoisson, r; maxit = 100, crit = 1e-
 	A_switch   = vcat(A_switch_1, A_switch_2)
 
 	# initial guess for value function
-	v₀((; z, a)) = (z + r*a)^(1-σ)/(1-σ)/ρ
-	v = v₀.(ss)
+	#v₀((; z, a)) = (z + r*a)^(1-σ)/(1-σ)/ρ
+	v = v₀.(ss, Ref((; r, σ, ρ)))
 
 	# initialize vector that keeps track of convergence
 	dist = - ones(maxit)
 
 	for it in range(1, maxit)
 
-		# STEP 1
-
-		# forward difference
-		dvf[1:N_a-1,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] .= (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] .= (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-				
-		# STEP 3
-		(; c, ȧf, ȧb, ȧ) = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
-		
-		u = c .^ (1-σ)/(1-σ)
-
-		#@assert all(ȧf[end,:] .== 0.0)
-		#@assert all(ȧb[1,:] .== 0.0)
+		(; u, c, ȧ, ȧf, ȧb, dv) = inner_function(ss, v, par)
 		
 		#A = construct_A_alt(ȧf, ȧb, da, N_a, 2) + A_switch
 		#A = construct_A_diag(ȧf, ȧb, da, N_a) + A_switch
-		A = construct_A_moll(ȧf, ȧb, da, N_a) + A_switch
+		A = construct_A_moll(ȧf, ȧb, Δa, N_a) + A_switch
 		# A = construct_A(ȧ, da, N_a, 2) + A_switch
 
 		B = (ρ + 1/Δ) * I - A
@@ -800,9 +847,9 @@ end
 
 # ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
 function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	(; da) = m
+	(; Δa) = m
 	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
-	A = dot(df.a, df.g) * da
+	A = dot(df.a, df.g) * Δa
 
 end
 
@@ -829,8 +876,36 @@ let
 	end
 end
 
-# ╔═╡ cf116acb-47ed-4631-8831-4321842abf6b
-solve_HJB_implicit_julian(m, 0.03, maxit=1000)
+# ╔═╡ 1cc42384-d262-496a-801a-033e7b40e6e9
+md"""
+### Differentiate
+"""
+
+# ╔═╡ 9f6051fa-2bd7-40b1-b2f8-5e7b1c477387
+begin
+	Δy_up(y, i, Δx) = (y[i+1] - y[i]) / Δx
+	Δy_down(y, i, Δx) = (y[i] - y[i-1]) / Δx
+	Δy_central(y, i, Δx) = (y[i+1] - y[i-1]) / Δx
+	
+	function Δgrid(grid, i)
+	    last = length(grid)
+	    @inbounds down = grid[max(i, 2)]      - grid[max(i-1, 1)]
+	    @inbounds up   = grid[min(i+1, last)] - grid[min(i, last-1)]
+	    central = (up + down)
+	    avg = central / 2
+	
+	    (; up, down, avg, central)
+	end
+	
+	function Δy(y, bc, i, Δx, fun_name, state_name)
+	    up       = i != length(y) ? Δy_up(y, i, Δx.up)     : bc[i]
+	    down     = i != 1         ? Δy_down(y, i, Δx.down) : bc[i]
+	    second = (up - down) / Δx.avg
+	    NamedTuple{deriv_names(fun_name, state_name)}((up, down, second))
+	end
+	
+	deriv_names(fun_name, state_name) = (Symbol(fun_name, state_name, "_", :up), Symbol(fun_name, state_name, "_", :down), Symbol(fun_name, state_name, state_name))
+end
 
 # ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
 md"""
@@ -2174,6 +2249,7 @@ version = "3.5.0+0"
 # ╟─0edf9214-7213-4b1d-8fa6-54a365525d29
 # ╟─1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
 # ╠═64d44910-988c-4e24-baf6-6408da65bd21
+# ╠═95764a2a-0a92-447c-98a8-df22167abda6
 # ╟─ac27dd69-1216-4a02-ba62-ebb098b33fa1
 # ╠═3dd0c186-04f0-425c-93dc-825c7d4b606e
 # ╠═23a991be-7c8b-45e2-bd75-af5e146fc6b0
@@ -2219,13 +2295,16 @@ version = "3.5.0+0"
 # ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
 # ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
 # ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
+# ╠═1971dce8-ca39-4ced-88af-c65105977ac4
 # ╠═e204ae15-fefd-4f01-8d5e-3772aefe9b0f
-# ╠═95764a2a-0a92-447c-98a8-df22167abda6
-# ╠═cf116acb-47ed-4631-8831-4321842abf6b
+# ╠═bf92e453-cea7-408e-9026-4d2f78995c85
+# ╠═90d6eba4-fa47-4717-b742-8b38f0b330ac
 # ╠═b57ea0a2-bee4-450f-99fa-cc79054fc963
 # ╠═8777505c-6db4-4e75-a57b-59f4620b0051
 # ╠═434ecb8d-eae2-4913-97f8-3bdbefbf78ff
 # ╠═b77b52ac-73ad-456c-94e5-5f72e310268f
+# ╟─1cc42384-d262-496a-801a-033e7b40e6e9
+# ╠═9f6051fa-2bd7-40b1-b2f8-5e7b1c477387
 # ╟─518eec58-eb4b-4294-9090-b6645f51a337
 # ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
 # ╠═6f92c837-1760-423e-9777-9db9ad758475
