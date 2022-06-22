@@ -82,7 +82,7 @@ The value function for agents that do not own a car is $v_0(a)$.
 
 The value function for agents that own a car is $v_1(a)$.
 
-The value of buying a car is $v_0^*(a) = v_1(a - p_0)$ if $a-p_0 \ge \underline{a}$, else $v_0^*(a) = \infty$.
+The value of buying a car is $v_0^*(a) = v_1(a - p_0)$ if $a-p_0 \ge \underline{a}$, else $v_0^*(a) = -\infty$.
 
 The value of selling the car is $v_1^*(a) = v_0(\max\{a + p_1, a_\max\})$. 
 
@@ -113,7 +113,7 @@ Finite difference method $\implies$
 \end{align}
 ```
 
-where $v_0$, $v_1$, etc. denote the column vectors now (the value functions evaluated on the discrete grid).
+where $v_0$, $v_1$, etc. denote column vectors now (the value functions evaluated on the discrete grid).
 
 Stacking both equations $\implies$
 

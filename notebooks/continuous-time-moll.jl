@@ -105,7 +105,7 @@ md"""
 Start with an initial guess for the value function $v_{i,j}^0$. A natural choice is
 $$v_{i,j}^0 = \frac{u(z_j + ra_i)}{\rho}$$.
 
-For i = 1, ... maxit 
+For n = 1, ... maxit 
 
 (1) Approximate $(v_{i,j}^n)'$, $j=1,2$ using a finite difference method:
 
