@@ -211,23 +211,6 @@ u_prime(c, (; σ)) = c^(-σ)
 # ╔═╡ 68aeb6cf-cff8-49e9-8c39-d94aadd5a444
 u(c, (; σ)) = c > 0 ? σ == 1 ? log(c) : c^(1-σ)/(1-σ) : 10 * c - 100
 
-# ╔═╡ 570d643a-933e-4c3e-9e68-b8b8b839a6a2
-function c₀_adot_va((; z, a), (; r, w, σ))
-	c = z * w + a * r
-    va = u_prime(c, (; σ))
-	
-	(; va, c, ȧ=0.0)
-end
-
-# ╔═╡ 2cb1ac9c-6aa9-4f49-b94a-8a6b2c380333
-function c_adot_va(va, (; z, a), (; r, w, σ))
-	#va = max(va, eps())
-	c = u_prime_inv(va, (; σ))
-	ȧ = z * w + a * r - c
-	
-	(; va, c, ȧ)
-end
-
 # ╔═╡ e197b24a-7e51-45e4-8186-11f88bf48de6
 function clean_variables(nt, solname, statename, n)
 	map(1:n) do i
@@ -580,7 +563,7 @@ end
 # ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
 function consumption_and_drift((; a, z), dv, (; r, σ))
 	#dv = max(dv, eps(0.0))
-	c = dv ^ (-1/σ)
+	c = u_prime_inv(dv, (; σ))
 	ȧ = z + r * a - c
 
 	(; c, ȧ, dv)
@@ -591,7 +574,7 @@ function consumption_and_drift₀((; a, z), (; r, σ))
 	ȧ = 0.0
 	c = z + r * a
 
-	dv = c^(-σ)
+	dv = u_prime(c, (; σ))
 
 	(; c, ȧ, dv)
 end
@@ -694,7 +677,7 @@ function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
 end
 
 # ╔═╡ 1971dce8-ca39-4ced-88af-c65105977ac4
-v₀((; z, a), (; r, σ, ρ)) = (z + r*a)^(1-σ)/(1-σ)/ρ
+v₀((; z, a), (; r, σ, ρ)) = u(z + r*a, (; σ))/ρ
 
 # ╔═╡ b7024377-6ffe-4f8a-a58a-0fa809683fd2
 abstract type Scheme end
@@ -726,11 +709,11 @@ function inner_function(ss, v, (; aₘₐₓ, aₘᵢₙ, r, σ, N_a, Δa, z))
 
 	# forward difference
 	dvf[1:N_a-1,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / Δa
-	dvf[N_a,:] .= (vec(z) .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+	#dvf[N_a,:] .= (vec(z) .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
 
 	# backward difference
 	dvb[2:N_a,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / Δa
-	dvb[1,:] .= (vec(z) .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	#dvb[1,:] .= (vec(z) .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
 	
 	#I_concave = dvb .> dvf # problems if value function not concave
 
@@ -856,7 +839,7 @@ function construct_A_moll(ȧf, ȧb, da, N_a)
 end
 
 # ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
-function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), Δ = 1000)
 
 	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
 	da = Δa
@@ -951,6 +934,9 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ =
 	@error("Algorithm did not converge")
 
 end
+
+# ╔═╡ 3a92eac0-643f-47ec-b6dc-6d541873ac9a
+solve_HJB_implicit(m, 0.03)
 
 # ╔═╡ bf01f8b6-b618-4ce8-9ff0-3bdf37901ce1
 function update_v(ss, v, par, A_switch, _, (; Δ)::Implicit)
@@ -1119,7 +1105,7 @@ let
 end
 
 # ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
+function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = √eps())
 	scheme = Explicit(m; maxit)
 	(; v, c, ȧ, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
 	df = results_to_df(m; v, c, ȧ)
@@ -1129,7 +1115,7 @@ function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
 end
 
 # ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
-(df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=1e-6);
+(df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=√eps());
 
 # ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
 (df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]]) ./ df[:,[:c, :ȧ, :v]]
@@ -2804,8 +2790,6 @@ version = "3.5.0+0"
 # ╠═56234834-6de9-4e44-95af-c5e3fb828a9d
 # ╠═a10ef170-045c-439e-a23b-122e812853aa
 # ╠═68aeb6cf-cff8-49e9-8c39-d94aadd5a444
-# ╠═570d643a-933e-4c3e-9e68-b8b8b839a6a2
-# ╠═2cb1ac9c-6aa9-4f49-b94a-8a6b2c380333
 # ╠═e197b24a-7e51-45e4-8186-11f88bf48de6
 # ╠═12cbc2a7-ddf3-42c5-b592-a438ecdc5165
 # ╠═d7fbe6a6-076e-4a96-9431-7470cf73e576
@@ -2833,6 +2817,7 @@ version = "3.5.0+0"
 # ╠═e1376e99-a636-4d28-b711-2dd4be66374f
 # ╠═4de350bb-d2be-46b1-8558-a49f54a29dd1
 # ╠═98a7d8e0-1741-4447-b612-e40491fa8673
+# ╠═3a92eac0-643f-47ec-b6dc-6d541873ac9a
 # ╠═1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
 # ╟─deeff3d5-3856-43cb-8469-2a4d6d7fca4f
 # ╟─b6101102-2054-4932-b6b6-5070cd84f2be
