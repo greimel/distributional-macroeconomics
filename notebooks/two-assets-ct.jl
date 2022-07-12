@@ -378,7 +378,7 @@ md"""
 
 # ╔═╡ ed6045c0-b76c-4691-9f05-c943c542d13f
 Base.@kwdef struct TwoAssets
-	ga = 2 #CRRA utility with parameter gamma
+	γ = 2 #CRRA utility with parameter gamma
 	ra = 0.05
 	rb_pos = 0.03
 	rb_neg = 0.12
@@ -416,9 +416,21 @@ function check((; ra, χ₁))
 	end
 end
 
+# ╔═╡ f6c0329e-1a02-4292-96b7-11c8cd9c3b54
+util(c, (; γ)) = c^(1-γ)/(1-γ)
+
+# ╔═╡ 5a6c37d8-af66-46a1-9c93-581057c41f94
+u_prime(c, (; γ)) = c^(-γ)
+
+# ╔═╡ cdcca65f-59df-4990-97b7-2b511bdb61e6
+u_prime_inv(x, (; γ)) = x^(-1/γ)
+
+# ╔═╡ 920e3393-fd38-4154-8d90-ce9dc712ed1a
+
+
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
-	(; rho, ga, ra, rb_pos, rb_neg, xi, w) = model
+	(; rho, ra, rb_pos, rb_neg, xi, w) = model
 	(; Delta, crit) = model
 	(; a, b, z, I, J, Nz, la_mat, amin, amax, bmin, bmax, db, da) = model
 
@@ -464,7 +476,7 @@ function solve_HJB_new(model, maxit = 35)
 	u = zeros(I,J,Nz)
 	
 	#INITIAL GUESS
-	v0 = (((1-xi)*w*zzz + ra.*aaa + rb_neg.*bbb).^(1-ga))/(1-ga)/rho
+	v0 = util.((1-xi)*w*zzz + ra.*aaa + rb_neg.*bbb, Ref(model)) ./ rho
 	v = copy(v0)
 
 
@@ -487,11 +499,11 @@ function solve_HJB_new(model, maxit = 35)
 	    #DERIVATIVES W.R.T. b
 	    # forward difference
 	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db;
-	    VbF[I,:,:] = ((1-xi)*w*zzz[I,:,:] + Rb[I,:,:] .* bmax).^(-ga); #state constraint boundary condition
+	    VbF[I,:,:] = u_prime.((1-xi)*w*zzz[I,:,:] + Rb[I,:,:] .* bmax, Ref(model)) #state constraint boundary condition
 			
 	    # backward difference
 	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:])/db;
-	    VbB[1,:,:] = ((1-xi)*w*zzz[1,:,:] + Rb[1,:,:].*bmin).^(-ga); #state constraint boundary condition
+	    VbB[1,:,:] = u_prime.((1-xi)*w*zzz[1,:,:] + Rb[1,:,:].*bmin, Ref(model)) #state constraint boundary condition
 	
 	    #DERIVATIVES W.R.T. a
 	    # forward difference
@@ -500,8 +512,8 @@ function solve_HJB_new(model, maxit = 35)
 	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
 	 
 	    #useful quantities
-	    c_B = max.(VbB,10^(-6)).^(-1/ga);
-	    c_F = max.(VbF,10^(-6)).^(-1/ga); 
+	    c_B = u_prime_inv.(max.(VbB,10^(-6)), Ref(model))
+	    c_F = u_prime_inv.(max.(VbF,10^(-6)), Ref(model))
 		dBB = two_asset_kinked_FOC_new.(VaB,VbB,aaa, Ref(model))
 	    dFB = two_asset_kinked_FOC_new.(VaB,VbF,aaa, Ref(model))
 	    #VaF(:,J,:) = VbB(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
@@ -544,7 +556,7 @@ function solve_HJB_new(model, maxit = 35)
 	    c_0 = (1-xi) * w * zzz + Rb .* bbb
 	  
 	    c .= c_F .* Ic_F + c_B .* Ic_B + c_0 .* Ic_0
-	    u .= c .^ (1-ga) ./(1-ga)
+	    u .= util.(c, Ref(model))
 	    
 	    #CONSTRUCT MATRIX BB SUMMARING EVOLUTION OF b
 	    X = -Ic_B .* sc_B ./db .- Id_B .* sd_B ./ db
@@ -1999,6 +2011,10 @@ version = "3.5.0+0"
 # ╠═ed6045c0-b76c-4691-9f05-c943c542d13f
 # ╠═a72719ef-0e55-4f5f-af9a-7cad8d1d45dd
 # ╠═a6356900-5530-494f-9d01-03041805ebe6
+# ╠═f6c0329e-1a02-4292-96b7-11c8cd9c3b54
+# ╠═5a6c37d8-af66-46a1-9c93-581057c41f94
+# ╠═cdcca65f-59df-4990-97b7-2b511bdb61e6
+# ╠═920e3393-fd38-4154-8d90-ce9dc712ed1a
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
 # ╠═8f3da06b-2887-4564-87c7-12a798580f53
