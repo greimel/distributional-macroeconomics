@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ b48b0674-1bcb-48e5-9b05-57dea5877715
 using LinearAlgebra
 
+# ╔═╡ 1ee8ccc3-d498-48c6-b299-1032165e4ab9
+using StructArrays
+
 # ╔═╡ 9aa61364-51a3-45d0-b1c2-757b864de132
 using PlutoTest
 
@@ -426,7 +429,47 @@ u_prime(c, (; γ)) = c^(-γ)
 u_prime_inv(x, (; γ)) = x^(-1/γ)
 
 # ╔═╡ 920e3393-fd38-4154-8d90-ce9dc712ed1a
+function get_d(VaB, VaF, Vb, a, b, model)
+	(; amax, amin, bmin, bmax) = model
+	dxB = two_asset_kinked_FOC_new(VaB,Vb,a, model)
+	dxF = two_asset_kinked_FOC_new(VaF,Vb,a, model)
 
+	if dxF > 0 && dxB < 0
+		d  = dxF + dxB
+	elseif dxF > 0
+		d = dxF
+	elseif dxB < 0
+		d = dxB
+	else
+		d = 0.0
+	end
+
+	if a == amin
+		d = dxF * (dxF > 10^(-12))
+	end
+	if a == amax
+		d = dxB * (dxB < -10^(-12))
+	end
+	if a == amin && b == bmin
+		d = max(d, 0.0)
+	end
+
+	sd = -d - two_asset_kinked_cost_new(d, a, model)
+
+	(; d, sd)
+end
+
+# ╔═╡ c3bdccfb-0bb7-4a06-ba9e-0522a3b3e3d4
+	sd_B = (-d_B .- two_asset_kinked_cost_new.(d_B, aaa, Ref(model)))
+		sd_F = (-d_F .- two_asset_kinked_cost_new.(d_F, aaa, Ref(model)))
+	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
+		
+	    Id_F .= (sd_F .> 10^(-12))
+	    Id_B .= (sd_B .< -10^(-12)) .* (1 .- Id_F)
+	    Id_B[1,:,:] .= 0
+	    Id_F[I,:,:] .= 0
+		Id_B[I,:,:] .= 1 #don't use VbF at bmax so as not to pick up articial state constraint
+	    Id_0 = 1 .- Id_F .- Id_B
 
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
@@ -514,38 +557,31 @@ function solve_HJB_new(model, maxit = 35)
 	    #useful quantities
 	    c_B = u_prime_inv.(max.(VbB,10^(-6)), Ref(model))
 	    c_F = u_prime_inv.(max.(VbF,10^(-6)), Ref(model))
-		dBB = two_asset_kinked_FOC_new.(VaB,VbB,aaa, Ref(model))
-	    dFB = two_asset_kinked_FOC_new.(VaB,VbF,aaa, Ref(model))
-	    #VaF(:,J,:) = VbB(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
-	    dBF = two_asset_kinked_FOC_new.(VaF,VbB,aaa, Ref(model))
-	    #VaF(:,J,:) = VbF(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
-	    dFF = two_asset_kinked_FOC_new.(VaF,VbF,aaa, Ref(model))
-	    
-	    #UPWIND SCHEME
-	    d_B .= (dBF .> 0) .* dBF .+ (dBB .< 0) .* dBB;
-	   
-		#state constraints at amin and amax
-	    d_B[:,1,:] = (dBF[:,1,:] .> 10^(-12)) .* dBF[:,1,:] #make sure d>=0 at amax, don't use VaB(:,1,:)
-	    d_B[:,J,:] = (dBB[:,J,:] .< -10^(-12)) .* dBB[:,J,:] #make sure d<=0 at amax, don't use VaF(:,J,:)
-	    d_B[1,1,:] = max.(d_B[1,1,:],0)
-	    #split drift of b and upwind separately
+
+		outB = get_d.(VaB, VaF, VbB, aaa, bbb, Ref(model)) |> StructArray
+		outF = get_d.(VaB, VaF, VbF, aaa, bbb, Ref(model)) |> StructArray
+
+		d_B = outB.d
+		d_F = outF.d
+		sd_B = outB.sd
+		sd_F = outF.sd
+
+		#split drift of b and upwind separately
 	    sc_B = (1-xi) .* w .* zzz .+ Rb .* bbb .- c_B;
-	    sd_B = (-d_B - two_asset_kinked_cost_new.(d_B, aaa, Ref(model)))
 	    
-	    d_F .= (dFF .> 0) .* dFF + (dFB .< 0) .* dFB
-	    #state constraints at amin and amax
-	    d_F[:,1,:] = (dFF[:,1,:] .> 10^(-12)) .* dFF[:,1,:] #make sure d>=0 at amin, don't use VaB(:,1,:)
-	    d_F[:,J,:] = (dFB[:,J,:] .< -10^(-12)) .* dFB[:,J,:] #make sure d<=0 at amax, don't use VaF(:,J,:)
-	
+
 	    #split drift of b and upwind separately
 	    sc_F = (1-xi)*w*zzz .+ Rb.*bbb .- c_F;
-	    sd_F = (-d_F .- two_asset_kinked_cost_new.(d_F,aaa, Ref(model)));
-	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
+		
 	    
 	    Ic_B = (sc_B .< -10^(-12))
 	    Ic_F = (sc_F .> 10^(-12)) .* (1 .- Ic_B)
 	    Ic_0 = 1 .- Ic_F .- Ic_B
-	    
+
+		sd_B = outB.sd
+		sd_F = outF.sd
+	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
+		
 	    Id_F .= (sd_F .> 10^(-12))
 	    Id_B .= (sd_B .< -10^(-12)) .* (1 .- Id_F)
 	    Id_B[1,:,:] .= 0
@@ -587,6 +623,13 @@ function solve_HJB_new(model, maxit = 35)
 	
 	
 	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+		dBB = two_asset_kinked_FOC_new.(VaB,VbB,aaa, Ref(model))
+	    dFB = two_asset_kinked_FOC_new.(VaB,VbF,aaa, Ref(model))
+	    #VaF(:,J,:) = VbB(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
+	    dBF = two_asset_kinked_FOC_new.(VaF,VbB,aaa, Ref(model))
+	    #VaF(:,J,:) = VbF(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
+	    dFF = two_asset_kinked_FOC_new.(VaF,VbF,aaa, Ref(model))
+		
 	    dB = Id_B .* dBB .+ Id_F .* dFB
 	    dF = Id_B .* dBF .+ Id_F .* dFF
 	    MB = min.(dB,0.0)
@@ -726,6 +769,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 AlgebraOfGraphics = "~0.6.9"
@@ -735,6 +779,7 @@ DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 PlutoTest = "~0.2.2"
 PlutoUI = "~0.7.39"
+StructArrays = "~0.6.11"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -2015,6 +2060,8 @@ version = "3.5.0+0"
 # ╠═5a6c37d8-af66-46a1-9c93-581057c41f94
 # ╠═cdcca65f-59df-4990-97b7-2b511bdb61e6
 # ╠═920e3393-fd38-4154-8d90-ce9dc712ed1a
+# ╠═c3bdccfb-0bb7-4a06-ba9e-0522a3b3e3d4
+# ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
 # ╠═8f3da06b-2887-4564-87c7-12a798580f53
