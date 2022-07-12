@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ b48b0674-1bcb-48e5-9b05-57dea5877715
 using LinearAlgebra
 
+# ╔═╡ 9aa61364-51a3-45d0-b1c2-757b864de132
+using PlutoTest
+
 # ╔═╡ 026cfe16-ff0f-4f68-b412-b1f6c1902824
 using CairoMakie, AlgebraOfGraphics
 
@@ -33,6 +36,16 @@ md"""
 md"""
 ## HJB Moll
 """
+
+# ╔═╡ 3ab0c985-5317-4ea4-bddc-6289ab90bcad
+function two_asset_kinked_cost_new(d,a, (; χ₀, χ₁))
+	χ₀ * abs(d) + χ₁ * d^2/2 *(max(a,10^(-5)))^(-1)
+end
+
+# ╔═╡ f2ce6352-450e-4cde-a2fe-3586461c3bdf
+function two_asset_kinked_FOC_new(pa, pb, a, (; χ₀, χ₁))
+	min(pa / pb - 1 +  χ₀, 0.0) * a / χ₁ + max(pa/pb - 1 -  χ₀, 0.0) * a / χ₁
+end
 
 # ╔═╡ 9c1ef8d1-57bc-4da2-83ec-fb8f1a8ce296
 function two_asset_kinked_cost(d,a, (; chi0, chi1))
@@ -340,7 +353,8 @@ function solve_HJB_base(maxit = 35)
 		m = vec(m),
 		u = vec(u),
 		sc = vec(sc),
-		sd = vec(sd)
+		sd = vec(sd),
+		v = vec(v)
 	)
 end
 
@@ -362,8 +376,323 @@ md"""
 ## HJB Greimel
 """
 
-# ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
+# ╔═╡ ed6045c0-b76c-4691-9f05-c943c542d13f
+Base.@kwdef struct TwoAssets
+	ga = 2 #CRRA utility with parameter gamma
+	ra = 0.05
+	rb_pos = 0.03
+	rb_neg = 0.12
+	rho = 0.06 #discount rate
+	χ₀ = 0.03
+	χ₁ = 2
+	xi = 0.1 #fraction of income that is automatically deposited
+	#Income process (two-state Poisson process):
+	w = 4
+	Nz = 2
+	z      = [.8, 1.3]
+	la_mat = [-1/3 1/3; 1/3 -1/3]
+	crit = 10^(-5)
+	Delta = 100
+	#grids
+	I = 100
+	bmin = -2
+	bmax = 40
+	b = range(bmin,bmax,length=I)
+	db = (bmax-bmin)/(I-1)
+	J= 50
+	amin = 0
+	amax = 70
+	a = range(amin,amax,length=J)
+	da = (amax-amin)/(J-1)
+end
 
+# ╔═╡ a72719ef-0e55-4f5f-af9a-7cad8d1d45dd
+
+
+# ╔═╡ a6356900-5530-494f-9d01-03041805ebe6
+function check((; ra, χ₁))
+	if ra - 1/χ₁ > 0
+    	@warn("Warning: ra - 1/χ₁ > 0")
+	end
+end
+
+# ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
+function solve_HJB_new(model, maxit = 35)
+	(; rho, ga, ra, rb_pos, rb_neg, xi, w) = model
+	(; Delta, crit) = model
+	(; a, b, z, I, J, Nz, la_mat, amin, amax, bmin, bmax, db, da) = model
+
+	bb = b * ones(1,J)
+	aa = ones(I,1) * a'
+	zz = ones(J,1) * z'
+
+	dist = zeros(maxit)
+
+
+	bbb = zeros(I,J,Nz)
+	aaa = zeros(I,J,Nz)
+	zzz = zeros(I,J,Nz)
+	for nz = 1:Nz
+	    bbb[:,:,nz] .= bb
+	    aaa[:,:,nz] .= aa
+	    zzz[:,:,nz] .= z[nz]
+	end
+
+	
+	Bswitch = [
+	    LinearAlgebra.I(I*J)*la_mat[1,1] LinearAlgebra.I(I*J)*la_mat[1,2];
+	    LinearAlgebra.I(I*J)*la_mat[2,1] LinearAlgebra.I(I*J)*la_mat[2,2]
+	]
+	
+	#Preallocation
+	VbF = zeros(I,J,Nz);
+	VbB = zeros(I,J,Nz);
+	VaF = zeros(I,J,Nz);
+	VaB = zeros(I,J,Nz);
+	c = zeros(I,J,Nz);
+	updiag = zeros(I*J,Nz);
+	lowdiag = zeros(I*J,Nz);
+	centdiag = zeros(I*J,Nz);
+	AAi = Array{AbstractArray}(undef, Nz)
+	BBi = Array{AbstractArray}(undef, Nz)
+
+	d_B = zeros(I,J,Nz)
+	d_F = zeros(I,J,Nz)
+	Id_B = zeros(I,J,Nz)
+	Id_F = zeros(I,J,Nz)
+	c = zeros(I,J,Nz)
+	u = zeros(I,J,Nz)
+	
+	#INITIAL GUESS
+	v0 = (((1-xi)*w*zzz + ra.*aaa + rb_neg.*bbb).^(1-ga))/(1-ga)/rho
+	v = copy(v0)
+
+
+	#return at different points in state space
+	#matrix of liquid returns
+	Rb = rb_pos .* (bbb .> 0) .+ rb_neg .* (bbb .< 0)
+	raa = ra .* ones(1,J)
+	#if ra>>rb, impose tax on ra*a at high a, otherwise some households
+	#accumulate infinite illiquid wealth (not needed if ra is close to or less than rb)
+	tau = 10
+	raa = ra .* (1 .- (1.33 .* amax ./ a) .^ (1-tau))#; plot(a,raa.*a)
+	#matrix of illiquid returns
+
+	Ra = zeros(I,J,Nz)
+	Ra[:,:,1] .= raa'
+	Ra[:,:,2] .= raa'
+
+	for n=1:maxit
+	    V = v;   
+	    #DERIVATIVES W.R.T. b
+	    # forward difference
+	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db;
+	    VbF[I,:,:] = ((1-xi)*w*zzz[I,:,:] + Rb[I,:,:] .* bmax).^(-ga); #state constraint boundary condition
+			
+	    # backward difference
+	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:])/db;
+	    VbB[1,:,:] = ((1-xi)*w*zzz[1,:,:] + Rb[1,:,:].*bmin).^(-ga); #state constraint boundary condition
+	
+	    #DERIVATIVES W.R.T. a
+	    # forward difference
+	    VaF[:,1:J-1,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
+	    # backward difference
+	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
+	 
+	    #useful quantities
+	    c_B = max.(VbB,10^(-6)).^(-1/ga);
+	    c_F = max.(VbF,10^(-6)).^(-1/ga); 
+		dBB = two_asset_kinked_FOC_new.(VaB,VbB,aaa, Ref(model))
+	    dFB = two_asset_kinked_FOC_new.(VaB,VbF,aaa, Ref(model))
+	    #VaF(:,J,:) = VbB(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
+	    dBF = two_asset_kinked_FOC_new.(VaF,VbB,aaa, Ref(model))
+	    #VaF(:,J,:) = VbF(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
+	    dFF = two_asset_kinked_FOC_new.(VaF,VbF,aaa, Ref(model))
+	    
+	    #UPWIND SCHEME
+	    d_B .= (dBF .> 0) .* dBF .+ (dBB .< 0) .* dBB;
+	   
+		#state constraints at amin and amax
+	    d_B[:,1,:] = (dBF[:,1,:] .> 10^(-12)) .* dBF[:,1,:] #make sure d>=0 at amax, don't use VaB(:,1,:)
+	    d_B[:,J,:] = (dBB[:,J,:] .< -10^(-12)) .* dBB[:,J,:] #make sure d<=0 at amax, don't use VaF(:,J,:)
+	    d_B[1,1,:] = max.(d_B[1,1,:],0)
+	    #split drift of b and upwind separately
+	    sc_B = (1-xi) .* w .* zzz .+ Rb .* bbb .- c_B;
+	    sd_B = (-d_B - two_asset_kinked_cost_new.(d_B, aaa, Ref(model)))
+	    
+	    d_F .= (dFF .> 0) .* dFF + (dFB .< 0) .* dFB
+	    #state constraints at amin and amax
+	    d_F[:,1,:] = (dFF[:,1,:] .> 10^(-12)) .* dFF[:,1,:] #make sure d>=0 at amin, don't use VaB(:,1,:)
+	    d_F[:,J,:] = (dFB[:,J,:] .< -10^(-12)) .* dFB[:,J,:] #make sure d<=0 at amax, don't use VaF(:,J,:)
+	
+	    #split drift of b and upwind separately
+	    sc_F = (1-xi)*w*zzz .+ Rb.*bbb .- c_F;
+	    sd_F = (-d_F .- two_asset_kinked_cost_new.(d_F,aaa, Ref(model)));
+	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
+	    
+	    Ic_B = (sc_B .< -10^(-12))
+	    Ic_F = (sc_F .> 10^(-12)) .* (1 .- Ic_B)
+	    Ic_0 = 1 .- Ic_F .- Ic_B
+	    
+	    Id_F .= (sd_F .> 10^(-12))
+	    Id_B .= (sd_B .< -10^(-12)) .* (1 .- Id_F)
+	    Id_B[1,:,:] .= 0
+	    Id_F[I,:,:] .= 0
+		Id_B[I,:,:] .= 1 #don't use VbF at bmax so as not to pick up articial state constraint
+	    Id_0 = 1 .- Id_F .- Id_B
+	    
+	    c_0 = (1-xi) * w * zzz + Rb .* bbb
+	  
+	    c .= c_F .* Ic_F + c_B .* Ic_B + c_0 .* Ic_0
+	    u .= c .^ (1-ga) ./(1-ga)
+	    
+	    #CONSTRUCT MATRIX BB SUMMARING EVOLUTION OF b
+	    X = -Ic_B .* sc_B ./db .- Id_B .* sd_B ./ db
+	    Y = (Ic_B .* sc_B .- Ic_F .* sc_F) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
+	    Z = Ic_F.*sc_F/db + Id_F.*sd_F/db;
+	    
+	    for i = 1:Nz
+	        centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
+	    end
+	
+	    lowdiag[1:I-1,:] = X[2:I,1,:]
+	    updiag[2:I,:] = Z[1:I-1,1,:]
+	    for j = 2:J
+	        lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
+	        updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
+	    end
+	
+	    for nz = 1:Nz
+	    	BBi[nz] = spdiagm(
+				I*J, I*J, 
+				0 => centdiag[:,nz],
+				1 => updiag[2:end,nz],
+				-1 => lowdiag[1:end-1,nz]
+						 )
+	    end
+	
+	    BB = cat(BBi..., dims = (1,2))
+	
+	
+	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+	    dB = Id_B .* dBB .+ Id_F .* dFB
+	    dF = Id_B .* dBF .+ Id_F .* dFF
+	    MB = min.(dB,0.0)
+	    MF = max.(dF,0.0) .+ xi .* w .* zzz .+ Ra .* aaa
+	    MB[:,J,:] = xi .* w .* zzz[:,J,:] .+ dB[:,J,:] .+ Ra[:,J,:] .* amax #this is hopefully negative
+	    MF[:,J,:] .= 0.0
+	    chi = -MB ./ da
+	    yy =  (MB - MF) ./da
+	    zeta = MF ./ da
+	
+	    # MATRIX AAi
+	    for nz=1:Nz
+	        #This will be the upperdiagonal of the matrix AAi
+	        AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
+	        for j=1:J
+	            AAupdiag=[AAupdiag; zeta[:,j,nz]]
+	        end
+	        
+	        #This will be the center diagonal of the matrix AAi
+	        AAcentdiag = yy[:,1,nz]
+	        for j=2:J-1
+	            AAcentdiag = [AAcentdiag; yy[:,j,nz]];
+	        end
+	        AAcentdiag = [AAcentdiag; yy[:,J,nz]];
+	        
+	        #This will be the lower diagonal of the matrix AAi
+	        AAlowdiag = chi[:,2,nz]
+	        for j=3:J
+	            AAlowdiag = [AAlowdiag; chi[:,j,nz]]
+	        end
+		
+		    #Add up the upper, center, and lower diagonal into a sparse matrix
+	        AAi[nz] = spdiagm(
+				I*J, I*J,
+				0 => AAcentdiag,
+				-I => AAlowdiag,
+				I => AAupdiag[begin+I:end-I]
+			)
+	
+	    end
+	
+		AA = cat(AAi..., dims = (1,2))
+	    
+	    A = AA + BB + Bswitch
+	
+		
+	    if maximum(abs, sum(A,dims=2)) > 10^(-12)
+	        @warn("Improper Transition Matrix")
+	        break
+	    end
+	    
+	#    if maximum(abs, sum(A, dims=2)) > 10^(-9)
+	#       @warn("Improper Transition Matrix")
+	#       break
+	#    end
+	    
+	    B = (1/Delta + rho)*LinearAlgebra.I(I*J*Nz) - A
+	    
+	    u_stacked = reshape(u,I*J*Nz,1)
+	    V_stacked = reshape(V,I*J*Nz,1)
+	    
+	    vec = u_stacked + V_stacked/Delta;
+	    
+	    V_stacked = B\vec #SOLVE SYSTEM OF EQUATIONS
+	        
+	    V = reshape(V_stacked,I,J,Nz)   
+	    
+	    
+	    Vchange = V - v
+	    v .= V
+	    	   
+	    dist[n] = maximum(abs, Vchange)
+	    @info "Value Function, Iteration $n | max Vchange = $(dist[n])"
+	    if dist[n]<crit
+	        @info("Value Function Converged, Iteration = $n")
+	        break
+	    end 
+	end
+
+	d = Id_B .* d_B + Id_F .* d_F
+	m = d + xi*w*zzz + Ra.*aaa;
+	s = (1-xi)*w*zzz + Rb.*bbb - d - two_asset_kinked_cost_new.(d, aaa, Ref(model)) - c
+
+	sc = (1-xi)*w*zzz + Rb.*bbb - c;
+	sd = - d - two_asset_kinked_cost_new.(d,aaa, Ref(model))
+
+	df = DataFrame(
+		a = vec(aaa),
+		b = vec(bbb),
+		z = vec(zzz),
+		c = vec(c), 
+		d = vec(d),
+		s = vec(s),
+		m = vec(m),
+		u = vec(u),
+		sc = vec(sc),
+		sd = vec(sd),
+		v = vec(v)
+	)
+end
+
+# ╔═╡ 48ecc7ee-b943-4497-bc15-1b62d78e9271
+begin
+	m = TwoAssets()
+	df_new = solve_HJB_new(m)
+end
+
+# ╔═╡ 8f3da06b-2887-4564-87c7-12a798580f53
+@test df_new.v ≈ df_base.v
+
+# ╔═╡ 0cf5bd0e-51e8-437b-bea6-2027b898a579
+@test df_new.c ≈ df_base.c
+
+# ╔═╡ 87074572-87c8-4f01-8895-a8ebcbeef9a0
+@test df_new.d ≈ df_base.d
+
+# ╔═╡ 4fe6acdd-521e-44b1-a7b6-97f78f72986d
+@test df_new.s ≈ df_base.s
 
 # ╔═╡ 3a43bab0-c058-4665-8939-a3920c9986d1
 md"""
@@ -382,6 +711,7 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
@@ -391,6 +721,7 @@ CairoMakie = "~0.8.8"
 Chain = "~0.5.0"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
+PlutoTest = "~0.2.2"
 PlutoUI = "~0.7.39"
 """
 
@@ -1237,6 +1568,12 @@ git-tree-sha1 = "9888e59493658e476d3073f1ce24348bdc086660"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.3.0"
 
+[[deps.PlutoTest]]
+deps = ["HypertextLiteral", "InteractiveUtils", "Markdown", "Test"]
+git-tree-sha1 = "17aa9b81106e661cffa1c4c36c17ee1c50a86eda"
+uuid = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
+version = "0.2.2"
+
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
 git-tree-sha1 = "8d1f54886b9037091edf146b517989fc4a09efec"
@@ -1652,13 +1989,24 @@ version = "3.5.0+0"
 # ╠═b48b0674-1bcb-48e5-9b05-57dea5877715
 # ╟─828dee22-1ee7-41c4-b68b-f88facea86d9
 # ╠═68a97aab-7924-4472-aa47-7903add8aea4
+# ╠═3ab0c985-5317-4ea4-bddc-6289ab90bcad
+# ╠═f2ce6352-450e-4cde-a2fe-3586461c3bdf
 # ╠═9c1ef8d1-57bc-4da2-83ec-fb8f1a8ce296
 # ╠═91b63bfc-f4a4-41c1-a472-7d13df27b93c
 # ╠═75c6bed0-86a2-4393-83a7-fbd7862a3975
 # ╠═b8a7269f-27ae-4c37-b73e-7decb8333ea9
 # ╟─830448b7-1700-4312-91ce-55f86aaa33a4
+# ╠═ed6045c0-b76c-4691-9f05-c943c542d13f
+# ╠═a72719ef-0e55-4f5f-af9a-7cad8d1d45dd
+# ╠═a6356900-5530-494f-9d01-03041805ebe6
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
+# ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
+# ╠═8f3da06b-2887-4564-87c7-12a798580f53
+# ╠═0cf5bd0e-51e8-437b-bea6-2027b898a579
+# ╠═87074572-87c8-4f01-8895-a8ebcbeef9a0
+# ╠═4fe6acdd-521e-44b1-a7b6-97f78f72986d
 # ╟─3a43bab0-c058-4665-8939-a3920c9986d1
+# ╠═9aa61364-51a3-45d0-b1c2-757b864de132
 # ╠═026cfe16-ff0f-4f68-b412-b1f6c1902824
 # ╠═9d99416e-8119-4a40-b577-0135050a0e4e
 # ╠═6188aab9-86bf-4ec4-bb10-43b59f71e3e2
