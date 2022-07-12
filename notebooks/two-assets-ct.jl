@@ -456,20 +456,53 @@ function get_d(VaB, VaF, Vb, a, b, model)
 
 	sd = -d - two_asset_kinked_cost_new(d, a, model)
 
-	(; d, sd)
+	(; d, dxB, dxF, sd)
 end
 
-# ╔═╡ c3bdccfb-0bb7-4a06-ba9e-0522a3b3e3d4
-	sd_B = (-d_B .- two_asset_kinked_cost_new.(d_B, aaa, Ref(model)))
-		sd_F = (-d_F .- two_asset_kinked_cost_new.(d_F, aaa, Ref(model)))
-	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
-		
-	    Id_F .= (sd_F .> 10^(-12))
-	    Id_B .= (sd_B .< -10^(-12)) .* (1 .- Id_F)
-	    Id_B[1,:,:] .= 0
-	    Id_F[I,:,:] .= 0
-		Id_B[I,:,:] .= 1 #don't use VbF at bmax so as not to pick up articial state constraint
-	    Id_0 = 1 .- Id_F .- Id_B
+# ╔═╡ 9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
+function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
+	(; amax, amin, bmin, bmax) = model
+
+	outB = get_d(VaB, VaF, VbB, a, b, model)
+	outF = get_d(VaB, VaF, VbF, a, b, model)
+
+	d_B = outB.d
+	d_F = outF.d
+	sd_B = outB.sd
+	sd_F = outF.sd
+	
+	if b == bmax
+		sd_F = min(sd_F, 0.0)
+	end
+
+	Id_F = false
+	Id_B = false
+	Id_0 = false
+
+	if b == bmax
+		Id_B = true
+		dB = outB.dxB
+		dF = outB.dxF
+		d = d_B
+	elseif sd_F > 10^(-12) #&& b < bmax
+		Id_F = true
+		dB = outF.dxB
+		dF = outF.dxF
+		d = d_F
+	elseif sd_B < - 10^(-12) && b > bmin
+		Id_B = true
+		dB = outB.dxB
+		dF = outB.dxF
+		d = d_B
+	else
+		Id_0 = true
+		dB = 0.0
+		dF = 0.0
+		d = 0.0
+	end
+
+	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d)
+end	
 
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
@@ -511,10 +544,11 @@ function solve_HJB_new(model, maxit = 35)
 	AAi = Array{AbstractArray}(undef, Nz)
 	BBi = Array{AbstractArray}(undef, Nz)
 
-	d_B = zeros(I,J,Nz)
-	d_F = zeros(I,J,Nz)
-	Id_B = zeros(I,J,Nz)
-	Id_F = zeros(I,J,Nz)
+	d = zeros(I,J,Nz)
+	#d_F = zeros(I,J,Nz)
+	#Id_B = zeros(I,J,Nz)
+	#Id_F = zeros(I,J,Nz)
+	#Id_0 = zeros(I,J,Nz)
 	c = zeros(I,J,Nz)
 	u = zeros(I,J,Nz)
 	
@@ -554,42 +588,23 @@ function solve_HJB_new(model, maxit = 35)
 	    # backward difference
 	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
 	 
-	    #useful quantities
+		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, aaa, bbb, Ref(model)) |> StructArray
+		(; d_B, d_F, Id_B, Id_F, sd_B, sd_F) = out_d
+		d .= out_d.d
+		
+		
+		#useful quantities
 	    c_B = u_prime_inv.(max.(VbB,10^(-6)), Ref(model))
 	    c_F = u_prime_inv.(max.(VbF,10^(-6)), Ref(model))
-
-		outB = get_d.(VaB, VaF, VbB, aaa, bbb, Ref(model)) |> StructArray
-		outF = get_d.(VaB, VaF, VbF, aaa, bbb, Ref(model)) |> StructArray
-
-		d_B = outB.d
-		d_F = outF.d
-		sd_B = outB.sd
-		sd_F = outF.sd
-
 		#split drift of b and upwind separately
 	    sc_B = (1-xi) .* w .* zzz .+ Rb .* bbb .- c_B;
-	    
-
-	    #split drift of b and upwind separately
 	    sc_F = (1-xi)*w*zzz .+ Rb.*bbb .- c_F;
 		
-	    
 	    Ic_B = (sc_B .< -10^(-12))
 	    Ic_F = (sc_F .> 10^(-12)) .* (1 .- Ic_B)
 	    Ic_0 = 1 .- Ic_F .- Ic_B
 
-		sd_B = outB.sd
-		sd_F = outF.sd
-	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
-		
-	    Id_F .= (sd_F .> 10^(-12))
-	    Id_B .= (sd_B .< -10^(-12)) .* (1 .- Id_F)
-	    Id_B[1,:,:] .= 0
-	    Id_F[I,:,:] .= 0
-		Id_B[I,:,:] .= 1 #don't use VbF at bmax so as not to pick up articial state constraint
-	    Id_0 = 1 .- Id_F .- Id_B
-	    
-	    c_0 = (1-xi) * w * zzz + Rb .* bbb
+		c_0 = (1-xi) * w * zzz + Rb .* bbb
 	  
 	    c .= c_F .* Ic_F + c_B .* Ic_B + c_0 .* Ic_0
 	    u .= util.(c, Ref(model))
@@ -623,15 +638,7 @@ function solve_HJB_new(model, maxit = 35)
 	
 	
 	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
-		dBB = two_asset_kinked_FOC_new.(VaB,VbB,aaa, Ref(model))
-	    dFB = two_asset_kinked_FOC_new.(VaB,VbF,aaa, Ref(model))
-	    #VaF(:,J,:) = VbB(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
-	    dBF = two_asset_kinked_FOC_new.(VaF,VbB,aaa, Ref(model))
-	    #VaF(:,J,:) = VbF(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
-	    dFF = two_asset_kinked_FOC_new.(VaF,VbF,aaa, Ref(model))
-		
-	    dB = Id_B .* dBB .+ Id_F .* dFB
-	    dF = Id_B .* dBF .+ Id_F .* dFF
+		(; dB, dF) = out_d
 	    MB = min.(dB,0.0)
 	    MF = max.(dF,0.0) .+ xi .* w .* zzz .+ Ra .* aaa
 	    MB[:,J,:] = xi .* w .* zzz[:,J,:] .+ dB[:,J,:] .+ Ra[:,J,:] .* amax #this is hopefully negative
@@ -709,7 +716,7 @@ function solve_HJB_new(model, maxit = 35)
 	    end 
 	end
 
-	d = Id_B .* d_B + Id_F .* d_F
+	#d = Id_B .* d_B + Id_F .* d_F
 	m = d + xi*w*zzz + Ra.*aaa;
 	s = (1-xi)*w*zzz + Rb.*bbb - d - two_asset_kinked_cost_new.(d, aaa, Ref(model)) - c
 
@@ -2060,7 +2067,7 @@ version = "3.5.0+0"
 # ╠═5a6c37d8-af66-46a1-9c93-581057c41f94
 # ╠═cdcca65f-59df-4990-97b7-2b511bdb61e6
 # ╠═920e3393-fd38-4154-8d90-ce9dc712ed1a
-# ╠═c3bdccfb-0bb7-4a06-ba9e-0522a3b3e3d4
+# ╠═9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
