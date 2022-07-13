@@ -402,15 +402,24 @@ Base.@kwdef struct TwoAssets
 	bmax = 40
 	b = range(bmin,bmax,length=I)
 	db = (bmax-bmin)/(I-1)
-	J= 50
+	J = 50
 	amin = 0
 	amax = 70
 	a = range(amin,amax,length=J)
 	da = (amax-amin)/(J-1)
+	τ = 10
 end
 
-# ╔═╡ a72719ef-0e55-4f5f-af9a-7cad8d1d45dd
+# ╔═╡ 03ec6276-09a4-4f66-a864-19e2e0d825eb
+md"""
+if ``r_a \gg r_b``, impose tax on ``ra \cdot a`` at high ``a``, otherwise some households accumulate infinite illiquid wealth (not needed if ``r_a`` is close to or less than ``r_b``)
+"""
 
+# ╔═╡ 98f11cbd-8b05-464b-be44-3b76277c6d0d
+R_a(a, (; ra, amax, τ)) = ra * (1 - (1.33 * amax / a) ^ (1-τ))
+
+# ╔═╡ 8a6cd6dd-49f6-496a-bb50-e43e06c4a1db
+R_b(b, (; rb_pos, rb_neg)) = b ≥ 0 ? rb_pos : rb_neg
 
 # ╔═╡ a6356900-5530-494f-9d01-03041805ebe6
 function check((; ra, χ₁))
@@ -435,7 +444,7 @@ function get_d(VaB, VaF, Vb, a, b, model)
 	dxF = two_asset_kinked_FOC_new(VaF,Vb,a, model)
 
 	if dxF > 0 && dxB < 0
-		d  = dxF + dxB
+		d = dxF + dxB
 	elseif dxF > 0
 		d = dxF
 	elseif dxB < 0
@@ -489,7 +498,7 @@ function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
 		dB = outF.dxB
 		dF = outF.dxF
 		d = d_F
-	elseif sd_B < - 10^(-12) && b > bmin
+	elseif sd_B < -10^(-12) && b > bmin
 		Id_B = true
 		dB = outB.dxB
 		dF = outB.dxF
@@ -591,28 +600,19 @@ function solve_HJB_new(model, maxit = 35)
 		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, aaa, bbb, Ref(model)) |> StructArray
 		(; d_B, d_F, Id_B, Id_F, sd_B, sd_F) = out_d
 		d .= out_d.d
-		
-		
-		#useful quantities
-	    c_B = u_prime_inv.(max.(VbB,10^(-6)), Ref(model))
-	    c_F = u_prime_inv.(max.(VbF,10^(-6)), Ref(model))
-		#split drift of b and upwind separately
-	    sc_B = (1-xi) .* w .* zzz .+ Rb .* bbb .- c_B;
-	    sc_F = (1-xi)*w*zzz .+ Rb.*bbb .- c_F;
-		
-	    Ic_B = (sc_B .< -10^(-12))
-	    Ic_F = (sc_F .> 10^(-12)) .* (1 .- Ic_B)
-	    Ic_0 = 1 .- Ic_F .- Ic_B
 
-		c_0 = (1-xi) * w * zzz + Rb .* bbb
-	  
-	    c .= c_F .* Ic_F + c_B .* Ic_B + c_0 .* Ic_0
+		out_c = get_c_upwind.(VbB, VbF, bbb, zzz, Ref(model)) |> StructArray
+		(; sc) = out_c
+
+		@info size(c)
+		@info size(out_c.c)
+	    c .= out_c.c
 	    u .= util.(c, Ref(model))
 	    
 	    #CONSTRUCT MATRIX BB SUMMARING EVOLUTION OF b
-	    X = -Ic_B .* sc_B ./db .- Id_B .* sd_B ./ db
-	    Y = (Ic_B .* sc_B .- Ic_F .* sc_F) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
-	    Z = Ic_F.*sc_F/db + Id_F.*sd_F/db;
+	    X = - min.(sc, 0.0) ./db .- Id_B .* sd_B ./ db
+	    Y = (min.(sc, 0.0) - max.(sc, 0.0)) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
+	    Z = max.(sc, 0.0)/db + Id_F.*sd_F/db;
 	    
 	    for i = 1:Nz
 	        centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
@@ -2061,7 +2061,9 @@ version = "3.5.0+0"
 # ╠═b8a7269f-27ae-4c37-b73e-7decb8333ea9
 # ╟─830448b7-1700-4312-91ce-55f86aaa33a4
 # ╠═ed6045c0-b76c-4691-9f05-c943c542d13f
-# ╠═a72719ef-0e55-4f5f-af9a-7cad8d1d45dd
+# ╟─03ec6276-09a4-4f66-a864-19e2e0d825eb
+# ╠═98f11cbd-8b05-464b-be44-3b76277c6d0d
+# ╠═8a6cd6dd-49f6-496a-bb50-e43e06c4a1db
 # ╠═a6356900-5530-494f-9d01-03041805ebe6
 # ╠═f6c0329e-1a02-4292-96b7-11c8cd9c3b54
 # ╠═5a6c37d8-af66-46a1-9c93-581057c41f94
