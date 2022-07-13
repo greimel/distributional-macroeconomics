@@ -616,11 +616,11 @@ function solve_HJB_new(model, maxit = 35)
 	    #DERIVATIVES W.R.T. b
 	    # forward difference
 	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db;
-	    VbF[I,:,:] = u_prime.((1-xi)*w*zzz[I,:,:] + Rb[I,:,:] .* bmax, Ref(model)) #state constraint boundary condition
+	    VbF[I,:,:] = u_prime.((1-xi)*w*zzz[I,:,:] .+ R_b(bmax, model), Ref(model)) #state constraint boundary condition
 			
 	    # backward difference
 	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:])/db;
-	    VbB[1,:,:] = u_prime.((1-xi)*w*zzz[1,:,:] + Rb[1,:,:].*bmin, Ref(model)) #state constraint boundary condition
+	    VbB[1,:,:] = u_prime.((1-xi)*w*zzz[1,:,:] .+ R_b(bmin, model), Ref(model)) #state constraint boundary condition
 	
 	    #DERIVATIVES W.R.T. a
 	    # forward difference
@@ -669,8 +669,8 @@ function solve_HJB_new(model, maxit = 35)
 	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
 		(; dB, dF) = out_d
 	    MB = min.(dB,0.0)
-	    MF = max.(dF,0.0) .+ xi .* w .* zzz .+ Ra .* aaa
-	    MB[:,J,:] = xi .* w .* zzz[:,J,:] .+ dB[:,J,:] .+ Ra[:,J,:] .* amax #this is hopefully negative
+	    MF = max.(dF,0.0) .+ xi .* w .* zzz .+ R_a.(aaa, Ref(model))
+	    MB[:,J,:] = xi .* w .* zzz[:,J,:] .+ dB[:,J,:] .+ R_a(amax, model) #this is hopefully negative
 	    MF[:,J,:] .= 0.0
 	    chi = -MB ./ da
 	    yy =  (MB - MF) ./da
