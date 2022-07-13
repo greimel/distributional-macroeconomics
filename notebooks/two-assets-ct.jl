@@ -416,10 +416,10 @@ if ``r_a \gg r_b``, impose tax on ``ra \cdot a`` at high ``a``, otherwise some h
 """
 
 # ╔═╡ 98f11cbd-8b05-464b-be44-3b76277c6d0d
-R_a(a, (; ra, amax, τ)) = ra * (1 - (1.33 * amax / a) ^ (1-τ))
+R_a(a, (; ra, amax, τ)) = ra * (1 - (1.33 * amax / a) ^ (1-τ)) * a
 
 # ╔═╡ 8a6cd6dd-49f6-496a-bb50-e43e06c4a1db
-R_b(b, (; rb_pos, rb_neg)) = b ≥ 0 ? rb_pos : rb_neg
+R_b(b, (; rb_pos, rb_neg)) = (b ≥ 0 ? rb_pos : rb_neg) * b
 
 # ╔═╡ a6356900-5530-494f-9d01-03041805ebe6
 function check((; ra, χ₁))
@@ -513,6 +513,36 @@ function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
 	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d)
 end	
 
+# ╔═╡ 4023a748-5e4f-4137-811b-0e93567021dd
+function get_c(Vb, b, z, model)
+	(; γ, xi, w) = model
+	c = u_prime_inv.(max.(Vb,10^(-6)), Ref((; γ)))
+	sc = (1-xi) * w * z + R_b(b, model) - c
+
+	(; c, sc)
+end
+
+# ╔═╡ 541a5b4f-0d49-4c36-85c8-799e3260c77d
+function get_c₀(b, z, model)
+	(; γ, xi, w) = model
+	sc = 0.0
+	c = (1-xi) * w * z + R_b(b, model)
+	(; c, sc)
+end
+
+# ╔═╡ 09a8d045-6867-43a9-a021-5a39c22171a5
+function get_c_upwind(VbB, VbF, b, z, model)
+	out_F = get_c(VbF, b, z, model)
+	if out_F.sc > 10^(-12)
+		return out_F
+	end
+	out_B = get_c(VbB, b, z, model)
+	if out_B.sc < -10^(-12)
+		return out_B
+	end
+	return get_c₀(b, z, model)
+end
+
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
 	(; rho, ra, rb_pos, rb_neg, xi, w) = model
@@ -604,8 +634,6 @@ function solve_HJB_new(model, maxit = 35)
 		out_c = get_c_upwind.(VbB, VbF, bbb, zzz, Ref(model)) |> StructArray
 		(; sc) = out_c
 
-		@info size(c)
-		@info size(out_c.c)
 	    c .= out_c.c
 	    u .= util.(c, Ref(model))
 	    
@@ -2070,6 +2098,9 @@ version = "3.5.0+0"
 # ╠═cdcca65f-59df-4990-97b7-2b511bdb61e6
 # ╠═920e3393-fd38-4154-8d90-ce9dc712ed1a
 # ╠═9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
+# ╠═4023a748-5e4f-4137-811b-0e93567021dd
+# ╠═541a5b4f-0d49-4c36-85c8-799e3260c77d
+# ╠═09a8d045-6867-43a9-a021-5a39c22171a5
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
