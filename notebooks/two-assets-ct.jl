@@ -493,24 +493,28 @@ function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
 		dB = outB.dxB
 		dF = outB.dxF
 		d = d_B
+		sd = outB.sd
 	elseif sd_F > 10^(-12) #&& b < bmax
 		Id_F = true
 		dB = outF.dxB
 		dF = outF.dxF
 		d = d_F
+		sd = outF.sd
 	elseif sd_B < -10^(-12) && b > bmin
 		Id_B = true
 		dB = outB.dxB
 		dF = outB.dxF
 		d = d_B
+		sd = outB.sd
 	else
 		Id_0 = true
 		dB = 0.0
 		dF = 0.0
 		d = 0.0
+		sd = 0.0
 	end
 
-	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d)
+	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd)
 end	
 
 # ╔═╡ 4023a748-5e4f-4137-811b-0e93567021dd
@@ -577,6 +581,8 @@ function solve_HJB_new(model, maxit = 35)
 	VaF = zeros(I,J,Nz);
 	VaB = zeros(I,J,Nz);
 	c = zeros(I,J,Nz);
+	sc = zeros(I,J,Nz);
+	
 	updiag = zeros(I*J,Nz);
 	lowdiag = zeros(I*J,Nz);
 	centdiag = zeros(I*J,Nz);
@@ -584,6 +590,8 @@ function solve_HJB_new(model, maxit = 35)
 	BBi = Array{AbstractArray}(undef, Nz)
 
 	d = zeros(I,J,Nz)
+	sd = zeros(I,J,Nz)
+	
 	#d_F = zeros(I,J,Nz)
 	#Id_B = zeros(I,J,Nz)
 	#Id_F = zeros(I,J,Nz)
@@ -631,10 +639,11 @@ function solve_HJB_new(model, maxit = 35)
 		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, aaa, bbb, Ref(model)) |> StructArray
 		(; d_B, d_F, Id_B, Id_F, sd_B, sd_F) = out_d
 		d .= out_d.d
-
+		sd .= out_d.sd
+		
 		out_c = get_c_upwind.(VbB, VbF, bbb, zzz, Ref(model)) |> StructArray
-		(; sc) = out_c
 
+		sc .= out_c.sc
 	    c .= out_c.c
 	    u .= util.(c, Ref(model))
 	    
@@ -745,12 +754,8 @@ function solve_HJB_new(model, maxit = 35)
 	    end 
 	end
 
-	#d = Id_B .* d_B + Id_F .* d_F
-	m = d + xi*w*zzz + Ra.*aaa;
-	s = (1-xi)*w*zzz + Rb.*bbb - d - two_asset_kinked_cost_new.(d, aaa, Ref(model)) - c
-
-	sc = (1-xi)*w*zzz + Rb.*bbb - c;
-	sd = - d - two_asset_kinked_cost_new.(d,aaa, Ref(model))
+	m = d + xi*w*zzz + R_a.(aaa, Ref(model))
+	s = sc + sd
 
 	df = DataFrame(
 		a = vec(aaa),
@@ -784,6 +789,12 @@ end
 
 # ╔═╡ 4fe6acdd-521e-44b1-a7b6-97f78f72986d
 @test df_new.s ≈ df_base.s
+
+# ╔═╡ 98a32dda-1b6f-4ef9-9945-a9daabc7e19d
+@test df_new.sd ≈ df_base.sd
+
+# ╔═╡ 0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
+@test df_new.sc ≈ df_base.sc
 
 # ╔═╡ 3a43bab0-c058-4665-8939-a3920c9986d1
 md"""
@@ -2109,6 +2120,8 @@ version = "3.5.0+0"
 # ╠═0cf5bd0e-51e8-437b-bea6-2027b898a579
 # ╠═87074572-87c8-4f01-8895-a8ebcbeef9a0
 # ╠═4fe6acdd-521e-44b1-a7b6-97f78f72986d
+# ╠═98a32dda-1b6f-4ef9-9945-a9daabc7e19d
+# ╠═0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
 # ╟─3a43bab0-c058-4665-8939-a3920c9986d1
 # ╠═9aa61364-51a3-45d0-b1c2-757b864de132
 # ╠═026cfe16-ff0f-4f68-b412-b1f6c1902824
