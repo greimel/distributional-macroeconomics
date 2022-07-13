@@ -438,7 +438,7 @@ u_prime(c, (; γ)) = c^(-γ)
 u_prime_inv(x, (; γ)) = x^(-1/γ)
 
 # ╔═╡ 920e3393-fd38-4154-8d90-ce9dc712ed1a
-function get_d(VaB, VaF, Vb, a, b, model)
+function get_d(VaB, VaF, Vb, (; a, b), model)
 	(; amax, amin, bmin, bmax) = model
 	dxB = two_asset_kinked_FOC_new(VaB,Vb,a, model)
 	dxF = two_asset_kinked_FOC_new(VaF,Vb,a, model)
@@ -468,12 +468,58 @@ function get_d(VaB, VaF, Vb, a, b, model)
 	(; d, dxB, dxF, sd)
 end
 
-# ╔═╡ 9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
-function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
-	(; amax, amin, bmin, bmax) = model
+# ╔═╡ 4023a748-5e4f-4137-811b-0e93567021dd
+function get_c(Vb, (; b, z), model)
+	(; γ, xi, w) = model
+	c = u_prime_inv.(max.(Vb,10^(-6)), Ref((; γ)))
+	sc = (1-xi) * w * z + R_b(b, model) - c
 
-	outB = get_d(VaB, VaF, VbB, a, b, model)
-	outF = get_d(VaB, VaF, VbF, a, b, model)
+	(; c, sc)
+end
+
+# ╔═╡ 541a5b4f-0d49-4c36-85c8-799e3260c77d
+function get_c₀((; b, z), model)
+	(; γ, xi, w) = model
+	sc = 0.0
+	c = (1-xi) * w * z + R_b(b, model)
+	(; c, sc)
+end
+
+# ╔═╡ 09a8d045-6867-43a9-a021-5a39c22171a5
+function get_c_upwind(VbB, VbF, state, model)
+	out_F = get_c(VbF, state, model)
+	if out_F.sc > 10^(-12)
+		return out_F
+	end
+	out_B = get_c(VbB, state, model)
+	if out_B.sc < -10^(-12)
+		return out_B
+	end
+	return get_c₀(state, model)
+end
+
+# ╔═╡ f8b728e7-4f8a-465e-a8cf-413cec8e9c66
+function initial_guess((; a, b, z), model)
+	(; xi, w, rho, rb_neg, ra) = model
+	c_init = (1-xi) * w * z + ra * a + rb_neg * b
+	# should be
+	# c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * R_b(b, model)
+	util(c_init, model) / rho
+end
+
+# ╔═╡ 2befd2fa-ca64-4606-b55d-6163709f2e6e
+function ȧ_fixed((; a, z), model)
+	(; xi, w) = model
+	xi * w * z + R_a(a, model)
+end
+
+# ╔═╡ 9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
+function get_d_upwind(VaB, VaF, VbB, VbF, state, model)
+	(; amax, amin, bmin, bmax) = model
+	(; a, b) = state
+	
+	outB = get_d(VaB, VaF, VbB, state, model)
+	outF = get_d(VaB, VaF, VbF, state, model)
 
 	d_B = outB.d
 	d_F = outF.d
@@ -490,20 +536,20 @@ function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
 
 	if b == bmax
 		Id_B = true
-		dB = outB.dxB
-		dF = outB.dxF
+		dB = min(outB.dxB, 0.0)
+		dF = max(outB.dxF, 0.0)
 		d = d_B
 		sd = outB.sd
 	elseif sd_F > 10^(-12) #&& b < bmax
 		Id_F = true
-		dB = outF.dxB
-		dF = outF.dxF
+		dB = min(outF.dxB, 0.0)
+		dF = max(outF.dxF, 0.0)
 		d = d_F
 		sd = outF.sd
 	elseif sd_B < -10^(-12) && b > bmin
 		Id_B = true
-		dB = outB.dxB
-		dF = outB.dxF
+		dB = min(outB.dxB, 0.0)
+		dF = max(outB.dxF, 0.0)
 		d = d_B
 		sd = outB.sd
 	else
@@ -514,47 +560,16 @@ function get_d_upwind(VaB, VaF, VbB, VbF, a, b, model)
 		sd = 0.0
 	end
 
-	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd)
+	if a < amax
+		MF = dF + ȧ_fixed(state, model)
+		MB = dB
+	else # a == amax
+		MF = 0.0
+		MB = dB + ȧ_fixed(state, model) #this is hopefully negative
+	end
+	
+	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd, MF, MB)
 end	
-
-# ╔═╡ 4023a748-5e4f-4137-811b-0e93567021dd
-function get_c(Vb, b, z, model)
-	(; γ, xi, w) = model
-	c = u_prime_inv.(max.(Vb,10^(-6)), Ref((; γ)))
-	sc = (1-xi) * w * z + R_b(b, model) - c
-
-	(; c, sc)
-end
-
-# ╔═╡ 541a5b4f-0d49-4c36-85c8-799e3260c77d
-function get_c₀(b, z, model)
-	(; γ, xi, w) = model
-	sc = 0.0
-	c = (1-xi) * w * z + R_b(b, model)
-	(; c, sc)
-end
-
-# ╔═╡ 09a8d045-6867-43a9-a021-5a39c22171a5
-function get_c_upwind(VbB, VbF, b, z, model)
-	out_F = get_c(VbF, b, z, model)
-	if out_F.sc > 10^(-12)
-		return out_F
-	end
-	out_B = get_c(VbB, b, z, model)
-	if out_B.sc < -10^(-12)
-		return out_B
-	end
-	return get_c₀(b, z, model)
-end
-
-# ╔═╡ f8b728e7-4f8a-465e-a8cf-413cec8e9c66
-function initial_guess(z, a, b, model)
-	(; xi, w, rho, rb_neg, ra) = model
-	c_init = (1-xi) * w * z + ra * a + rb_neg * b
-	# should be
-	# c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * R_b(b, model)
-	util(c_init, model) / rho
-end
 
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
@@ -562,22 +577,9 @@ function solve_HJB_new(model, maxit = 35)
 	(; Delta, crit) = model
 	(; a, b, z, I, J, Nz, la_mat, amin, amax, bmin, bmax, db, da) = model
 
-	bb = b * ones(1,J)
-	aa = ones(I,1) * a'
-	zz = ones(J,1) * z'
-
 	dist = zeros(maxit)
 
-
-	bbb = zeros(I,J,Nz)
-	aaa = zeros(I,J,Nz)
-	zzz = zeros(I,J,Nz)
-	for nz = 1:Nz
-	    bbb[:,:,nz] .= bb
-	    aaa[:,:,nz] .= aa
-	    zzz[:,:,nz] .= z[nz]
-	end
-
+	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
 	
 	Bswitch = [
 	    LinearAlgebra.I(I*J)*la_mat[1,1] LinearAlgebra.I(I*J)*la_mat[1,2];
@@ -601,26 +603,24 @@ function solve_HJB_new(model, maxit = 35)
 	d = zeros(I,J,Nz)
 	sd = zeros(I,J,Nz)
 	
-	#d_F = zeros(I,J,Nz)
-	#Id_B = zeros(I,J,Nz)
-	#Id_F = zeros(I,J,Nz)
-	#Id_0 = zeros(I,J,Nz)
 	c = zeros(I,J,Nz)
 	u = zeros(I,J,Nz)
 	
 	#INITIAL GUESS
-	v = initial_guess.(zzz, aaa, bbb, Ref(model))
+	v = initial_guess.(statespace, Ref(model))
 	
 	for n=1:maxit
 	    V = v;   
 	    #DERIVATIVES W.R.T. b
 	    # forward difference
 	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db;
-	    VbF[I,:,:] = u_prime.((1-xi)*w*zzz[I,:,:] .+ R_b(bmax, model), Ref(model)) #state constraint boundary condition
+		c_bd = get_c₀.(statespace[I,:,:], Ref(model)) |> StructArray
+	    VbF[I,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
 			
 	    # backward difference
-	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:])/db;
-	    VbB[1,:,:] = u_prime.((1-xi)*w*zzz[1,:,:] .+ R_b(bmin, model), Ref(model)) #state constraint boundary condition
+	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:]) ./ db;
+		c_bd = get_c₀.(statespace[1,:,:], Ref(model)) |> StructArray
+	    VbB[1,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
 	
 	    #DERIVATIVES W.R.T. a
 	    # forward difference
@@ -628,12 +628,12 @@ function solve_HJB_new(model, maxit = 35)
 	    # backward difference
 	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
 	 
-		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, aaa, bbb, Ref(model)) |> StructArray
-		(; d_B, d_F, Id_B, Id_F, sd_B, sd_F) = out_d
+		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, statespace, Ref(model)) |> StructArray
+		(; Id_B, Id_F, sd_B, sd_F) = out_d
 		d .= out_d.d
 		sd .= out_d.sd
 		
-		out_c = get_c_upwind.(VbB, VbF, bbb, zzz, Ref(model)) |> StructArray
+		out_c = get_c_upwind.(VbB, VbF, statespace, Ref(model)) |> StructArray
 
 		sc .= out_c.sc
 	    c .= out_c.c
@@ -668,12 +668,9 @@ function solve_HJB_new(model, maxit = 35)
 	
 	
 	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
-		(; dB, dF) = out_d
-	    MB = min.(dB,0.0)
-	    MF = max.(dF,0.0) .+ xi .* w .* zzz .+ R_a.(aaa, Ref(model))
-	    MB[:,J,:] = xi .* w .* zzz[:,J,:] .+ dB[:,J,:] .+ R_a(amax, model) #this is hopefully negative
-	    MF[:,J,:] .= 0.0
-	    chi = -MB ./ da
+		(; MB, MF) = out_d
+
+		chi = -MB ./ da
 	    yy =  (MB - MF) ./da
 	    zeta = MF ./ da
 	
@@ -712,7 +709,6 @@ function solve_HJB_new(model, maxit = 35)
 	    
 	    A = AA + BB + Bswitch
 	
-		
 	    if maximum(abs, sum(A,dims=2)) > 10^(-12)
 	        @warn("Improper Transition Matrix")
 	        break
@@ -746,13 +742,11 @@ function solve_HJB_new(model, maxit = 35)
 	    end 
 	end
 
-	m = d + xi*w*zzz + R_a.(aaa, Ref(model))
+	m = [d + xi * w * z + R_a(a, model) for (d, (; z, a)) ∈ zip(d, statespace)]
 	s = sc + sd
 
-	df = DataFrame(
-		a = vec(aaa),
-		b = vec(bbb),
-		z = vec(zzz),
+	df_ss = DataFrame(vec(statespace))
+	df_out = DataFrame(
 		c = vec(c), 
 		d = vec(d),
 		s = vec(s),
@@ -762,6 +756,7 @@ function solve_HJB_new(model, maxit = 35)
 		sd = vec(sd),
 		v = vec(v)
 	)
+	df = [df_ss df_out]
 end
 
 # ╔═╡ 48ecc7ee-b943-4497-bc15-1b62d78e9271
@@ -2080,7 +2075,7 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═c89f1918-01ee-11ed-22fa-edd66e0f6c59
+# ╟─c89f1918-01ee-11ed-22fa-edd66e0f6c59
 # ╟─629b8291-0f13-419e-b1c0-d10d5e708720
 # ╠═b48b0674-1bcb-48e5-9b05-57dea5877715
 # ╟─828dee22-1ee7-41c4-b68b-f88facea86d9
@@ -2108,6 +2103,7 @@ version = "3.5.0+0"
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
+# ╠═2befd2fa-ca64-4606-b55d-6163709f2e6e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
 # ╠═8f3da06b-2887-4564-87c7-12a798580f53
 # ╠═0cf5bd0e-51e8-437b-bea6-2027b898a579
