@@ -940,13 +940,7 @@ function solve_HJB_new(model, maxit = 35)
 	dists = []
 
 	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
-	
-	#Preallocation
-	VbF = zeros(I,J,Nz)
-	VbB = zeros(I,J,Nz)
-	VaF = zeros(I,J,Nz)
-	VaB = zeros(I,J,Nz)
-	
+		
 	#INITIAL GUESS
 	v = initial_guess.(statespace, Ref(model))
 
@@ -957,21 +951,21 @@ function solve_HJB_new(model, maxit = 35)
 	bc[1,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
 	
 	for n=1:maxit
-	    V = v;   
-	    #DERIVATIVES W.R.T. b
-	    # forward difference
-	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db
-		VbF[I,:,:] = bc[I,:,:]
-			
-	    # backward difference
-	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:]) ./ db
-	    VbB[1,:,:] = bc[1,:,:]
-	
-	    #DERIVATIVES W.R.T. a
-	    # forward difference
-	    VaF[:,1:J-1,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
-	    # backward difference
-	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
+	    V = v;
+
+		grids = (; b, a, z)
+		inds = (10,20,1)
+		∂s = map(CartesianIndices(V)) do inds
+			differentiate(V, grids, inds, bc)
+		end |> StructArray
+
+		# DERIVATIVES
+	    # Forward and backward differences w.r.t. b
+		VbF = ∂s.vb_up 
+		VbB = ∂s.vb_down
+	    # Forward and backward differences w.r.t. a
+		VaF = ∂s.va_up 
+		VaB = ∂s.va_down
 	 
 		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, statespace, Ref(model)) |> StructArray
 		out_c = get_c_upwind.(VbB, VbF, statespace, Ref(model)) |> StructArray
