@@ -654,7 +654,8 @@ function solve_HJB_new(model, maxit = 35)
 	(; Delta, crit) = model
 	(; a, b, z, I, J, Nz, la_mat, amin, amax, bmin, bmax, db, da) = model
 
-	dist = zeros(maxit)
+	# initialize vector that keeps track of convergence
+	dists = []
 
 	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
 	
@@ -664,18 +665,10 @@ function solve_HJB_new(model, maxit = 35)
 	]
 	
 	#Preallocation
-	VbF = zeros(I,J,Nz);
-	VbB = zeros(I,J,Nz);
-	VaF = zeros(I,J,Nz);
-	VaB = zeros(I,J,Nz);
-	c = zeros(I,J,Nz);
-	sc = zeros(I,J,Nz);
-
-	d = zeros(I,J,Nz)
-	sd = zeros(I,J,Nz)
-	
-	c = zeros(I,J,Nz)
-	u = zeros(I,J,Nz)
+	VbF = zeros(I,J,Nz)
+	VbB = zeros(I,J,Nz)
+	VaF = zeros(I,J,Nz)
+	VaB = zeros(I,J,Nz)
 	
 	#INITIAL GUESS
 	v = initial_guess.(statespace, Ref(model))
@@ -700,14 +693,7 @@ function solve_HJB_new(model, maxit = 35)
 	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
 	 
 		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, statespace, Ref(model)) |> StructArray
-		d .= out_d.d
-		sd .= out_d.sd
-		
 		out_c = get_c_upwind.(VbB, VbF, statespace, Ref(model)) |> StructArray
-
-		sc .= out_c.sc
-	    c .= out_c.c
-	    u .= util.(c, Ref(model))
 
 		(; AA, BB) = construct_A_moll(out_c, out_d, model)
 	    
@@ -723,50 +709,54 @@ function solve_HJB_new(model, maxit = 35)
 	#       break
 	#    end
 	    
-	    B = (1/Delta + rho)*LinearAlgebra.I(I*J*Nz) - A
-	    
-	    u_stacked = reshape(u,I*J*Nz,1)
-	    V_stacked = reshape(V,I*J*Nz,1)
-	    
-	    vec = u_stacked + V_stacked/Delta;
-	    
-	    V_stacked = B\vec #SOLVE SYSTEM OF EQUATIONS
+	    B = (1/Delta + rho)*LinearAlgebra.I - A
+
+	    (; c) = out_c
+	    u = util.(c, Ref(model))
+	    	    
+	    V_new = B\(vec(u) + vec(V)/Delta) #SOLVE SYSTEM OF EQUATIONS
 	        
-	    V = reshape(V_stacked,I,J,Nz)   
-	    
+	    V = reshape(V_new, I,J,Nz)   
 	    
 	    Vchange = V - v
 	    v .= V
 	    	   
-	    dist[n] = maximum(abs, Vchange)
-	    @info "Value Function, Iteration $n | max Vchange = $(dist[n])"
-	    if dist[n]<crit
+	    dist = maximum(abs, Vchange)
+		#push!(dists, dist)
+	    @info "Value Function, Iteration $n | max Vchange = $dist"
+	    if dist < crit
 	        @info("Value Function Converged, Iteration = $n")
-	        break
+
+			(; d, sd) = out_d
+			(; sc) = out_c
+			
+			m = [d + xi * w * z + R_a(a, model) for (d, (; z, a)) ∈ zip(d, statespace)]
+			s = sc + sd
+			
+			df_ss = DataFrame(vec(statespace))
+			df_out = DataFrame(
+				c = vec(c), 
+				d = vec(d),
+				s = vec(s),
+				m = vec(m),
+				u = vec(u),
+				sc = vec(sc),
+				sd = vec(sd),
+				v = vec(v)
+			)
+			df = [df_ss df_out]
+			
+			return (; df, out_c, out_d)
 	    end 
 	end
 
-	m = [d + xi * w * z + R_a(a, model) for (d, (; z, a)) ∈ zip(d, statespace)]
-	s = sc + sd
-
-	df_ss = DataFrame(vec(statespace))
-	df_out = DataFrame(
-		c = vec(c), 
-		d = vec(d),
-		s = vec(s),
-		m = vec(m),
-		u = vec(u),
-		sc = vec(sc),
-		sd = vec(sd),
-		v = vec(v)
-	)
-	df = [df_ss df_out]
+	@error "Algorithm did not converge after $maxit iterations"
 end
 
 # ╔═╡ 48ecc7ee-b943-4497-bc15-1b62d78e9271
 begin
 	m = TwoAssets()
-	df_new = solve_HJB_new(m)
+	df_new = solve_HJB_new(m).df
 end
 
 # ╔═╡ 8f3da06b-2887-4564-87c7-12a798580f53
