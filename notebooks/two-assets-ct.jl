@@ -10,6 +10,9 @@ using LinearAlgebra
 # ╔═╡ 1ee8ccc3-d498-48c6-b299-1032165e4ab9
 using StructArrays
 
+# ╔═╡ 7aca19ff-374d-4832-b442-d59d9a5f3629
+using EconPDEs
+
 # ╔═╡ 731cf94b-8a88-4fd6-8728-851c43500f1e
 using NamedTupleTools: delete
 
@@ -525,6 +528,7 @@ function get_d_upwind(VaB, VaF, VbB, VbF, state, model)
 		dF = max(outB.dxF, 0.0)
 		d = d_B
 		sd = outB.sd
+		vb_d = VbB
 	else
 		Id_0 = true
 		dB = 0.0
@@ -579,8 +583,61 @@ begin
 	function (model::TwoAssets)(state::NamedTuple, (; vb_up, vb_down, va_up, va_down))
 		out_d = get_d_upwind(va_down, va_up, vb_down, vb_up, state, model)
 		out_c = get_c_upwind(vb_down, vb_up, state, model)
+		
 		(; out_d, out_c)
+
+		(; c, sc) = out_c
+		(; sd, MF, MB) = out_d
+
+		endo = util(c, model) + 
+			va_down * MB + va_up * MF +  
+			vb_down * (min(sd, 0.0) + min(sc, 0.0)) +
+			vb_up   * (max(sd, 0.0) + max(sc, 0.0))
+
+		(; out_d, out_c, endo)
 	end
+end
+
+# ╔═╡ 9136b68d-65a0-4ab3-9ce1-866f65ebf875
+md"""
+### EconPDEs
+"""
+
+# ╔═╡ 562042f9-3e5d-463d-93c4-c808a0d57974
+function clean_variables(nt, solname, statename, n)
+	map(1:n) do i
+		sol_key = Symbol(solname, i)
+		up_key = Symbol(sol_key, statename, "_up") => Symbol(solname, statename, "_up")
+		down_key = Symbol(sol_key, statename, "_down") => Symbol(solname, statename, "_down")
+		
+		(; solname => nt[sol_key], up_key[2] => nt[up_key[1]], down_key[2] => nt[down_key[1]])
+	end |> DataFrame
+end
+
+# ╔═╡ 4301d6c7-ce24-470d-b033-87d0c9898e9e
+function f_econ_pdes(state::NamedTuple, sol::NamedTuple, m)
+	(; ϱ, Λ, z) = m
+	nz = length(z)
+		
+	sol_clean = [clean_variables(sol, :v, :a, nz) sol_clean = clean_variables(sol, :v, :b, nz)]
+		
+	nts = map(enumerate(eachrow(sol_clean))) do (i, row)
+		state = (; state..., z=zgrid[i])
+		(; out_d, out_c) = m(state, row)
+		endo = u(out.c, m) + out.dv * out.ȧ
+		(; i, out..., endo)
+	end
+
+	(; v) = sol_clean
+	(; endo, ȧ, c) = DataFrame(nts)
+
+	vt = ρ * v - (endo + Λ * v)
+
+	(; (Symbol(:v, i, :t) => vt[i] for i ∈ 1:nz)...),
+	(; 
+#		(Symbol(:c, i) => c[i] for i ∈ 1:nz)...,
+#		(Symbol(:s, i) => ȧ[i] for i ∈ 1:nz)...,
+	)
 end
 
 # ╔═╡ 9c0ec3bd-e8d9-4278-8230-56dcd783be82
@@ -1076,6 +1133,28 @@ end
 # ╔═╡ 32adc0c7-330f-4274-8ed7-70550193cb01
 ss = [(; b, a, z) for b ∈ m.b, a ∈ m.a, z ∈ m.z]
 
+# ╔═╡ 073a97c6-f2a4-4f4c-916f-61182c17ba58
+out3, agrid3 = let
+	
+	bgrid = m.b
+	agrid = m.a
+	zgrid = m.z
+
+	statespace = [(; b, a, z) for b ∈ m.b, a ∈ m.a, z ∈ m.z]
+		
+	#INITIAL GUESS
+	v = initial_guess.(statespace, Ref(m))
+	
+	stategrid = OrderedDict(:b => bgrid, :a => agrid)
+	
+	solend = OrderedDict(
+		Symbol(:v, i) => v[:,:,i] for i ∈ 1:length(zgrid)
+	)
+	@info solend
+	out = pdesolve((a, b) -> f_econ_pdes(a, b, m), stategrid, solend; maxdist = √eps())
+	(; out, a, b) #grid)
+end
+
 # ╔═╡ 3c9786bf-b51a-47a2-ba7c-55e2218afd4a
 let
 	y = reshape(df.v, size(ss))[:,20,1]
@@ -1421,6 +1500,7 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+EconPDEs = "a3315474-fad9-5060-8696-cee5f38a87b7"
 InfinitesimalGenerators = "2fce0c6f-5f0b-5c85-85c9-2ffe1d5ee30d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
@@ -1436,6 +1516,7 @@ CairoMakie = "~0.8.8"
 Chain = "~0.5.0"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
+EconPDEs = "~1.0.1"
 InfinitesimalGenerators = "~0.4.1"
 NamedTupleTools = "~0.14.0"
 PlutoTest = "~0.2.2"
@@ -1507,11 +1588,35 @@ git-tree-sha1 = "5ba6c757e8feccf03a1554dfaf3e26b3cfc7fd5e"
 uuid = "68821587-b530-5797-8361-c406ea357684"
 version = "3.5.1+1"
 
+[[deps.ArrayInterface]]
+deps = ["ArrayInterfaceCore", "Compat", "IfElse", "LinearAlgebra", "Static"]
+git-tree-sha1 = "6ccb71b40b04ad69152f1f83d5925de13911417e"
+uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+version = "6.0.19"
+
 [[deps.ArrayInterfaceCore]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
 git-tree-sha1 = "7d255eb1d2e409335835dc8624c35d97453011eb"
 uuid = "30b0a656-2188-435a-8636-2ec0e6a096e2"
 version = "0.1.14"
+
+[[deps.ArrayInterfaceStaticArrays]]
+deps = ["Adapt", "ArrayInterface", "ArrayInterfaceStaticArraysCore", "LinearAlgebra", "Static", "StaticArrays"]
+git-tree-sha1 = "efb000a9f643f018d5154e56814e338b5746c560"
+uuid = "b0d46f97-bff5-4637-a19a-dd75974142cd"
+version = "0.1.4"
+
+[[deps.ArrayInterfaceStaticArraysCore]]
+deps = ["Adapt", "ArrayInterfaceCore", "LinearAlgebra", "StaticArraysCore"]
+git-tree-sha1 = "a1e2cf6ced6505cbad2490532388683f1e88c3ed"
+uuid = "dd5226c6-a4d4-4bc7-8575-46859f9c95b9"
+version = "0.1.0"
+
+[[deps.ArrayLayouts]]
+deps = ["FillArrays", "LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "26c659b14c4dc109b6b9c3398e4455eebc523814"
+uuid = "4c555306-a7a7-4459-81d9-ec55ddd5c99a"
+version = "0.8.8"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -1528,6 +1633,12 @@ git-tree-sha1 = "66771c8d21c8ff5e3a93379480a2307ac36863f7"
 uuid = "13072b0f-2c55-5437-9ae7-d433b7a33950"
 version = "1.0.1"
 
+[[deps.BandedMatrices]]
+deps = ["ArrayLayouts", "FillArrays", "LinearAlgebra", "Random", "SparseArrays"]
+git-tree-sha1 = "13223ec65172b18f164e8a8338e4e95d40d54c8c"
+uuid = "aae01518-5342-5314-be14-df237901396f"
+version = "0.17.2"
+
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
@@ -1536,6 +1647,18 @@ deps = ["JSON", "Logging", "Printf", "Profile", "Statistics", "UUIDs"]
 git-tree-sha1 = "4c10eee4af024676200bc7752e536f858c6b8f93"
 uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 version = "1.3.1"
+
+[[deps.BlockArrays]]
+deps = ["ArrayLayouts", "FillArrays", "LinearAlgebra"]
+git-tree-sha1 = "6bf9cdd29d7f0fb7a1a342026d5cefbdb61e25fb"
+uuid = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
+version = "0.16.18"
+
+[[deps.BlockBandedMatrices]]
+deps = ["ArrayLayouts", "BandedMatrices", "BlockArrays", "FillArrays", "LinearAlgebra", "MatrixFactorizations", "SparseArrays", "Statistics"]
+git-tree-sha1 = "85c30bf983cb20748f126c235f0696dff8a83612"
+uuid = "ffab5731-97b5-5995-9138-79e8c1846df0"
+version = "0.11.7"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1773,6 +1896,12 @@ git-tree-sha1 = "3f3a2501fa7236e9b911e0f7a588c657e822bb6d"
 uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
 version = "2.2.3+0"
 
+[[deps.EconPDEs]]
+deps = ["BlockBandedMatrices", "FiniteDiff", "LinearAlgebra", "NLsolve", "OrderedCollections", "Printf", "SparseArrays", "SparseDiffTools"]
+git-tree-sha1 = "08420b30a3022dad9044754411ec5c3f1e6e449a"
+uuid = "a3315474-fad9-5060-8696-cee5f38a87b7"
+version = "1.0.1"
+
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "bad72f730e9e91c08d9427d5e8db95478a3c323d"
@@ -1966,6 +2095,11 @@ deps = ["Logging", "Random"]
 git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
 uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
 version = "0.2.2"
+
+[[deps.IfElse]]
+git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
+uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
+version = "0.1.1"
 
 [[deps.ImageCore]]
 deps = ["AbstractFFTs", "ColorVectorSpace", "Colors", "FixedPointNumbers", "Graphics", "MappedArrays", "MosaicViews", "OffsetArrays", "PaddedViews", "Reexport"]
@@ -2263,6 +2397,12 @@ git-tree-sha1 = "114ef48a73aea632b8aebcb84f796afcc510ac7c"
 uuid = "0a4f8689-d25c-4efe-a92b-7142dfc1aa53"
 version = "0.4.3"
 
+[[deps.MatrixFactorizations]]
+deps = ["ArrayLayouts", "LinearAlgebra", "Printf", "Random"]
+git-tree-sha1 = "2212d36f97e01347adb1460a6914e20f2feee853"
+uuid = "a3b82374-2e81-5b9e-98ce-41277c0e4c87"
+version = "0.9.1"
+
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
@@ -2308,6 +2448,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "9b1f15a08f9d00cdb2761dcfa6f453f5d0d6f973"
 uuid = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
 version = "2.7.1+0"
+
+[[deps.NLsolve]]
+deps = ["Distances", "LineSearches", "LinearAlgebra", "NLSolversBase", "Printf", "Reexport"]
+git-tree-sha1 = "019f12e9a1a7880459d0173c182e6a99365d7ac1"
+uuid = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
+version = "4.5.1"
 
 [[deps.NaNMath]]
 git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
@@ -2678,6 +2824,12 @@ version = "1.0.1"
 deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
+[[deps.SparseDiffTools]]
+deps = ["Adapt", "ArrayInterfaceCore", "ArrayInterfaceStaticArrays", "Compat", "DataStructures", "FiniteDiff", "ForwardDiff", "Graphs", "LinearAlgebra", "Requires", "SparseArrays", "StaticArrays", "VertexSafeGraphs"]
+git-tree-sha1 = "32025c052719c6353f22f7c6de7d7b97b7cd2c88"
+uuid = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
+version = "1.24.0"
+
 [[deps.SpecialFunctions]]
 deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
 git-tree-sha1 = "d75bda01f8c31ebb72df80a46c88b25d1c79c56d"
@@ -2689,6 +2841,12 @@ deps = ["OffsetArrays"]
 git-tree-sha1 = "46e589465204cd0c08b4bd97385e4fa79a0c770c"
 uuid = "cae243ae-269e-4f55-b966-ac2d0dc13c15"
 version = "0.1.1"
+
+[[deps.Static]]
+deps = ["IfElse"]
+git-tree-sha1 = "46638763d3a25ad7818a15d441e0c3446a10742d"
+uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
+version = "0.7.5"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "StaticArraysCore", "Statistics"]
@@ -2803,6 +2961,12 @@ deps = ["REPL"]
 git-tree-sha1 = "53915e50200959667e78a92a418594b428dffddf"
 uuid = "1cfade01-22cf-5700-b092-accc4b62d6e1"
 version = "0.4.1"
+
+[[deps.VertexSafeGraphs]]
+deps = ["Graphs"]
+git-tree-sha1 = "8351f8d73d7e880bfc042a8b6922684ebeafb35c"
+uuid = "19fa3120-7c27-5ec5-8db8-b0b0aa330d6f"
+version = "0.2.0"
 
 [[deps.WoodburyMatrices]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -2975,6 +3139,11 @@ version = "3.5.0+0"
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
 # ╠═2befd2fa-ca64-4606-b55d-6163709f2e6e
+# ╟─9136b68d-65a0-4ab3-9ce1-866f65ebf875
+# ╠═562042f9-3e5d-463d-93c4-c808a0d57974
+# ╠═4301d6c7-ce24-470d-b033-87d0c9898e9e
+# ╠═7aca19ff-374d-4832-b442-d59d9a5f3629
+# ╠═073a97c6-f2a4-4f4c-916f-61182c17ba58
 # ╟─9c0ec3bd-e8d9-4278-8230-56dcd783be82
 # ╠═8c293630-e2a2-4123-9523-0e6f01a7f1d0
 # ╠═10e8f1f6-820c-432a-8b3e-3abb7652f780
