@@ -1118,7 +1118,7 @@ begin
 end
 
 # ╔═╡ 0ede8e50-9767-4930-9507-e98c75c0b566
-function construct_A_new_simple((; s, m), (; b, a, z, db, da, Λ), with_exo = false)
+function construct_A_new_simple((; s, m), (; b, a, z, db, da, Λ); with_exo = false)
 	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
 	N = length(statespace)
 	state_inds = [(; i_b, i_a, i_z) for i_b ∈ eachindex(b), i_a ∈ eachindex(a), i_z ∈ eachindex(z)]
@@ -1173,7 +1173,7 @@ function construct_A_new_simple((; s, m), (; b, a, z, db, da, Λ), with_exo = fa
 			end
 		end
 	end
-#=
+
 	(; from, to, λ) = StructArray(entries_B)
 	B = sparse(from, to, λ, N, N)
 	BB = B - spdiagm(dropdims(sum(B, dims = 2), dims=2))
@@ -1181,7 +1181,7 @@ function construct_A_new_simple((; s, m), (; b, a, z, db, da, Λ), with_exo = fa
 	(; from, to, λ) = StructArray(entries_A)
 	A = sparse(from, to, λ, N, N)
 	AA = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
-=#	
+	
 	(; from, to, λ) = StructArray(entries)
 	A = sparse(from, to, λ, N, N)
 	A = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
@@ -1190,7 +1190,7 @@ function construct_A_new_simple((; s, m), (; b, a, z, db, da, Λ), with_exo = fa
 #	switch = sparse(from, to, λ, N, N)
 #	switch = switch - spdiagm(dropdims(sum(switch, dims = 2), dims=2))
 
-	(; A) #, AA, BB, A_alt = AA + BB)
+	(; A, AA, BB)#, A_alt = AA + BB)
 end
 
 # ╔═╡ 1b963435-7a4b-4246-8e45-9a5f56083428
@@ -1198,8 +1198,42 @@ md"""
 # Solving for the stationary distribution
 """
 
-# ╔═╡ 2888f7ec-f14b-4f7a-96e9-5c3512acf159
+# ╔═╡ b03dc60d-6d0c-42ff-8828-8089a42e1541
+function solve_KF_iterate(A, Δ, g₀=fill(1/size(A,1), size(A,1)))
+	g = copy(g₀)
+	B = (I + Δ * A')
+	for i ∈ 1:50000
+		g_new = B * g
 
+		crit = maximum(abs, g_new - g)
+		i % 1000 == 0 && @info crit
+		if !isfinite(crit)
+			throw(ArgumentError("Got non-finite results. Try different Δ."))
+		end
+		if crit < 1e-12
+			@info "converged after $i iterations"
+			return g
+		end
+		g .= g_new
+	end
+	g
+end
+
+# ╔═╡ 86a90e5b-b6d4-4d3c-9395-996e4c709007
+function solve_KF_moll(A)
+	N = size(A, 1)
+	AT = copy(transpose(A))
+	b = zeros(N)
+	
+	i_fix = 1
+	b[i_fix] = .1
+	AT[i_fix,:] .= 0.0
+	AT[i_fix,i_fix] = 1.0
+
+	g = AT\b
+
+	g ./ sum(g)
+end
 
 # ╔═╡ b4bec84c-6428-454c-85c8-9a9bd3a64c91
 function stationary_distribution(A; δ = 0.0, ψ = InfinitesimalGenerators.Zeros(size(A, 1)))
@@ -1232,47 +1266,21 @@ df_π = let model = m
 	
 	(; m, s) = df
 	m = reshape(m, size(ss))
-	s = reshape(m, size(ss))
+	s = reshape(s, size(ss))
 
-	(; A) = construct_A_new_simple((; m, s), model) #; with_exo=true)
-	@info A
+	(; A) = construct_A_new_simple((; m, s), model; with_exo=true)
 
-	π1 = solve_KF_death(A)
-	π2 = solve_KF_eigs(A)
-	#=
-	M = size(A, 1)
-	#M = I*J*Nz;
-	AT = copy(A)'
-	# Fix one value so matrix isn't singular:
-	#vec = zeros(M,1);
-	iFix = 1657
-	AT[iFix,:] .= 0.0
-	AT[iFix,iFix] = 1.0
-
-	almost_zero = zeros(M)
-	almost_zero[iFix] = 0.01
-
-	#vec(iFix)=.01;
-	#AT(iFix,:) = [zeros(1,iFix-1),1,zeros(1,M-iFix)];
-
-	# Solve system:
-	g_stacked = AT\almost_zero
-	g_sum = g_stacked'*ones(M)*da*db
-	g_stacked = g_stacked ./ g_sum
-
-=#
 	df_new = copy(df)
-	df_new.π1 = π1
-	df_new.π2 = π2
-#	g(:,:,1) = reshape(g_stacked(1:I*J),I,J);
-#	g(:,:,2) = reshape(g_stacked(I*J+1:I*J*2),I,J);
+	df_new.π1 = solve_KF_death(A)
+	df_new.π2 = solve_KF_eigs(A)
+	df_new.π3 = solve_KF_moll(A)
+	
 	df_new
-
 end
 
 # ╔═╡ 7aa6d452-5566-405e-8e91-906b6bb2196c
 @chain df_π begin
-	data(_) * mapping(:b, :a, :π2, layout = :z => nonnumeric) * visual(Surface)
+	data(_) * mapping(:b, :a, :π1, layout = :z => nonnumeric) * visual(Surface)
 	draw(axis = (type = Axis3, ))
 end
 
@@ -1292,7 +1300,7 @@ let model = m
 	
 	s = reshape(s, size(ss))
 	m = reshape(m, size(ss))
-
+	
 	updiag = zeros(I*J,Nz)
 	lowdiag = zeros(I*J,Nz)
 	centdiag = zeros(I*J,Nz)
@@ -1376,6 +1384,7 @@ let model = m
 	vec_ = zeros(M,1)
 	iFix = 1657
 	vec_[iFix] = .01
+	AT[iFix,:] .= 0.0
 	AT[iFix,:] .= [zeros(iFix-1); 1; zeros(M-iFix)]
 	
 	# Solve system:
@@ -1383,7 +1392,7 @@ let model = m
 	
 	g_sum = g_stacked' *ones(M,1)*da*db
 	g_stacked = g_stacked ./ g_sum
-
+	
 	fig = Figure()
 	ax = Axis3(fig[1,1])
 	surface!(ax, reshape(g_stacked, size(ss))[:,:,1])
@@ -2991,9 +3000,10 @@ version = "3.5.0+0"
 # ╠═3b6ffffc-b8ab-42df-9046-ec3b4f5e0122
 # ╠═8fc2b293-9f5e-420d-b6e3-260db9fed4b8
 # ╠═7aa6d452-5566-405e-8e91-906b6bb2196c
-# ╠═2888f7ec-f14b-4f7a-96e9-5c3512acf159
 # ╠═6ab0e37f-143f-4ba6-b2e4-2da82bac53aa
 # ╠═d9cb7453-8de2-4b76-89d5-14035c00c51f
+# ╠═b03dc60d-6d0c-42ff-8828-8089a42e1541
+# ╠═86a90e5b-b6d4-4d3c-9395-996e4c709007
 # ╠═b4bec84c-6428-454c-85c8-9a9bd3a64c91
 # ╠═2a7472f3-aa80-43f2-a959-05c3870d424d
 # ╠═bf78e6b1-32db-4741-8435-b2bd89db0f1f
