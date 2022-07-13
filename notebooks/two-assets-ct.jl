@@ -549,7 +549,7 @@ end
 
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
-	(; rho, ra, rb_pos, rb_neg, xi, w) = model
+	(; rho, xi, w) = model
 	(; Delta, crit) = model
 	(; a, b, z, I, J, Nz, la_mat, amin, amax, bmin, bmax, db, da) = model
 
@@ -603,22 +603,7 @@ function solve_HJB_new(model, maxit = 35)
 	c0 = (1-xi)*w*zzz + model.ra .* aaa + model.rb_neg .* bbb 
 	v0 = util.(c0, Ref(model)) ./ rho
 	v = copy(v0)
-
-
-	#return at different points in state space
-	#matrix of liquid returns
-	Rb = rb_pos .* (bbb .> 0) .+ rb_neg .* (bbb .< 0)
-	raa = ra .* ones(1,J)
-	#if ra>>rb, impose tax on ra*a at high a, otherwise some households
-	#accumulate infinite illiquid wealth (not needed if ra is close to or less than rb)
-	tau = 10
-	raa = ra .* (1 .- (1.33 .* amax ./ a) .^ (1-tau))#; plot(a,raa.*a)
-	#matrix of illiquid returns
-
-	Ra = zeros(I,J,Nz)
-	Ra[:,:,1] .= raa'
-	Ra[:,:,2] .= raa'
-
+	
 	for n=1:maxit
 	    V = v;   
 	    #DERIVATIVES W.R.T. b
