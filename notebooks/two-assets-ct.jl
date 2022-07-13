@@ -35,9 +35,14 @@ md"""
 ## Setup
 """
 
+# ╔═╡ 73c1ff42-ac94-4175-8c30-9d6a751c913a
+md"""
+## Solving the HJB equation
+"""
+
 # ╔═╡ 828dee22-1ee7-41c4-b68b-f88facea86d9
 md"""
-## HJB Moll
+### HJB Moll
 """
 
 # ╔═╡ 3ab0c985-5317-4ea4-bddc-6289ab90bcad
@@ -364,19 +369,9 @@ end
 # ╔═╡ 75c6bed0-86a2-4393-83a7-fbd7862a3975
 df_base = solve_HJB_base()
 
-# ╔═╡ b8a7269f-27ae-4c37-b73e-7decb8333ea9
-# ╠═╡ disabled = true
-#=╠═╡
-@chain df begin
-	stack([:s, :d])
-	data(_) * mapping(:b, :a, :value, col = :z => nonnumeric, row = :variable) * visual(Surface)
-	draw(axis = (type = Axis3, ))
-end
-  ╠═╡ =#
-
 # ╔═╡ 830448b7-1700-4312-91ce-55f86aaa33a4
 md"""
-## HJB Greimel
+### HJB Greimel
 """
 
 # ╔═╡ ed6045c0-b76c-4691-9f05-c943c542d13f
@@ -385,17 +380,17 @@ Base.@kwdef struct TwoAssets
 	ra = 0.05
 	rb_pos = 0.03
 	rb_neg = 0.12
-	rho = 0.06 #discount rate
+	ϱ = 0.06 #discount rate
 	χ₀ = 0.03
 	χ₁ = 2
-	xi = 0.1 #fraction of income that is automatically deposited
+	ξ = 0.1 #fraction of income that is automatically deposited
 	#Income process (two-state Poisson process):
 	w = 4
 	Nz = 2
 	z      = [.8, 1.3]
-	la_mat = [-1/3 1/3; 1/3 -1/3]
+	Λ = [-1/3 1/3; 1/3 -1/3]
 	crit = 10^(-5)
-	Delta = 100
+	Δ = 100
 	#grids
 	I = 100
 	bmin = -2
@@ -470,18 +465,18 @@ end
 
 # ╔═╡ 4023a748-5e4f-4137-811b-0e93567021dd
 function get_c(Vb, (; b, z), model)
-	(; γ, xi, w) = model
+	(; γ, ξ, w) = model
 	c = u_prime_inv.(max.(Vb,10^(-6)), Ref((; γ)))
-	sc = (1-xi) * w * z + R_b(b, model) - c
+	sc = (1-ξ) * w * z + R_b(b, model) - c
 
 	(; c, sc)
 end
 
 # ╔═╡ 541a5b4f-0d49-4c36-85c8-799e3260c77d
 function get_c₀((; b, z), model)
-	(; γ, xi, w) = model
+	(; γ, ξ, w) = model
 	sc = 0.0
-	c = (1-xi) * w * z + R_b(b, model)
+	c = (1-ξ) * w * z + R_b(b, model)
 	(; c, sc)
 end
 
@@ -500,94 +495,17 @@ end
 
 # ╔═╡ f8b728e7-4f8a-465e-a8cf-413cec8e9c66
 function initial_guess((; a, b, z), model)
-	(; xi, w, rho, rb_neg, ra) = model
-	c_init = (1-xi) * w * z + ra * a + rb_neg * b
+	(; ξ, w, ϱ, rb_neg, ra) = model
+	c_init = (1-ξ) * w * z + ra * a + rb_neg * b
 	# should be
 	# c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * R_b(b, model)
-	util(c_init, model) / rho
-end
-
-# ╔═╡ 85bc873e-c9d3-4006-81d3-de3db8d18f7b
-function construct_A_moll((; sc), (; Id_B, sd_B, Id_F, sd_F, MB, MF), (; I, J, Nz, db, da))
-
-	updiag = zeros(I*J,Nz)
-	lowdiag = zeros(I*J,Nz)
-	centdiag = zeros(I*J,Nz)
-	AAi = Array{AbstractArray}(undef, Nz)
-	BBi = Array{AbstractArray}(undef, Nz)
-	
-	X = - min.(sc, 0.0) ./db .- Id_B .* sd_B ./ db
-	Y = (min.(sc, 0.0) - max.(sc, 0.0)) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
-	Z = max.(sc, 0.0)/db + Id_F.*sd_F/db;
-	    
-	for i = 1:Nz
-		centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
-	end
-	
-	lowdiag[1:I-1,:] = X[2:I,1,:]
-    updiag[2:I,:] = Z[1:I-1,1,:]
-	for j = 2:J
-	    lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
-	    updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
-    end
-	
-	for nz = 1:Nz
-    	BBi[nz] = spdiagm(
-			I*J, I*J, 
-			0 => centdiag[:,nz],
-			1 => updiag[2:end,nz],
-			-1 => lowdiag[1:end-1,nz]
-		)
-	end
-	
-	BB = cat(BBi..., dims = (1,2))
-	
-	
-	#CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
-	chi = -MB ./ da
-	yy =  (MB - MF) ./da
-	zeta = MF ./ da
-	
-	# MATRIX AAi
-	for nz=1:Nz
-	    #This will be the upperdiagonal of the matrix AAi
-	    AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
-	    for j=1:J
-	        AAupdiag=[AAupdiag; zeta[:,j,nz]]
-	    end
-	        
-	    #This will be the center diagonal of the matrix AAi
-        AAcentdiag = yy[:,1,nz]
-		for j=2:J-1
-	    	AAcentdiag = [AAcentdiag; yy[:,j,nz]];
-	    end
-	    AAcentdiag = [AAcentdiag; yy[:,J,nz]];
-	        
-	    #This will be the lower diagonal of the matrix AAi
-	    AAlowdiag = chi[:,2,nz]
-        for j=3:J
-	        AAlowdiag = [AAlowdiag; chi[:,j,nz]]
-	    end
-
-		#Add up the upper, center, and lower diagonal into a sparse matrix
-	    AAi[nz] = spdiagm(
-			I*J, I*J,
-			0 => AAcentdiag,
-			-I => AAlowdiag,
-			I => AAupdiag[begin+I:end-I]
-		)
-	
-	end
-	
-	AA = cat(AAi..., dims = (1,2))
-
-	(; AA, BB)
+	util(c_init, model) / ϱ
 end
 
 # ╔═╡ 2befd2fa-ca64-4606-b55d-6163709f2e6e
 function ȧ_fixed((; a, z), model)
-	(; xi, w) = model
-	xi * w * z + R_a(a, model)
+	(; ξ, w) = model
+	ξ * w * z + R_a(a, model)
 end
 
 # ╔═╡ 9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
@@ -648,21 +566,187 @@ function get_d_upwind(VaB, VaF, VbB, VbF, state, model)
 	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd, MF, MB)
 end	
 
+# ╔═╡ 9689b9fd-c553-4650-99e9-466edd2acdb4
+md"""
+## Constructing the Intensity Matrix
+"""
+
+# ╔═╡ 6b298d9f-1526-477a-8d58-2cf76af539d1
+md"""
+### Intensity matrix Moll
+"""
+
+# ╔═╡ 85bc873e-c9d3-4006-81d3-de3db8d18f7b
+function construct_A_moll((; sc), (; Id_B, sd_B, Id_F, sd_F, MB, MF), (; I, J, Nz, db, da))
+
+	updiag = zeros(I*J,Nz)
+	lowdiag = zeros(I*J,Nz)
+	centdiag = zeros(I*J,Nz)
+	AAi = Array{AbstractArray}(undef, Nz)
+	BBi = Array{AbstractArray}(undef, Nz)
+	
+	X = - min.(sc, 0.0) ./db .- Id_B .* sd_B ./ db
+	Y = (min.(sc, 0.0) - max.(sc, 0.0)) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
+	Z = max.(sc, 0.0)/db + Id_F.*sd_F/db;
+	    
+	for i = 1:Nz
+		centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
+	end
+	
+	lowdiag[1:I-1,:] = X[2:I,1,:]
+    updiag[2:I,:] = Z[1:I-1,1,:]
+	for j = 2:J
+	    lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
+	    updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
+    end
+	
+	for nz = 1:Nz
+    	BBi[nz] = spdiagm(
+			I*J, I*J, 
+			0 => centdiag[:,nz],
+			1 => updiag[2:end,nz],
+			-1 => lowdiag[1:end-1,nz]
+		)
+	end
+	
+	BB = cat(BBi..., dims = (1,2))
+	
+	
+	#CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+	chi = -MB ./ da
+	yy =  MB / da - MF / da
+	zeta = MF ./ da
+	
+	# MATRIX AAi
+	for nz=1:Nz
+	    #This will be the upperdiagonal of the matrix AAi
+	    AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
+	    for j=1:J
+	        AAupdiag=[AAupdiag; zeta[:,j,nz]]
+	    end
+	        
+	    #This will be the center diagonal of the matrix AAi
+        AAcentdiag = yy[:,1,nz]
+		for j=2:J-1
+	    	AAcentdiag = [AAcentdiag; yy[:,j,nz]];
+	    end
+	    AAcentdiag = [AAcentdiag; yy[:,J,nz]];
+	        
+	    #This will be the lower diagonal of the matrix AAi
+	    AAlowdiag = chi[:,2,nz]
+        for j=3:J
+	        AAlowdiag = [AAlowdiag; chi[:,j,nz]]
+	    end
+
+		#Add up the upper, center, and lower diagonal into a sparse matrix
+	    AAi[nz] = spdiagm(
+			I*J, I*J,
+			0 => AAcentdiag,
+			-I => AAlowdiag,
+			I => AAupdiag[begin+I:end-I]
+		)
+	
+	end
+	
+	AA = cat(AAi..., dims = (1,2))
+
+	(; A = AA + BB)
+#	(; AA, BB)
+end
+
+# ╔═╡ 7401e4ea-d8bb-4e22-b7ec-ab2ab458c910
+md"""
+### Intensity matrix Greimel
+"""
+
+# ╔═╡ 3301c5cc-4860-4d44-8bf5-e9d890dd4e5a
+function construct_A_new((; sc), (; Id_B, sd_B, Id_F, sd_F, MB, MF), (; b, a, z, db, da, Λ), with_exo = false)
+	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
+	N = length(statespace)
+	state_inds = [(; i_b, i_a, i_z) for i_b ∈ eachindex(b), i_a ∈ eachindex(a), i_z ∈ eachindex(z)]
+	linind = LinearIndices(size(statespace))
+
+	T = typeof((; from = 1, to = 1, λ = 0.1))
+	entries_B = T[]
+	entries_A = T[]
+	entries_switch = T[]
+	entries = T[]
+	
+	
+	for (from, (; i_a, i_b, i_z)) ∈ enumerate(state_inds)
+		scᵢ = sc[from]
+		
+		if i_b > 1
+			to = linind[i_b - 1, i_a, i_z]
+			λ = - min(scᵢ, 0.0) / db - Id_B[from] * sd_B[from] / db
+			entry = (; from, to, λ)
+			push!(entries_B, entry)
+			push!(entries, entry)
+		end
+		if i_b < length(b)
+			to = linind[i_b + 1, i_a, i_z]
+			λ = max(scᵢ, 0.0) / db + Id_F[from] * sd_F[from] / db
+			entry = (; from, to, λ)
+			push!(entries_B, entry)
+			push!(entries, entry)
+		end
+
+		if i_a > 1
+			to = linind[i_b, i_a - 1, i_z]
+			λ = - MB[from] / da
+			entry = (; from, to, λ)
+			push!(entries_A, entry)
+			push!(entries, entry)
+		end
+
+		if i_a < length(a)
+			to = linind[i_b, i_a + 1, i_z]
+			λ = MF[from] / da
+			entry = (; from, to, λ)
+			push!(entries_A, entry)
+			push!(entries, entry)
+		end
+
+		for i_z_next ∈ eachindex(z)
+			if i_z_next != i_z
+				to = linind[i_b, i_a, i_z_next]
+				λ = Λ[i_z, i_z_next]
+				entry = (; from, to, λ)
+				#push!(entries_switch, entry)
+				with_exo && push!(entries, entry)
+			end
+		end
+	end
+#=
+	(; from, to, λ) = StructArray(entries_B)
+	B = sparse(from, to, λ, N, N)
+	BB = B - spdiagm(dropdims(sum(B, dims = 2), dims=2))
+
+	(; from, to, λ) = StructArray(entries_A)
+	A = sparse(from, to, λ, N, N)
+	AA = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
+=#	
+	(; from, to, λ) = StructArray(entries)
+	A = sparse(from, to, λ, N, N)
+	A = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
+
+#	(; from, to, λ) = StructArray(entries_switch)
+#	switch = sparse(from, to, λ, N, N)
+#	switch = switch - spdiagm(dropdims(sum(switch, dims = 2), dims=2))
+
+	(; A) #, AA, BB, A_alt = AA + BB)
+end
+
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
-	(; rho, xi, w) = model
-	(; Delta, crit) = model
-	(; a, b, z, I, J, Nz, la_mat, amin, amax, bmin, bmax, db, da) = model
+	(; ϱ) = model
+	(; Δ, crit) = model
+	(; a, b, z, I, J, Nz, amin, amax, bmin, bmax, db, da) = model
 
 	# initialize vector that keeps track of convergence
 	dists = []
 
 	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
-	
-	Bswitch = [
-	    LinearAlgebra.I(I*J)*la_mat[1,1] LinearAlgebra.I(I*J)*la_mat[1,2];
-	    LinearAlgebra.I(I*J)*la_mat[2,1] LinearAlgebra.I(I*J)*la_mat[2,2]
-	]
 	
 	#Preallocation
 	VbF = zeros(I,J,Nz)
@@ -695,10 +779,8 @@ function solve_HJB_new(model, maxit = 35)
 		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, statespace, Ref(model)) |> StructArray
 		out_c = get_c_upwind.(VbB, VbF, statespace, Ref(model)) |> StructArray
 
-		(; AA, BB) = construct_A_moll(out_c, out_d, model)
-	    
-	    A = AA + BB + Bswitch
-	
+		(; A) = construct_A_new(out_c, out_d, model, true)
+	    		
 	    if maximum(abs, sum(A,dims=2)) > 10^(-12)
 	        @warn("Improper Transition Matrix")
 	        break
@@ -709,12 +791,12 @@ function solve_HJB_new(model, maxit = 35)
 	#       break
 	#    end
 	    
-	    B = (1/Delta + rho)*LinearAlgebra.I - A
+	    B = (1/Δ + ϱ)*LinearAlgebra.I - A
 
 	    (; c) = out_c
 	    u = util.(c, Ref(model))
 	    	    
-	    V_new = B\(vec(u) + vec(V)/Delta) #SOLVE SYSTEM OF EQUATIONS
+	    V_new = B\(vec(u) + vec(V)/Δ) #SOLVE SYSTEM OF EQUATIONS
 	        
 	    V = reshape(V_new, I,J,Nz)   
 	    
@@ -729,8 +811,9 @@ function solve_HJB_new(model, maxit = 35)
 
 			(; d, sd) = out_d
 			(; sc) = out_c
+			(; ξ, w) = model
 			
-			m = [d + xi * w * z + R_a(a, model) for (d, (; z, a)) ∈ zip(d, statespace)]
+			m = [d + ξ * w * z + R_a(a, model) for (d, (; z, a)) ∈ zip(d, statespace)]
 			s = sc + sd
 			
 			df_ss = DataFrame(vec(statespace))
@@ -756,7 +839,8 @@ end
 # ╔═╡ 48ecc7ee-b943-4497-bc15-1b62d78e9271
 begin
 	m = TwoAssets()
-	df_new = solve_HJB_new(m).df
+	(; df, out_c, out_d) = solve_HJB_new(m)
+	df_new = df
 end
 
 # ╔═╡ 8f3da06b-2887-4564-87c7-12a798580f53
@@ -776,6 +860,30 @@ end
 
 # ╔═╡ 0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
 @test df_new.sc ≈ df_base.sc
+
+# ╔═╡ b8a7269f-27ae-4c37-b73e-7decb8333ea9
+# ╠═╡ disabled = true
+#=╠═╡
+@chain df begin
+	stack([:s, :d])
+	data(_) * mapping(:b, :a, :value, col = :z => nonnumeric, row = :variable) * visual(Surface)
+	draw(axis = (type = Axis3, ))
+end
+  ╠═╡ =#
+
+# ╔═╡ d7b46231-2db5-46a5-85ce-eda87b1a29b8
+construct_A_new(out_c, out_d, m)
+
+# ╔═╡ 39c77283-4ef8-406f-aa00-ee3cec4db5e1
+begin
+	@time (; A) = construct_A_moll(out_c, out_d, m)
+	@time A_new = construct_A_new(out_c, out_d, m).A
+
+	@test A ≈ A_new
+end
+
+# ╔═╡ 691088ff-9dff-4fe7-bb54-2e4e7fbf0560
+construct_A_new(out_c, out_d, m).switch
 
 # ╔═╡ 3a43bab0-c058-4665-8939-a3920c9986d1
 md"""
@@ -2072,16 +2180,25 @@ version = "3.5.0+0"
 # ╟─c89f1918-01ee-11ed-22fa-edd66e0f6c59
 # ╟─629b8291-0f13-419e-b1c0-d10d5e708720
 # ╠═b48b0674-1bcb-48e5-9b05-57dea5877715
+# ╟─73c1ff42-ac94-4175-8c30-9d6a751c913a
+# ╠═75c6bed0-86a2-4393-83a7-fbd7862a3975
+# ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
+# ╠═8f3da06b-2887-4564-87c7-12a798580f53
+# ╠═0cf5bd0e-51e8-437b-bea6-2027b898a579
+# ╠═87074572-87c8-4f01-8895-a8ebcbeef9a0
+# ╠═4fe6acdd-521e-44b1-a7b6-97f78f72986d
+# ╠═98a32dda-1b6f-4ef9-9945-a9daabc7e19d
+# ╠═0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
 # ╟─828dee22-1ee7-41c4-b68b-f88facea86d9
 # ╠═68a97aab-7924-4472-aa47-7903add8aea4
 # ╠═3ab0c985-5317-4ea4-bddc-6289ab90bcad
 # ╠═f2ce6352-450e-4cde-a2fe-3586461c3bdf
 # ╠═9c1ef8d1-57bc-4da2-83ec-fb8f1a8ce296
 # ╠═91b63bfc-f4a4-41c1-a472-7d13df27b93c
-# ╠═75c6bed0-86a2-4393-83a7-fbd7862a3975
 # ╠═b8a7269f-27ae-4c37-b73e-7decb8333ea9
 # ╟─830448b7-1700-4312-91ce-55f86aaa33a4
 # ╠═ed6045c0-b76c-4691-9f05-c943c542d13f
+# ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╟─03ec6276-09a4-4f66-a864-19e2e0d825eb
 # ╠═98f11cbd-8b05-464b-be44-3b76277c6d0d
 # ╠═8a6cd6dd-49f6-496a-bb50-e43e06c4a1db
@@ -2096,16 +2213,15 @@ version = "3.5.0+0"
 # ╠═09a8d045-6867-43a9-a021-5a39c22171a5
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
-# ╠═85bc873e-c9d3-4006-81d3-de3db8d18f7b
-# ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═2befd2fa-ca64-4606-b55d-6163709f2e6e
-# ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
-# ╠═8f3da06b-2887-4564-87c7-12a798580f53
-# ╠═0cf5bd0e-51e8-437b-bea6-2027b898a579
-# ╠═87074572-87c8-4f01-8895-a8ebcbeef9a0
-# ╠═4fe6acdd-521e-44b1-a7b6-97f78f72986d
-# ╠═98a32dda-1b6f-4ef9-9945-a9daabc7e19d
-# ╠═0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
+# ╟─9689b9fd-c553-4650-99e9-466edd2acdb4
+# ╠═d7b46231-2db5-46a5-85ce-eda87b1a29b8
+# ╠═39c77283-4ef8-406f-aa00-ee3cec4db5e1
+# ╠═691088ff-9dff-4fe7-bb54-2e4e7fbf0560
+# ╟─6b298d9f-1526-477a-8d58-2cf76af539d1
+# ╠═85bc873e-c9d3-4006-81d3-de3db8d18f7b
+# ╟─7401e4ea-d8bb-4e22-b7ec-ab2ab458c910
+# ╠═3301c5cc-4860-4d44-8bf5-e9d890dd4e5a
 # ╟─3a43bab0-c058-4665-8939-a3920c9986d1
 # ╠═9aa61364-51a3-45d0-b1c2-757b864de132
 # ╠═026cfe16-ff0f-4f68-b412-b1f6c1902824
