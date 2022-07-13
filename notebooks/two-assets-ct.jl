@@ -949,19 +949,23 @@ function solve_HJB_new(model, maxit = 35)
 	
 	#INITIAL GUESS
 	v = initial_guess.(statespace, Ref(model))
+
+	bc = zeros(size(v))
+	c_bd = get_c₀.(statespace[I,:,:], Ref(model)) |> StructArray
+	bc[I,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+	c_bd = get_c₀.(statespace[1,:,:], Ref(model)) |> StructArray
+	bc[1,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
 	
 	for n=1:maxit
 	    V = v;   
 	    #DERIVATIVES W.R.T. b
 	    # forward difference
-	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db;
-		c_bd = get_c₀.(statespace[I,:,:], Ref(model)) |> StructArray
-	    VbF[I,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db
+		VbF[I,:,:] = bc[I,:,:]
 			
 	    # backward difference
-	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:]) ./ db;
-		c_bd = get_c₀.(statespace[1,:,:], Ref(model)) |> StructArray
-	    VbB[1,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:]) ./ db
+	    VbB[1,:,:] = bc[1,:,:]
 	
 	    #DERIVATIVES W.R.T. a
 	    # forward difference
