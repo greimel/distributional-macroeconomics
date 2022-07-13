@@ -547,6 +547,15 @@ function get_c_upwind(VbB, VbF, b, z, model)
 	return get_c₀(b, z, model)
 end
 
+# ╔═╡ f8b728e7-4f8a-465e-a8cf-413cec8e9c66
+function initial_guess(z, a, b, model)
+	(; xi, w, rho, rb_neg, ra) = model
+	c_init = (1-xi) * w * z + ra * a + rb_neg * b
+	# should be
+	# c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * R_b(b, model)
+	util(c_init, model) / rho
+end
+
 # ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
 function solve_HJB_new(model, maxit = 35)
 	(; rho, xi, w) = model
@@ -600,14 +609,7 @@ function solve_HJB_new(model, maxit = 35)
 	u = zeros(I,J,Nz)
 	
 	#INITIAL GUESS
-	function initial_guess(z, a, b, model)
-		(; xi, w, rho) = model
-		c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * b #R_b(b, model)
-		util(c_init, model) / rho
-	end
-	
-	v0 = initial_guess.(zzz, aaa, bbb, Ref(model))
-	v = copy(v0)
+	v = initial_guess.(zzz, aaa, bbb, Ref(model))
 	
 	for n=1:maxit
 	    V = v;   
@@ -2104,6 +2106,7 @@ version = "3.5.0+0"
 # ╠═541a5b4f-0d49-4c36-85c8-799e3260c77d
 # ╠═09a8d045-6867-43a9-a021-5a39c22171a5
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
+# ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
 # ╠═8f3da06b-2887-4564-87c7-12a798580f53
