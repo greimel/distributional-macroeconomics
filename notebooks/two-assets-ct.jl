@@ -507,6 +507,83 @@ function initial_guess((; a, b, z), model)
 	util(c_init, model) / rho
 end
 
+# ╔═╡ 85bc873e-c9d3-4006-81d3-de3db8d18f7b
+function construct_A_moll((; sc), (; Id_B, sd_B, Id_F, sd_F, MB, MF), (; I, J, Nz, db, da))
+
+	updiag = zeros(I*J,Nz)
+	lowdiag = zeros(I*J,Nz)
+	centdiag = zeros(I*J,Nz)
+	AAi = Array{AbstractArray}(undef, Nz)
+	BBi = Array{AbstractArray}(undef, Nz)
+	
+	X = - min.(sc, 0.0) ./db .- Id_B .* sd_B ./ db
+	Y = (min.(sc, 0.0) - max.(sc, 0.0)) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
+	Z = max.(sc, 0.0)/db + Id_F.*sd_F/db;
+	    
+	for i = 1:Nz
+		centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
+	end
+	
+	lowdiag[1:I-1,:] = X[2:I,1,:]
+    updiag[2:I,:] = Z[1:I-1,1,:]
+	for j = 2:J
+	    lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
+	    updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
+    end
+	
+	for nz = 1:Nz
+    	BBi[nz] = spdiagm(
+			I*J, I*J, 
+			0 => centdiag[:,nz],
+			1 => updiag[2:end,nz],
+			-1 => lowdiag[1:end-1,nz]
+		)
+	end
+	
+	BB = cat(BBi..., dims = (1,2))
+	
+	
+	#CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+	chi = -MB ./ da
+	yy =  (MB - MF) ./da
+	zeta = MF ./ da
+	
+	# MATRIX AAi
+	for nz=1:Nz
+	    #This will be the upperdiagonal of the matrix AAi
+	    AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
+	    for j=1:J
+	        AAupdiag=[AAupdiag; zeta[:,j,nz]]
+	    end
+	        
+	    #This will be the center diagonal of the matrix AAi
+        AAcentdiag = yy[:,1,nz]
+		for j=2:J-1
+	    	AAcentdiag = [AAcentdiag; yy[:,j,nz]];
+	    end
+	    AAcentdiag = [AAcentdiag; yy[:,J,nz]];
+	        
+	    #This will be the lower diagonal of the matrix AAi
+	    AAlowdiag = chi[:,2,nz]
+        for j=3:J
+	        AAlowdiag = [AAlowdiag; chi[:,j,nz]]
+	    end
+
+		#Add up the upper, center, and lower diagonal into a sparse matrix
+	    AAi[nz] = spdiagm(
+			I*J, I*J,
+			0 => AAcentdiag,
+			-I => AAlowdiag,
+			I => AAupdiag[begin+I:end-I]
+		)
+	
+	end
+	
+	AA = cat(AAi..., dims = (1,2))
+
+	(; AA, BB)
+end
+
 # ╔═╡ 2befd2fa-ca64-4606-b55d-6163709f2e6e
 function ȧ_fixed((; a, z), model)
 	(; xi, w) = model
@@ -593,12 +670,6 @@ function solve_HJB_new(model, maxit = 35)
 	VaB = zeros(I,J,Nz);
 	c = zeros(I,J,Nz);
 	sc = zeros(I,J,Nz);
-	
-	updiag = zeros(I*J,Nz);
-	lowdiag = zeros(I*J,Nz);
-	centdiag = zeros(I*J,Nz);
-	AAi = Array{AbstractArray}(undef, Nz)
-	BBi = Array{AbstractArray}(undef, Nz)
 
 	d = zeros(I,J,Nz)
 	sd = zeros(I,J,Nz)
@@ -629,7 +700,6 @@ function solve_HJB_new(model, maxit = 35)
 	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
 	 
 		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, statespace, Ref(model)) |> StructArray
-		(; Id_B, Id_F, sd_B, sd_F) = out_d
 		d .= out_d.d
 		sd .= out_d.sd
 		
@@ -638,74 +708,8 @@ function solve_HJB_new(model, maxit = 35)
 		sc .= out_c.sc
 	    c .= out_c.c
 	    u .= util.(c, Ref(model))
-	    
-	    #CONSTRUCT MATRIX BB SUMMARING EVOLUTION OF b
-	    X = - min.(sc, 0.0) ./db .- Id_B .* sd_B ./ db
-	    Y = (min.(sc, 0.0) - max.(sc, 0.0)) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
-	    Z = max.(sc, 0.0)/db + Id_F.*sd_F/db;
-	    
-	    for i = 1:Nz
-	        centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
-	    end
-	
-	    lowdiag[1:I-1,:] = X[2:I,1,:]
-	    updiag[2:I,:] = Z[1:I-1,1,:]
-	    for j = 2:J
-	        lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
-	        updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
-	    end
-	
-	    for nz = 1:Nz
-	    	BBi[nz] = spdiagm(
-				I*J, I*J, 
-				0 => centdiag[:,nz],
-				1 => updiag[2:end,nz],
-				-1 => lowdiag[1:end-1,nz]
-						 )
-	    end
-	
-	    BB = cat(BBi..., dims = (1,2))
-	
-	
-	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
-		(; MB, MF) = out_d
 
-		chi = -MB ./ da
-	    yy =  (MB - MF) ./da
-	    zeta = MF ./ da
-	
-	    # MATRIX AAi
-	    for nz=1:Nz
-	        #This will be the upperdiagonal of the matrix AAi
-	        AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
-	        for j=1:J
-	            AAupdiag=[AAupdiag; zeta[:,j,nz]]
-	        end
-	        
-	        #This will be the center diagonal of the matrix AAi
-	        AAcentdiag = yy[:,1,nz]
-	        for j=2:J-1
-	            AAcentdiag = [AAcentdiag; yy[:,j,nz]];
-	        end
-	        AAcentdiag = [AAcentdiag; yy[:,J,nz]];
-	        
-	        #This will be the lower diagonal of the matrix AAi
-	        AAlowdiag = chi[:,2,nz]
-	        for j=3:J
-	            AAlowdiag = [AAlowdiag; chi[:,j,nz]]
-	        end
-		
-		    #Add up the upper, center, and lower diagonal into a sparse matrix
-	        AAi[nz] = spdiagm(
-				I*J, I*J,
-				0 => AAcentdiag,
-				-I => AAlowdiag,
-				I => AAupdiag[begin+I:end-I]
-			)
-	
-	    end
-	
-		AA = cat(AAi..., dims = (1,2))
+		(; AA, BB) = construct_A_moll(out_c, out_d, model)
 	    
 	    A = AA + BB + Bswitch
 	
@@ -2102,6 +2106,7 @@ version = "3.5.0+0"
 # ╠═09a8d045-6867-43a9-a021-5a39c22171a5
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
+# ╠═85bc873e-c9d3-4006-81d3-de3db8d18f7b
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╠═2befd2fa-ca64-4606-b55d-6163709f2e6e
 # ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
