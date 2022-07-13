@@ -10,6 +10,9 @@ using LinearAlgebra
 # ╔═╡ 1ee8ccc3-d498-48c6-b299-1032165e4ab9
 using StructArrays
 
+# ╔═╡ 731cf94b-8a88-4fd6-8728-851c43500f1e
+using NamedTupleTools: delete
+
 # ╔═╡ 9aa61364-51a3-45d0-b1c2-757b864de132
 using PlutoTest
 
@@ -566,6 +569,196 @@ function get_d_upwind(VaB, VaF, VbB, VbF, state, model)
 	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd, MF, MB)
 end	
 
+# ╔═╡ 9c0ec3bd-e8d9-4278-8230-56dcd783be82
+md"""
+## Differentiate
+"""
+
+# ╔═╡ 8c293630-e2a2-4123-9523-0e6f01a7f1d0
+begin
+	Δy_up(y, i, Δx) = (y[i+1] - y[i]) / Δx
+	Δy_down(y, i, Δx) = (y[i] - y[i-1]) / Δx
+	Δy_central(y, i, Δx) = (y[i+1] - y[i-1]) / Δx
+	
+	function Δgrid(grid, i)
+	    last = length(grid)
+	    @inbounds down = grid[max(i, 2)]      - grid[max(i-1, 1)]
+	    @inbounds up   = grid[min(i+1, last)] - grid[min(i, last-1)]
+	    central = (up + down)
+	    avg = central / 2
+	
+	    (; up, down, avg, central)
+	end
+	
+	function Δy(y, bc, i, Δx, fun_name, state_name)
+	    up       = i != length(y) ? Δy_up(y, i, Δx.up)     : bc[i]
+	    down     = i != 1         ? Δy_down(y, i, Δx.down) : bc[i]
+	    second = (up - down) / Δx.avg
+	    NamedTuple{deriv_names(fun_name, state_name)}((up, down, second))
+	end
+	
+	deriv_names(fun_name, state_name) = (Symbol(fun_name, state_name, "_", :up), Symbol(fun_name, state_name, "_", :down), Symbol(fun_name, state_name, state_name))
+end
+
+# ╔═╡ 10e8f1f6-820c-432a-8b3e-3abb7652f780
+function cross_difference(y, grids, inds)
+    @assert length(grids) == length(inds) == length(size(y)) == 2
+
+    i1, i2 = Tuple(inds)
+    grid1, grid2 = grids
+
+    Δx1 = Δgrid(grid1, i1)
+    Δx2 = Δgrid(grid2, i2)
+
+    i1_lo = max(i1-1, 1)
+    i1_hi = min(i1+1, length(grid1))
+
+    if i2 == 1
+        a = Δy_up(view(y, i1_hi, :), i2, Δx2.central) # use Δx2.up?
+        b = Δy_up(view(y, i1_lo, :), i2, Δx2.central) # use Δx2.up?
+    elseif i2 == length(grid2)
+        a = Δy_down(view(y, i1_hi, :), i2, Δx2.central) # use Δx2.down?
+        b = Δy_down(view(y, i1_lo, :), i2, Δx2.central) # use Δx2.down?
+    else
+        a = Δy_central(view(y, i1_hi, :), i2, Δx2.central)
+        b = Δy_central(view(y, i1_lo, :), i2, Δx2.central)
+    end
+
+    vab = (a - b) / Δx1.central # adjust Δx1.central when i1 is adjusted?
+end
+
+# ╔═╡ 5267753b-212b-4d80-b4a5-aa74648890df
+function select_all_but_one_dim(y0, dim_inds_drop)
+    y = reshape(view(y0, :), size(y0))
+
+    for (dim_drop, i_drop) ∈ reverse(dim_inds_drop)
+        y = selectdim(y, dim_drop, i_drop)
+    end
+    y
+end
+
+# ╔═╡ 42f3458b-9acd-4daa-9d01-7e76767b1a91
+function selectdims(A0, ds, is)
+	A = reshape(view(A0, :), size(A0)) 
+	for (d, i) ∈ zip(ds, is)
+		A = selectdim(A, d, i)
+    end
+    A
+end
+
+# ╔═╡ 459a01c4-2b9c-437b-8502-c7331729f37d
+function differentiate_1_naive(y, grids, inds, bc, solname=:v)
+    statename = only(keys(grids))
+    i = only(Tuple(inds))
+    n_states = 1
+    grid = only(grids)
+
+    Δx = Δgrid(grid, i)
+    va = Δy(y, bc, i, Δx, solname, statename)
+
+    (; solname => y[Tuple(inds)...], va...)
+end
+
+# ╔═╡ a6528bdc-db07-4d62-8705-6948dc9b7fdb
+function differentiate_2_naive(y, grids, inds, bc, solname=:v)
+    statenames = keys(grids)
+    dim_inds = [(; dim, i) for (dim, i) ∈ enumerate(Tuple(inds))]
+    n_states = length(grids)
+
+	# simple differences
+    nts_simple = map(enumerate(statenames)) do (dim, statename)
+        i = inds[dim]
+        grid = grids[statename]
+        Δx = Δgrid(grid, i)
+
+        dim_inds_drop = dim_inds[Not(dim)]
+
+        y_sub = select_all_but_one_dim(y, dim_inds_drop)
+        bc_sub = select_all_but_one_dim(bc, dim_inds_drop)
+
+        va = Δy(y_sub, bc_sub, i, Δx, solname, statename)
+    end
+
+	out = (; solname => y[Tuple(inds)...], merge(nts_simple...)...)
+
+	# cross differences
+	if n_states == 2
+	    vab = cross_difference(y, grids, inds)
+	    cross_name = Symbol(solname, statenames...)
+		out = (; out..., cross_name => vab)
+	elseif n_states == 3
+		nts_cross = map(dim_inds) do (dim_drop, i_drop)
+	        state_drop = statenames[dim_drop]
+			
+	        sub_grids = delete(grids, state_drop)
+	        sub_inds = [Tuple(inds)...][Not(dim_drop)]
+	        sub_y  = selectdim(y,  dim_drop, i_drop)
+	        sub_bc = selectdim(bc, dim_drop, i_drop)
+	        sub_statenames = filter(!=(state_drop), statenames)
+	
+	        vab = cross_difference(sub_y, sub_grids, sub_inds)
+	        cross_name = Symbol(solname, sub_statenames...)
+	
+	        (; Symbol(solname, sub_statenames...) => vab)
+	    end    
+
+		out = merge(out, merge(nts_cross...))
+	end
+	
+    out
+end
+
+# ╔═╡ abca9b50-f347-484a-9a16-a1e0f48cfdd9
+function differentiate(y, grids, inds, bc, solname=:v)
+    statenames = collect(keys(grids))
+    dim_inds = [(; dim, i) for (dim, i) ∈ enumerate(Tuple(inds))]
+
+    n_states = length(grids)
+
+	# simple upwind differences for each state
+    nts_simple = map(enumerate(statenames)) do (dim, statename)
+        i = inds[dim]
+        grid = grids[statename]
+        Δx = Δgrid(grid, i)
+
+        dim_inds_drop = dim_inds[Not(dim)]
+
+        y_sub = select_all_but_one_dim(y, dim_inds_drop)
+        bc_sub = select_all_but_one_dim(bc, dim_inds_drop)
+
+        va = Δy(y_sub, bc_sub, i, Δx, solname, statename)    
+    end
+
+	out = (; solname => y[Tuple(inds)...], merge(nts_simple...)...)
+	
+    # upwind cross-differences for each combination of state
+	cross = Pair[]
+	for i in 1:n_states
+		for j in 1:i-1
+			
+			drop = dim_inds[Not([i, j])]
+			dim_drop = first.(drop)
+			i_drop   = last.(drop)
+
+			state_drop = statenames[dim_drop]
+			sub_grids = delete(grids, state_drop...)
+	        sub_inds = [Tuple(inds)...][Not(dim_drop)]
+			sub_y  = selectdims(y,  dim_drop, i_drop)
+	        sub_bc = selectdims(bc, dim_drop, i_drop)
+
+			sub_statenames = filter(∉(state_drop), statenames)
+	        vab = cross_difference(sub_y, sub_grids, sub_inds)
+	        cross_name = Symbol(solname, sub_statenames...)
+	        push!(cross, cross_name => vab)
+		end
+	end
+
+	merge(out, (; cross...))
+end
+
+# ╔═╡ 0628188a-d8b6-4f1a-9f57-69ec895bd6b7
+
+
 # ╔═╡ 9689b9fd-c553-4650-99e9-466edd2acdb4
 md"""
 ## Constructing the Intensity Matrix
@@ -871,6 +1064,39 @@ end
 end
   ╠═╡ =#
 
+# ╔═╡ 32adc0c7-330f-4274-8ed7-70550193cb01
+ss = [(; b, a, z) for b ∈ m.b, a ∈ m.a, z ∈ m.z]
+
+# ╔═╡ 3c9786bf-b51a-47a2-ba7c-55e2218afd4a
+let
+	y = reshape(df.v, size(ss))[:,20,1]
+	bc = zeros(size(y))
+	inds = (10, )
+	grids = (; m.b)
+	@info length(grids) length(size(y)) length(inds)
+	
+	differentiate(y, grids, inds, bc)
+end
+
+# ╔═╡ ad653a73-7cfa-4a11-9347-908730a6b9db
+let
+	y = reshape(df.v, size(ss))[:,:,1]
+	bc = zeros(size(y))
+	differentiate(y, (; m.b, m.a), (10,20), bc)
+end
+
+# ╔═╡ 4d631fea-181b-4a53-87cc-f5fa2229a64c
+let
+	y = reshape(df.v, size(ss))
+	grids = (; m.b, m.a, m.z)
+	inds = (10,20,1)
+	bc = zeros(size(y))
+	out   = differentiate(y, grids , inds, bc)
+	check = differentiate_2_naive(y, grids, inds, bc)
+
+	out, check
+end
+
 # ╔═╡ d7b46231-2db5-46a5-85ce-eda87b1a29b8
 construct_A_new(out_c, out_d, m)
 
@@ -881,9 +1107,6 @@ begin
 
 	@test A ≈ A_new
 end
-
-# ╔═╡ 691088ff-9dff-4fe7-bb54-2e4e7fbf0560
-construct_A_new(out_c, out_d, m).switch
 
 # ╔═╡ 3a43bab0-c058-4665-8939-a3920c9986d1
 md"""
@@ -902,6 +1125,7 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
 PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
@@ -913,6 +1137,7 @@ CairoMakie = "~0.8.8"
 Chain = "~0.5.0"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
+NamedTupleTools = "~0.14.0"
 PlutoTest = "~0.2.2"
 PlutoUI = "~0.7.39"
 StructArrays = "~0.6.11"
@@ -1624,9 +1849,14 @@ version = "0.3.3"
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 
 [[deps.NaNMath]]
-git-tree-sha1 = "737a5957f387b17e74d4ad2f440eb330b39a62c5"
+git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
-version = "1.0.0"
+version = "0.3.7"
+
+[[deps.NamedTupleTools]]
+git-tree-sha1 = "befc30261949849408ac945a1ebb9fa5ec5e1fd5"
+uuid = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
+version = "0.14.0"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
@@ -2197,6 +2427,7 @@ version = "3.5.0+0"
 # ╠═91b63bfc-f4a4-41c1-a472-7d13df27b93c
 # ╠═b8a7269f-27ae-4c37-b73e-7decb8333ea9
 # ╟─830448b7-1700-4312-91ce-55f86aaa33a4
+# ╠═32adc0c7-330f-4274-8ed7-70550193cb01
 # ╠═ed6045c0-b76c-4691-9f05-c943c542d13f
 # ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
 # ╟─03ec6276-09a4-4f66-a864-19e2e0d825eb
@@ -2214,10 +2445,22 @@ version = "3.5.0+0"
 # ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
 # ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
 # ╠═2befd2fa-ca64-4606-b55d-6163709f2e6e
+# ╟─9c0ec3bd-e8d9-4278-8230-56dcd783be82
+# ╠═8c293630-e2a2-4123-9523-0e6f01a7f1d0
+# ╠═10e8f1f6-820c-432a-8b3e-3abb7652f780
+# ╠═5267753b-212b-4d80-b4a5-aa74648890df
+# ╠═42f3458b-9acd-4daa-9d01-7e76767b1a91
+# ╠═731cf94b-8a88-4fd6-8728-851c43500f1e
+# ╠═459a01c4-2b9c-437b-8502-c7331729f37d
+# ╠═a6528bdc-db07-4d62-8705-6948dc9b7fdb
+# ╠═abca9b50-f347-484a-9a16-a1e0f48cfdd9
+# ╠═3c9786bf-b51a-47a2-ba7c-55e2218afd4a
+# ╠═ad653a73-7cfa-4a11-9347-908730a6b9db
+# ╠═4d631fea-181b-4a53-87cc-f5fa2229a64c
+# ╠═0628188a-d8b6-4f1a-9f57-69ec895bd6b7
 # ╟─9689b9fd-c553-4650-99e9-466edd2acdb4
 # ╠═d7b46231-2db5-46a5-85ce-eda87b1a29b8
 # ╠═39c77283-4ef8-406f-aa00-ee3cec4db5e1
-# ╠═691088ff-9dff-4fe7-bb54-2e4e7fbf0560
 # ╟─6b298d9f-1526-477a-8d58-2cf76af539d1
 # ╠═85bc873e-c9d3-4006-81d3-de3db8d18f7b
 # ╟─7401e4ea-d8bb-4e22-b7ec-ab2ab458c910
