@@ -592,7 +592,13 @@ function solve_HJB_new(model, maxit = 35)
 	u = zeros(I,J,Nz)
 	
 	#INITIAL GUESS
-	v0 = util.((1-xi)*w*zzz + ra.*aaa + rb_neg.*bbb, Ref(model)) ./ rho
+	function initial_guess(z, a, b, model)
+		(; xi, w, rho) = model
+		c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * b #R_b(b, model)
+		util(c_init, model) / rho
+	end
+	
+	v0 = initial_guess.(zzz, aaa, bbb, Ref(model))
 	v = copy(v0)
 
 
