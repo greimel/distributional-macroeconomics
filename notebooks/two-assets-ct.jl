@@ -600,8 +600,13 @@ function solve_HJB_new(model, maxit = 35)
 	u = zeros(I,J,Nz)
 	
 	#INITIAL GUESS
-	c0 = (1-xi)*w*zzz + model.ra .* aaa + model.rb_neg .* bbb 
-	v0 = util.(c0, Ref(model)) ./ rho
+	function initial_guess(z, a, b, model)
+		(; xi, w, rho) = model
+		c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * b #R_b(b, model)
+		util(c_init, model) / rho
+	end
+	
+	v0 = initial_guess.(zzz, aaa, bbb, Ref(model))
 	v = copy(v0)
 	
 	for n=1:maxit
@@ -2073,7 +2078,7 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─c89f1918-01ee-11ed-22fa-edd66e0f6c59
+# ╠═c89f1918-01ee-11ed-22fa-edd66e0f6c59
 # ╟─629b8291-0f13-419e-b1c0-d10d5e708720
 # ╠═b48b0674-1bcb-48e5-9b05-57dea5877715
 # ╟─828dee22-1ee7-41c4-b68b-f88facea86d9
