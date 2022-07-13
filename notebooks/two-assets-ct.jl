@@ -377,37 +377,6 @@ md"""
 ### HJB Greimel
 """
 
-# ╔═╡ ed6045c0-b76c-4691-9f05-c943c542d13f
-Base.@kwdef struct TwoAssets
-	γ = 2 #CRRA utility with parameter gamma
-	ra = 0.05
-	rb_pos = 0.03
-	rb_neg = 0.12
-	ϱ = 0.06 #discount rate
-	χ₀ = 0.03
-	χ₁ = 2
-	ξ = 0.1 #fraction of income that is automatically deposited
-	#Income process (two-state Poisson process):
-	w = 4
-	Nz = 2
-	z      = [.8, 1.3]
-	Λ = [-1/3 1/3; 1/3 -1/3]
-	crit = 10^(-5)
-	Δ = 100
-	#grids
-	I = 100
-	bmin = -2
-	bmax = 40
-	b = range(bmin,bmax,length=I)
-	db = (bmax-bmin)/(I-1)
-	J = 50
-	amin = 0
-	amax = 70
-	a = range(amin,amax,length=J)
-	da = (amax-amin)/(J-1)
-	τ = 10
-end
-
 # ╔═╡ 03ec6276-09a4-4f66-a864-19e2e0d825eb
 md"""
 if ``r_a \gg r_b``, impose tax on ``ra \cdot a`` at high ``a``, otherwise some households accumulate infinite illiquid wealth (not needed if ``r_a`` is close to or less than ``r_b``)
@@ -568,6 +537,45 @@ function get_d_upwind(VaB, VaF, VbB, VbF, state, model)
 	
 	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd, MF, MB)
 end	
+
+# ╔═╡ ed6045c0-b76c-4691-9f05-c943c542d13f
+begin
+	Base.@kwdef struct TwoAssets
+		γ = 2 #CRRA utility with parameter gamma
+		ra = 0.05
+		rb_pos = 0.03
+		rb_neg = 0.12
+		ϱ = 0.06 #discount rate
+		χ₀ = 0.03
+		χ₁ = 2
+		ξ = 0.1 #fraction of income that is automatically deposited
+		#Income process (two-state Poisson process):
+		w = 4
+		Nz = 2
+		z      = [.8, 1.3]
+		Λ = [-1/3 1/3; 1/3 -1/3]
+		crit = 10^(-5)
+		Δ = 100
+		#grids
+		I = 100
+		bmin = -2
+		bmax = 40
+		b = range(bmin,bmax,length=I)
+		db = (bmax-bmin)/(I-1)
+		J = 50
+		amin = 0
+		amax = 70
+		a = range(amin,amax,length=J)
+		da = (amax-amin)/(J-1)
+		τ = 10
+	end
+	
+	function (model::TwoAssets)(state::NamedTuple, (; vb_up, vb_down, va_up, va_down))
+		out_d = get_d_upwind(va_down, va_up, vb_down, vb_up, state, model)
+		out_c = get_c_upwind(vb_down, vb_up, state, model)
+		(; out_d, out_c)
+	end
+end
 
 # ╔═╡ 9c0ec3bd-e8d9-4278-8230-56dcd783be82
 md"""
@@ -934,41 +942,35 @@ end
 function solve_HJB_new(model, maxit = 35)
 	(; ϱ) = model
 	(; Δ, crit) = model
-	(; a, b, z, I, J, Nz, amin, amax, bmin, bmax, db, da) = model
+	(; a, b, z) = model
 
 	# initialize vector that keeps track of convergence
 	dists = []
 
+	grids = (; b, a, z)
 	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
 		
 	#INITIAL GUESS
 	v = initial_guess.(statespace, Ref(model))
 
 	bc = zeros(size(v))
-	c_bd = get_c₀.(statespace[I,:,:], Ref(model)) |> StructArray
-	bc[I,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
-	c_bd = get_c₀.(statespace[1,:,:], Ref(model)) |> StructArray
-	bc[1,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
-	
+	c_bd = get_c₀.(statespace[end,:,:], Ref(model)) |> StructArray
+	bc[end,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+	c_bd = get_c₀.(statespace[begin,:,:], Ref(model)) |> StructArray
+	bc[begin,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+
 	for n=1:maxit
 	    V = v;
 
-		grids = (; b, a, z)
-		inds = (10,20,1)
-		∂s = map(CartesianIndices(V)) do inds
-			differentiate(V, grids, inds, bc)
+		out = map(CartesianIndices(V)) do inds
+		    # Forward and backward differences w.r.t. b and a
+			∂s = differentiate(V, grids, inds, bc)
+			state = statespace[inds]
+			model(state, ∂s)
 		end |> StructArray
 
-		# DERIVATIVES
-	    # Forward and backward differences w.r.t. b
-		VbF = ∂s.vb_up 
-		VbB = ∂s.vb_down
-	    # Forward and backward differences w.r.t. a
-		VaF = ∂s.va_up 
-		VaB = ∂s.va_down
-	 
-		out_d = get_d_upwind.(VaB, VaF, VbB, VbF, statespace, Ref(model)) |> StructArray
-		out_c = get_c_upwind.(VbB, VbF, statespace, Ref(model)) |> StructArray
+		out_d = StructArray(out.out_d)
+		out_c = StructArray(out.out_c)	 
 
 		(; A) = construct_A_new(out_c, out_d, model, true)
 	    		
@@ -989,7 +991,7 @@ function solve_HJB_new(model, maxit = 35)
 	    	    
 	    V_new = B\(vec(u) + vec(V)/Δ) #SOLVE SYSTEM OF EQUATIONS
 	        
-	    V = reshape(V_new, I,J,Nz)   
+	    V = reshape(V_new, size(statespace))
 	    
 	    Vchange = V - v
 	    v .= V
