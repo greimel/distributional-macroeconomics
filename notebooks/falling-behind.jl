@@ -13,6 +13,9 @@ using LinearAlgebra: I, dot
 # ╔═╡ 16f6d020-561c-43ea-bd1f-606890b7e009
 using Roots
 
+# ╔═╡ 8ca25b51-89fa-47af-b2a0-e109e9b0f98a
+using Statistics
+
 # ╔═╡ 43174c3f-e313-46c0-ba79-33b5ace09c21
 using DataFrames, DataFrameMacros, Chain
 
@@ -51,7 +54,7 @@ Base.@kwdef struct TractableModel
 end
 
 # ╔═╡ 37618646-be2e-474d-972f-e2e84b914765
-function choices(p, (; r, δ, ξ, ε, ϕ, G, group_weights, HS_ela, α, L̄), y)
+function choices(p, (; r, δ, ξ, ε, ϕ, G, group_weights, groups, HS_ela, α, L̄), y)
 	κ₀ = ((r + δ) * (1-ξ)/ξ * p)^(1/(1-ε))
 	κ₁ = 1 / (p * (r + δ)/κ₀ + 1)
 	κ₂ = κ₁/κ₀
@@ -62,14 +65,15 @@ function choices(p, (; r, δ, ξ, ε, ϕ, G, group_weights, HS_ela, α, L̄), y)
 		@assert κ₁ ≈ 1 / (ξ/ (1-ξ) + 1)
 		@assert κ₁ ≈ 1-ξ
 		@assert κ₂ ≈ ξ / (p * (r + δ))
-		@debug κ₃ ≈ 1 / (1 + p*r/(δ * p + κ₀))
+		@assert κ₃ ≈ 1 / (1 + p*r/(δ * p + κ₀))
 	end
 	
 	a₀ = zeros(size(y))
 	𝒴 = r .* a₀ + y
 	h = (I - κ₁ * ϕ * G) \ (κ₂ * 𝒴)
 	debt = y - κ₃ * 𝒴 + (1-κ₃) * ((I - κ₁ * ϕ * G) \ 𝒴 - 𝒴)
-	
+
+	∑𝒴    = sum(𝒴, group_weights)
 	∑h    = sum(h, group_weights)
 	∑debt = sum(debt, group_weights)
 
@@ -78,22 +82,24 @@ function choices(p, (; r, δ, ξ, ε, ϕ, G, group_weights, HS_ela, α, L̄), y)
 	Iₕ_supply = (α * p)^HS_ela * L̄
 	ζₕ = Iₕ_demand - Iₕ_supply
 	ζₕ_rel = ζₕ / maximum(abs, [Iₕ_demand, Iₕ_supply])
-	(; p, Iₕ_demand, Iₕ_supply, ζₕ, ζₕ_rel, h, debt, ∑h, ∑debt, κ₀, κ₁, κ₂, κ₃, ϕ)
+
+	group_tbl = (; h, debt, 𝒴, groups, group_weights)
+	
+	(; p, Iₕ_demand, Iₕ_supply, ζₕ, ζₕ_rel, ∑h, ∑debt, d2y = ∑debt / ∑𝒴, d2ph = ∑debt / (p * ∑h), ϕ, group_tbl)
 end
 
 # ╔═╡ 62d8a4e2-1a24-48c8-b044-6c25147dcf51
 df = let
 	pars = [
-		"wo " => TractableModel(ϕ = 0.0),
+		#"wo " => TractableModel(ϕ = 0.0),
 		"w" => TractableModel(ϕ = 0.7),
-		"wo CD" => TractableModel(ϕ = 0.0, ε = 0.0),
+		#"wo CD" => TractableModel(ϕ = 0.0, ε = 0.0),
 		"w CD" => TractableModel(ϕ = 0.7, ε = 0.0),
 		#"wo KMV" => TractableModel(ϕ = 0.0, ela = 1.25),
-		#"w KMV" => TractableModel(ϕ = 0.7, ela = 1.25)
+		"w KMV" => TractableModel(ϕ = 0.7, ela = 1.25)
 	]
 
 
-	
 	𝒴₀ = [0.5, 1.0, 2.5]
 	𝒴₁ = copy(𝒴₀)
 	𝒴₁[3] *= 2.0
@@ -114,12 +120,41 @@ df = let
 end
 	
 
+# ╔═╡ 2db97ad1-7662-48f6-b546-ff11b267013b
+@chain df begin
+	select(:label, :𝒴_label, :group_tbl => AsTable)
+	flatten([:h, :debt, :𝒴, :groups, :group_weights])
+	stack([:h, :debt, :𝒴])
+	#data(_) * mapping(:𝒴_label, :value, row = :variable, col = :label, stack = :groups, color = :groups) * visual(BarPlot)
+	#draw(facet = (linkyaxes = false, ))
+	@groupby(:𝒴_label, :variable, :label)
+	@transform(:total = @c mean(:value, weights(:group_weights)))
+	@groupby(:label, :variable, :groups)
+	@transform(
+		:Δ = @c(:value .- first(:value)),
+		:total_Δ = @c(:total .- first(:total)),
+		:total_growth = @c(:total ./ first(:total) .- 1)
+	)
+	@transform(:wtd_Δ = :Δ * :group_weights)
+	@subset(:𝒴_label != "1980")
+	@transform(:xxx = :wtd_Δ / :total_Δ * :total_growth)
+	data(_) * mapping(:𝒴_label, :xxx, row = :variable, col = :label, stack = :groups, color = :groups) * visual(BarPlot)
+	draw(facet = (linkyaxes = false, ))
+	#		:total = fill(total, size(:value))
+	#		:share = :group_weights .* :value ./ total
+	#	end
+	#)
+end
+
+# ╔═╡ 0d6b97b7-a1ef-4cd5-9868-4d9ea74591e4
+vars = [:p, :∑debt, :∑h, :d2y, :d2ph]
+
 # ╔═╡ f8888d57-2e06-4dcc-b7b6-db830840d426
 @chain df begin
-	@select(:p, :∑debt, :∑h, :label, :𝒴_label)
-	stack([:p, :∑debt, :∑h])
+	select(vars..., :label, :𝒴_label)
+	stack(vars)
 	@groupby(:label, :variable)
-	@transform(:value = @c :value ./ first(:value))
+	@transform(:value = @c :value ./ first(:value) .- 1)
 	@subset(:𝒴_label != "1980")
 	data(_) * mapping(:label => "year", :value, layout = :variable, dodge = :𝒴_label, color = :𝒴_label) * visual(BarPlot)
 	draw(facet = (linkyaxes = false, ))
@@ -278,6 +313,7 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
@@ -299,7 +335,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.0-rc3"
 manifest_format = "2.0"
-project_hash = "ab4e8f89916e91e34ffd13c8f40b17c9e0e390b2"
+project_hash = "7a65b6b39b92bcbfd9ee302c65657549163f8753"
 
 [[deps.AbstractAlgebra]]
 deps = ["GroupsCore", "InteractiveUtils", "LinearAlgebra", "MacroTools", "Markdown", "Random", "RandomExtensions", "SparseArrays", "Test"]
@@ -1914,7 +1950,10 @@ version = "3.5.0+0"
 # ╠═37618646-be2e-474d-972f-e2e84b914765
 # ╠═16f6d020-561c-43ea-bd1f-606890b7e009
 # ╠═62d8a4e2-1a24-48c8-b044-6c25147dcf51
+# ╠═8ca25b51-89fa-47af-b2a0-e109e9b0f98a
+# ╠═2db97ad1-7662-48f6-b546-ff11b267013b
 # ╠═f8888d57-2e06-4dcc-b7b6-db830840d426
+# ╠═0d6b97b7-a1ef-4cd5-9868-4d9ea74591e4
 # ╠═43174c3f-e313-46c0-ba79-33b5ace09c21
 # ╠═ce061fb9-1678-47c9-a13e-90cf90d0338c
 # ╟─b29b41b6-cc32-46a8-8c0c-dd6ccc990f71
