@@ -115,9 +115,6 @@ dina_80_groups = @chain dina_80 begin
 	@transform(:income_share = :income * :weight)
 end
 
-# ╔═╡ b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
-𝒴 = dina_80_groups.income
-
 # ╔═╡ 673d0937-a670-45a0-a7a5-6b9d9d270610
 dina_targets(; avg_sensitivity) = @chain dina_80 begin
 	disallowmissing!
@@ -137,9 +134,6 @@ dina_targets(; avg_sensitivity) = @chain dina_80 begin
 	only
 	(; _..., avg_sensitivity, hx2y = 0.3, kind = :data)
 end
-
-# ╔═╡ e518738f-6c0b-450d-a119-b17f1f71e5f0
-targets = dina_targets(avg_sensitivity=0.7)
 
 # ╔═╡ fb00431c-4eee-4041-bba6-504cd00693d6
 md"""
@@ -283,10 +277,11 @@ md"""
 # ╔═╡ 043624c1-0ee5-48db-80d2-82331ee5552e
 elas = [0.5, 1.0, 1.25]
 
-# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
-map(elas) do ela
-	#calibrate(ela, bounds; local_solver)
-end |> DataFrame
+# ╔═╡ b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
+𝒴 = dina_80_groups.income
+
+# ╔═╡ e518738f-6c0b-450d-a119-b17f1f71e5f0
+targets = dina_targets(avg_sensitivity=0.7)
 
 # ╔═╡ 6e308459-f126-4742-8e6f-33a6420bda19
 local_solver = NLopt.LN_BOBYQA()
@@ -341,23 +336,25 @@ end
 deviation(out, targets) = @combine(moments(out, targets), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
 
 # ╔═╡ 6d3a317e-8e14-457b-99a5-90baf85bfbaf
-function loss(x, p; return_details=false, append = (;))
-	named_x = NamedTuple{(:ξ, :ϕ, :ρ)}(x)
-	named_p = NamedTuple{(:ela,)}(p)
-
-	model = TractableModel(; named_x..., named_p...)
-	out = general_equilibrium(model, 𝒴)
-
-	#targets = dina_targets(; avg_sensitivity=0.7)
-	loss = abs(deviation(out, targets))
-
-	if return_details
-		
-		return (; loss, named_x..., named_p..., append..., model_statistics(out)...)
-	else
-		return loss
-	end
-end	
+function loss(targets, 𝒴)
+	function (x, p; return_details=false, append = (;))
+		named_x = NamedTuple{(:ξ, :ϕ, :ρ)}(x)
+		named_p = NamedTuple{(:ela,)}(p)
+	
+		model = TractableModel(; named_x..., named_p...)
+		out = general_equilibrium(model, 𝒴)
+	
+		#targets = dina_targets(; avg_sensitivity=0.7)
+		loss = abs(deviation(out, targets))
+	
+		if return_details
+			
+			return (; loss, named_x..., named_p..., append..., model_statistics(out)..., out.p)
+		else
+			return loss
+		end
+	end	
+end
 
 # ╔═╡ 6f3e7b25-95f2-4f77-b087-14c6543117c8
 let
@@ -368,9 +365,8 @@ let
 	s = skip(s, n₀-1, exact = true)
 	
 	map(enumerate(first(s, 1_000))) do (i, x)
-		
-	
-		(; i = i + n₀ - 1, loss(x, p, return_details=true)...)
+		ℓ = loss(targets, 𝒴)
+		(; i = i + n₀ - 1, ℓ(x, p, return_details=true)...)
 	end |> DataFrame |> x -> sort(x, :loss)
 end
 
@@ -382,12 +378,18 @@ function calibrate(ela, bounds; local_solver = NLopt.LN_NELDERMEAD())
 	ub = last.(bounds)
 	x0 = lb .+ ub ./ 2
 
-	f = OptimizationFunction(loss)
+	ℓ = loss(targets, 𝒴)
+	f = OptimizationFunction(ℓ)
 	prob = Optimization.OptimizationProblem(f, x0, _p_; lb, ub)
 
 	sol = solve(prob, MultistartOptimization.TikTak(100), local_solver)
-	loss(sol.u, prob.p, return_details=true, append = (; sol.retcode))
+	ℓ(sol.u, prob.p, return_details=true, append = (; sol.retcode))
 end
+
+# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
+map(elas) do ela
+	calibrate(ela, bounds; local_solver)
+end |> DataFrame
 
 # ╔═╡ 309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
 calibrate(0.5, bounds; local_solver)
@@ -2791,7 +2793,7 @@ version = "3.5.0+0"
 # ╠═e518738f-6c0b-450d-a119-b17f1f71e5f0
 # ╟─b052b26f-9ac2-49b0-a713-3a81169e7dcb
 # ╠═1146e3f5-d701-42fa-929f-4699efb5a5f6
-# ╟─6e308459-f126-4742-8e6f-33a6420bda19
+# ╠═6e308459-f126-4742-8e6f-33a6420bda19
 # ╠═309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
 # ╠═eb45f538-6384-475e-9de5-6bb6152a3cc1
 # ╠═6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
