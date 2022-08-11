@@ -26,6 +26,9 @@ using LinearAlgebra: I, dot
 # ╔═╡ 16f6d020-561c-43ea-bd1f-606890b7e009
 using Roots
 
+# ╔═╡ 6c8cf040-c64e-4a03-b42c-b1df688e3572
+using NamedTupleTools
+
 # ╔═╡ fa55d156-c645-4b16-b253-05f7802cfc36
 using Optimization
 
@@ -116,7 +119,7 @@ end
 𝒴 = dina_80_groups.income
 
 # ╔═╡ 673d0937-a670-45a0-a7a5-6b9d9d270610
-dina_targets = @chain dina_80 begin
+dina_targets(; avg_sensitivity) = @chain dina_80 begin
 	disallowmissing!
 	@transform(:is_owner = :ownerhome > 0)
 	@subset(:is_owner == true, :id > 0)
@@ -132,8 +135,11 @@ dina_targets = @chain dina_80 begin
 		:d2ph = -:ownermort / :ownerhome
 	)
 	only
-	(; _..., avg_sensitivity = 0.7, hx2y = 0.3, kind = :data)
+	(; _..., avg_sensitivity, hx2y = 0.3, kind = :data)
 end
+
+# ╔═╡ e518738f-6c0b-450d-a119-b17f1f71e5f0
+targets = dina_targets(avg_sensitivity=0.7)
 
 # ╔═╡ fb00431c-4eee-4041-bba6-504cd00693d6
 md"""
@@ -170,11 +176,11 @@ Base.@kwdef struct TractableModel
 	ξ = 0.3 # utility weight of consumption
 	ela = 0.15
 	ε = 1 - 1/ela
-	δ = 0.021
+	δ = 0.04 #1
 	ϕ = 0.7 # strength of the comparison motive
-	G = [0  0.5  0.5;
-		 0  0    1.0;
-		 0  0    0  ]
+	G = [1//3  1//3  1//3;
+		 0     1//2  1//2;
+		 0        0  1//1;]
 	p = 1.0
 	HS_ela = 1.5
 	α = HS_ela / (1 + HS_ela)
@@ -264,9 +270,6 @@ model_statistics(out) = (;
 	kind = :model
 )
 
-# ╔═╡ af7e1d1a-21c8-4c85-be4c-e46f5538df92
-_p_ = [1.25]
-
 # ╔═╡ 279101cf-0d99-4446-b25a-b7e2dd7b75f4
 md"""
 ### Trying a few Sobol numbers
@@ -276,6 +279,17 @@ md"""
 md"""
 ### Trying `TikTak` with different local solvers
 """
+
+# ╔═╡ 043624c1-0ee5-48db-80d2-82331ee5552e
+elas = [0.5, 1.0, 1.25]
+
+# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
+map(elas) do ela
+	#calibrate(ela, bounds; local_solver)
+end |> DataFrame
+
+# ╔═╡ 6e308459-f126-4742-8e6f-33a6420bda19
+local_solver = NLopt.LN_BOBYQA()
 
 # ╔═╡ e5d106d5-069b-464d-8555-8bd546a0a042
 md"""
@@ -296,7 +310,7 @@ par = TractableModel(; ϕ = _ϕ_, ela = 1.0, ξ=_ξ_, ρ = _ρ_)
 out = general_equilibrium(par, 𝒴)
 
 # ╔═╡ 5f8a5a6c-a628-46a6-a90c-8df775643e9c
-bounds = [(eps(), 1-eps()), (eps(), 1-eps()), (eps(), 0.10)]
+bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.10)]
 
 # ╔═╡ 8174336f-bb98-4fb5-a275-53d16e4e1ab3
 target_weights = (; 
@@ -309,9 +323,9 @@ target_weights = (;
 )
 
 # ╔═╡ b4852dd9-97f5-402f-916e-e387e52c0694
-moments(out) = let
+moments(out, targets) = let
 	df = DataFrame([
-		model_statistics(out), dina_targets, target_weights
+		model_statistics(out), targets, target_weights
 	])
 
 	@chain df begin
@@ -324,17 +338,18 @@ moments(out) = let
 end
 
 # ╔═╡ 2eb5df98-f294-481d-b0b3-947f020b0d47
-deviation(out) = @combine(moments(out), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
+deviation(out, targets) = @combine(moments(out, targets), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
 
 # ╔═╡ 6d3a317e-8e14-457b-99a5-90baf85bfbaf
 function loss(x, p; return_details=false, append = (;))
 	named_x = NamedTuple{(:ξ, :ϕ, :ρ)}(x)
-	named_p = NamedTuple{(:ela, )}(p)
-	
+	named_p = NamedTuple{(:ela,)}(p)
+
 	model = TractableModel(; named_x..., named_p...)
 	out = general_equilibrium(model, 𝒴)
 
-	loss = abs(deviation(out))
+	#targets = dina_targets(; avg_sensitivity=0.7)
+	loss = abs(deviation(out, targets))
 
 	if return_details
 		
@@ -347,7 +362,7 @@ end
 # ╔═╡ 6f3e7b25-95f2-4f77-b087-14c6543117c8
 let
 	n₀ = 1
-	p = _p_ #[1.0] # ela
+	p = [1.0] #, 0.7] # ela
 	
 	s = SobolSeq(first.(bounds), last.(bounds))
 	s = skip(s, n₀-1, exact = true)
@@ -359,39 +374,32 @@ let
 	end |> DataFrame |> x -> sort(x, :loss)
 end
 
-# ╔═╡ 769c6de6-a86f-428e-8387-2c91ed14f9dd
-prob = begin
+# ╔═╡ 1146e3f5-d701-42fa-929f-4699efb5a5f6
+function calibrate(ela, bounds; local_solver = NLopt.LN_NELDERMEAD())
+	_p_ = [ela]
+
 	lb = first.(bounds)
 	ub = last.(bounds)
 	x0 = lb .+ ub ./ 2
 
 	f = OptimizationFunction(loss)
-	Optimization.OptimizationProblem(f, x0, _p_; lb, ub)
+	prob = Optimization.OptimizationProblem(f, x0, _p_; lb, ub)
+
+	sol = solve(prob, MultistartOptimization.TikTak(100), local_solver)
+	loss(sol.u, prob.p, return_details=true, append = (; sol.retcode))
 end
 
-# ╔═╡ 76a28ea0-d9b1-476d-ae85-c6bb663cd7ea
-# ╠═╡ disabled = true
-#=╠═╡
-let
-	sol = solve(prob, MultistartOptimization.TikTak(100), NLopt.LN_NEWUOA())
-	x_opt = sol.u
-	loss(x_opt, prob.p, return_details=true, append = (; sol.retcode))
-end
-  ╠═╡ =#
+# ╔═╡ 309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
+calibrate(0.5, bounds; local_solver)
 
-# ╔═╡ b579f3c2-3d65-4350-a65d-1a28ddac50f7
-let
-	sol = solve(prob, MultistartOptimization.TikTak(100), NLopt.LN_NELDERMEAD())
-	x_opt = sol.u
-	loss(x_opt, prob.p, return_details=true, append = (; sol.retcode))
-end
+# ╔═╡ eb45f538-6384-475e-9de5-6bb6152a3cc1
+calibrate(1.0, bounds; local_solver)
 
-# ╔═╡ 63dfe40c-ab51-40a6-a871-ea6f59f24c07
-let
-	sol = solve(prob, MultistartOptimization.TikTak(100), NLopt.LN_BOBYQA())
-	x_opt = sol.u
-	loss(x_opt, prob.p, return_details=true, append = (; sol.retcode))
-end
+# ╔═╡ 6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
+calibrate(1.25, bounds; local_solver)
+
+# ╔═╡ 7d6088f8-2ffe-4238-9cb9-c0b7e765cc4d
+
 
 # ╔═╡ 082e201e-6732-432f-9323-162c84b68a25
 md"""
@@ -833,16 +841,16 @@ data_raw = @chain get_scf(1989) begin
 end
 
 # ╔═╡ 26cb90ad-e3ce-4a9f-9d9b-36e43a103057
-data_statistics = (; 
+scf_targets(; avg_sensitivity) = (; 
 	ph2y = data_raw.HOUSES / data_raw.INCOME, 
 	d2y = data_raw.NH_MORT / data_raw.INCOME,
 	d2ph = data_raw.NH_MORT / data_raw.HOUSES,
-	avg_sensitivity = 0.7, hx2y = 0.3,
+	avg_sensitivity, hx2y = 0.3,
 	kind = :data
 )
 
 # ╔═╡ a44b1c72-3bb5-4ff7-9378-275dffba2358
-data_statistics
+scf_targets(avg_sensitivity=0.7)
 
 # ╔═╡ 121b5939-216b-4864-9845-30ec53989f56
 md"""
@@ -881,6 +889,7 @@ DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
 Optimization = "7f7a1694-90dd-40f0-9382-eb1efda571ba"
 OptimizationMultistartOptimization = "e4316d97-8bbb-4fd3-a7d8-3851d2a72823"
 OptimizationNLopt = "4e6fcdb7-1186-4e1f-a706-475e75c168bb"
@@ -903,6 +912,7 @@ DataDeps = "~0.7.9"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 HypertextLiteral = "~0.9.4"
+NamedTupleTools = "~0.14.0"
 Optimization = "~3.8.2"
 OptimizationMultistartOptimization = "~0.1.0"
 OptimizationNLopt = "~0.1.0"
@@ -1958,6 +1968,11 @@ git-tree-sha1 = "a7c3d1da1189a1c2fe843a3bfa04d18d20eb3211"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "1.0.1"
 
+[[deps.NamedTupleTools]]
+git-tree-sha1 = "befc30261949849408ac945a1ebb9fa5ec5e1fd5"
+uuid = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
+version = "0.14.0"
+
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
 git-tree-sha1 = "18efc06f6ec36a8b801b23f076e3c6ac7c3bf153"
@@ -2743,8 +2758,6 @@ version = "3.5.0+0"
 # ╠═f14f868b-d6ad-43b5-82f6-5eba76fc344b
 # ╠═15c84e2b-e828-4320-9140-09a4a6c88968
 # ╠═e5d0b7c5-9d96-4702-b7dd-70f9c9e69ef2
-# ╠═b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
-# ╠═a44b1c72-3bb5-4ff7-9378-275dffba2358
 # ╠═673d0937-a670-45a0-a7a5-6b9d9d270610
 # ╟─fb00431c-4eee-4041-bba6-504cd00693d6
 # ╠═1d6866f4-af9c-444f-ba93-65b5900b9ee1
@@ -2763,19 +2776,25 @@ version = "3.5.0+0"
 # ╠═e0135a19-bf81-46c0-8b25-15e320a39e78
 # ╠═a6d14acc-8b2a-4736-a774-a03174f3ca42
 # ╟─7b4f2179-15fe-4651-94d0-1765c6ed8b83
+# ╠═6c8cf040-c64e-4a03-b42c-b1df688e3572
 # ╠═6d3a317e-8e14-457b-99a5-90baf85bfbaf
 # ╠═6ac092f8-8f03-4a1f-91f3-1177efd99745
-# ╠═af7e1d1a-21c8-4c85-be4c-e46f5538df92
 # ╟─279101cf-0d99-4446-b25a-b7e2dd7b75f4
 # ╠═6f3e7b25-95f2-4f77-b087-14c6543117c8
 # ╟─2816d37a-7ea1-4c0a-9149-373c9a4361a6
 # ╠═fa55d156-c645-4b16-b253-05f7802cfc36
 # ╠═fda2e873-d974-42f3-97fe-94223ab0b077
 # ╠═4644fac4-a6ed-48f4-b822-40f1df4977f8
-# ╠═769c6de6-a86f-428e-8387-2c91ed14f9dd
-# ╠═76a28ea0-d9b1-476d-ae85-c6bb663cd7ea
-# ╠═b579f3c2-3d65-4350-a65d-1a28ddac50f7
-# ╠═63dfe40c-ab51-40a6-a871-ea6f59f24c07
+# ╠═043624c1-0ee5-48db-80d2-82331ee5552e
+# ╠═b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
+# ╠═a44b1c72-3bb5-4ff7-9378-275dffba2358
+# ╠═e518738f-6c0b-450d-a119-b17f1f71e5f0
+# ╟─b052b26f-9ac2-49b0-a713-3a81169e7dcb
+# ╠═1146e3f5-d701-42fa-929f-4699efb5a5f6
+# ╟─6e308459-f126-4742-8e6f-33a6420bda19
+# ╠═309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
+# ╠═eb45f538-6384-475e-9de5-6bb6152a3cc1
+# ╠═6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
 # ╟─e5d106d5-069b-464d-8555-8bd546a0a042
 # ╠═a2d3f53b-2c15-4b17-83e9-25f6b975ee65
 # ╠═5be2de51-2391-457a-8b94-c07e364d3eef
@@ -2784,6 +2803,7 @@ version = "3.5.0+0"
 # ╠═b4852dd9-97f5-402f-916e-e387e52c0694
 # ╠═8174336f-bb98-4fb5-a275-53d16e4e1ab3
 # ╠═26cb90ad-e3ce-4a9f-9d9b-36e43a103057
+# ╠═7d6088f8-2ffe-4238-9cb9-c0b7e765cc4d
 # ╠═d0da815f-65ea-40d7-ba77-d93afcb9a889
 # ╟─082e201e-6732-432f-9323-162c84b68a25
 # ╠═62d8a4e2-1a24-48c8-b044-6c25147dcf51
