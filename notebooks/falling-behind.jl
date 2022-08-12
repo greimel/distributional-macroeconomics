@@ -17,12 +17,6 @@ end
 # ╔═╡ f14f868b-d6ad-43b5-82f6-5eba76fc344b
 using DINA
 
-# ╔═╡ d8cfaacb-b3de-41de-a2d1-6d1eeabaa2c7
-using StatsBase: weights
-
-# ╔═╡ 90f6bf62-752d-4018-beec-fa2239fc2db1
-using LinearAlgebra: I, dot
-
 # ╔═╡ 16f6d020-561c-43ea-bd1f-606890b7e009
 using Roots
 
@@ -53,6 +47,12 @@ using HypertextLiteral
 # ╔═╡ ab5b369e-5834-4154-ac75-fa10cc1d0d8b
 using Symbolics
 
+# ╔═╡ d8cfaacb-b3de-41de-a2d1-6d1eeabaa2c7
+using StatsBase: weights
+
+# ╔═╡ 90f6bf62-752d-4018-beec-fa2239fc2db1
+using LinearAlgebra: I, dot
+
 # ╔═╡ d2590b30-c26a-4502-a374-1e388894abc3
 using CSV: CSV
 
@@ -78,9 +78,27 @@ begin
 	end
 end
 
+# ╔═╡ fb00431c-4eee-4041-bba6-504cd00693d6
+md"""
+## Preparations for calibration
+"""
+
+# ╔═╡ 1d6866f4-af9c-444f-ba93-65b5900b9ee1
+md"""
+* ``\bar L``: The value of new land permits ``\bar L`` is set so that employment in the construction sector is 5% of total employment, consistent with Bureau of Labor Statistics data for 1998.
+* ``\xi``
+* ``\frac{1}{1-\varepsilon} \in [0.15, 1.25]``: micro vs macro estimates
+* ``\frac{\alpha}{1-\alpha} = 1.5`` median value across MSAs in Saiz (2010)
+* ``
+* ``\gamma``: 1.5
+* ``\delta``: 0.021
+* ``\rho``
+* ``\phi``
+"""
+
 # ╔═╡ 9e825451-37d8-4812-86c4-609e9296a179
 md"""
-## Targets from DINA
+### Targets from DINA
 """
 
 # ╔═╡ 15c84e2b-e828-4320-9140-09a4a6c88968
@@ -113,7 +131,7 @@ dina_80_groups = @chain dina_80 begin
 end
 
 # ╔═╡ 673d0937-a670-45a0-a7a5-6b9d9d270610
-dina_targets(; avg_sensitivity) = @chain dina_80 begin
+dina_targets(; avg_sensitivity=0.7) = @chain dina_80 begin
 	disallowmissing!
 	@transform(:is_owner = :ownerhome > 0)
 	@subset(:is_owner == true, :id > 0)
@@ -132,22 +150,9 @@ dina_targets(; avg_sensitivity) = @chain dina_80 begin
 	(; _..., avg_sensitivity, hx2y = 0.3, kind = :data)
 end
 
-# ╔═╡ fb00431c-4eee-4041-bba6-504cd00693d6
+# ╔═╡ c0e66e00-3a97-49e5-8597-5ef67bddb8e6
 md"""
-## Calibration targets
-"""
-
-# ╔═╡ 1d6866f4-af9c-444f-ba93-65b5900b9ee1
-md"""
-* ``\bar L``: The value of new land permits ``\bar L`` is set so that employment in the construction sector is 5% of total employment, consistent with Bureau of Labor Statistics data for 1998.
-* ``\xi``
-* ``\frac{1}{1-\varepsilon} \in [0.15, 1.25]``: micro vs macro estimates
-* ``\frac{\alpha}{1-\alpha} = 1.5`` median value across MSAs in Saiz (2010)
-* ``
-* ``\gamma``: 1.5
-* ``\delta``: 0.021
-* ``\rho``
-* ``\phi``
+### Targets from SCF
 """
 
 # ╔═╡ 0b1a51ea-073f-11ed-1d50-b1e334a7bcb0
@@ -255,9 +260,6 @@ md"""
 #### Specifying the loss function
 """
 
-# ╔═╡ 6c8cf040-c64e-4a03-b42c-b1df688e3572
-# using NamedTupleTools
-
 # ╔═╡ 6ac092f8-8f03-4a1f-91f3-1177efd99745
 model_statistics(out) = (;
 	out.ph2y, out.d2y, out.d2ph, out.avg_sensitivity, out.hx2y,
@@ -275,10 +277,25 @@ md"""
 """
 
 # ╔═╡ 043624c1-0ee5-48db-80d2-82331ee5552e
-elas = [0.5, 1.0, 1.25]
+elas = [0.15, 1.0, 1.25]
+
+# ╔═╡ 6804e47f-e088-4491-8fac-9a0293d5bca2
+sens = [0.7, 0.0]
+
+# ╔═╡ b7f0a0b4-bad9-4eac-ad28-28c3a449d425
+Iterators.product(elas, sens) |> collect
 
 # ╔═╡ b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
 𝒴 = dina_80_groups.income
+
+# ╔═╡ 996e4195-bfa7-4202-b391-2048a1cade93
+𝒴1 = 𝒴 .* 15.0
+
+# ╔═╡ 399278d7-807b-4e77-8adf-b6b64fdf817e
+dina_targets()
+
+# ╔═╡ 7fda0a57-1148-4f0d-b913-c148a7e6236f
+targets(t) = (; t.ph2y, t.d2y, t.d2ph, t.avg_sensitivity, t.hx2y, t.kind)
 
 # ╔═╡ 8174336f-bb98-4fb5-a275-53d16e4e1ab3
 target_weights = (; 
@@ -291,7 +308,9 @@ target_weights = (;
 )
 
 # ╔═╡ 6e308459-f126-4742-8e6f-33a6420bda19
-local_solver = NLopt.LN_BOBYQA()
+local_solver = 
+#	NLopt.LN_BOBYQA()
+	NLopt.LN_NELDERMEAD()
 
 # ╔═╡ e5d106d5-069b-464d-8555-8bd546a0a042
 md"""
@@ -312,7 +331,7 @@ par = TractableModel(; ϕ = _ϕ_, ela = 1.0, ξ=_ξ_, ρ = _ρ_)
 out = general_equilibrium(par, 𝒴)
 
 # ╔═╡ 5f8a5a6c-a628-46a6-a90c-8df775643e9c
-bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.20)]
+bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.5)]
 
 # ╔═╡ b4852dd9-97f5-402f-916e-e387e52c0694
 moments(out, targets, target_weights) = let
@@ -324,7 +343,11 @@ moments(out, targets, target_weights) = let
 		stack(Not(:kind), variable_name = :target)
 		unstack(:kind, :value)
 		disallowmissing!
-		@transform(:abs_pc_dev = abs((:model - :data)/:data))
+		@transform(:abs_pc_dev = :data ≈  
+			0.0         ? 
+			abs(:model) :
+		    abs((:model - :data)/:data)
+		)
 	end
 	
 end
@@ -367,8 +390,15 @@ function calibrate(other_params, bounds, targets, target_weights, 𝒴; local_so
 	ℓ(sol.u, prob.p, return_details=true, append = (; sol.retcode))
 end
 
-# ╔═╡ 7d6088f8-2ffe-4238-9cb9-c0b7e765cc4d
-
+# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
+df_out = map(Iterators.product(elas, sens)) do (ela, avg_sensitivity)
+	calibrate(
+		(; ela), bounds, 
+		dina_targets(; avg_sensitivity),
+		target_weights, 𝒴1;
+		local_solver
+	)
+end |> vec |> DataFrame
 
 # ╔═╡ 082e201e-6732-432f-9323-162c84b68a25
 md"""
@@ -810,22 +840,13 @@ data_raw = @chain get_scf(1989) begin
 end
 
 # ╔═╡ 26cb90ad-e3ce-4a9f-9d9b-36e43a103057
-scf_targets(; avg_sensitivity) = (; 
+scf_targets(; avg_sensitivity=0.7) = (; 
 	ph2y = data_raw.HOUSES / data_raw.INCOME, 
 	d2y = data_raw.NH_MORT / data_raw.INCOME,
 	d2ph = data_raw.NH_MORT / data_raw.HOUSES,
 	avg_sensitivity, hx2y = 0.3,
 	kind = :data
 )
-
-# ╔═╡ a44b1c72-3bb5-4ff7-9378-275dffba2358
-scf_targets(avg_sensitivity=0.7)
-
-# ╔═╡ e518738f-6c0b-450d-a119-b17f1f71e5f0
-t = scf_targets(avg_sensitivity=0.7)
-
-# ╔═╡ 7fda0a57-1148-4f0d-b913-c148a7e6236f
-targets = (; t.ph2y, t.d2y, t.d2ph, t.avg_sensitivity, t.hx2y, t.kind)
 
 # ╔═╡ 6f3e7b25-95f2-4f77-b087-14c6543117c8
 let
@@ -836,24 +857,22 @@ let
 	s = skip(s, n₀-1, exact = true)
 	
 	map(enumerate(first(s, 1_000))) do (i, x)
-		ℓ = loss(targets, 𝒴, (; ela))
+		ℓ = loss(scf_targets(), 𝒴, (; ela))
 		(; i = i + n₀ - 1, ℓ(x, p, return_details=true)...)
 	end |> DataFrame |> x -> sort(x, :loss)
 end
 
-# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
-df_out = map(elas) do ela
-	calibrate((; ela, δ = 0.05), bounds, targets, target_weights, 𝒴; local_solver)
-end |> DataFrame
+# ╔═╡ a44b1c72-3bb5-4ff7-9378-275dffba2358
+scf_targets()
 
 # ╔═╡ 309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
-calibrate((; ela=0.5), bounds, targets, target_weights, 𝒴; local_solver)
+calibrate((; ela=0.5), bounds, scf_targets(), target_weights, 𝒴; local_solver)
 
 # ╔═╡ eb45f538-6384-475e-9de5-6bb6152a3cc1
-calibrate((; ela=1.0), bounds, targets, target_weights, 𝒴; local_solver)
+calibrate((; ela=1.0), bounds, scf_targets(), target_weights, 𝒴; local_solver)
 
 # ╔═╡ 6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
-calibrate((; ela=1.25), bounds, targets, target_weights, 𝒴; local_solver)
+calibrate((; ela=1.25), bounds, scf_targets(), target_weights, 𝒴; local_solver)
 
 # ╔═╡ 121b5939-216b-4864-9845-30ec53989f56
 md"""
@@ -2750,16 +2769,17 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─fb00431c-4eee-4041-bba6-504cd00693d6
+# ╟─1d6866f4-af9c-444f-ba93-65b5900b9ee1
 # ╟─9e825451-37d8-4812-86c4-609e9296a179
 # ╠═f14f868b-d6ad-43b5-82f6-5eba76fc344b
 # ╠═15c84e2b-e828-4320-9140-09a4a6c88968
 # ╠═e5d0b7c5-9d96-4702-b7dd-70f9c9e69ef2
 # ╠═673d0937-a670-45a0-a7a5-6b9d9d270610
-# ╟─fb00431c-4eee-4041-bba6-504cd00693d6
-# ╠═1d6866f4-af9c-444f-ba93-65b5900b9ee1
+# ╟─c0e66e00-3a97-49e5-8597-5ef67bddb8e6
+# ╠═26cb90ad-e3ce-4a9f-9d9b-36e43a103057
+# ╠═d0da815f-65ea-40d7-ba77-d93afcb9a889
 # ╟─0b1a51ea-073f-11ed-1d50-b1e334a7bcb0
-# ╠═d8cfaacb-b3de-41de-a2d1-6d1eeabaa2c7
-# ╠═90f6bf62-752d-4018-beec-fa2239fc2db1
 # ╟─e8d0027f-d4e3-41eb-9181-821e3c586a22
 # ╠═cd60add2-cb80-431c-8119-def8a1b961ef
 # ╠═37618646-be2e-474d-972f-e2e84b914765
@@ -2772,36 +2792,35 @@ version = "3.5.0+0"
 # ╠═e0135a19-bf81-46c0-8b25-15e320a39e78
 # ╠═a6d14acc-8b2a-4736-a774-a03174f3ca42
 # ╟─7b4f2179-15fe-4651-94d0-1765c6ed8b83
-# ╠═6c8cf040-c64e-4a03-b42c-b1df688e3572
+# ╠═5f8a5a6c-a628-46a6-a90c-8df775643e9c
 # ╠═6d3a317e-8e14-457b-99a5-90baf85bfbaf
+# ╠═2eb5df98-f294-481d-b0b3-947f020b0d47
+# ╠═b4852dd9-97f5-402f-916e-e387e52c0694
 # ╠═6ac092f8-8f03-4a1f-91f3-1177efd99745
 # ╟─279101cf-0d99-4446-b25a-b7e2dd7b75f4
+# ╠═5be2de51-2391-457a-8b94-c07e364d3eef
 # ╠═6f3e7b25-95f2-4f77-b087-14c6543117c8
 # ╟─2816d37a-7ea1-4c0a-9149-373c9a4361a6
 # ╠═fa55d156-c645-4b16-b253-05f7802cfc36
 # ╠═fda2e873-d974-42f3-97fe-94223ab0b077
 # ╠═4644fac4-a6ed-48f4-b822-40f1df4977f8
 # ╠═043624c1-0ee5-48db-80d2-82331ee5552e
+# ╠═6804e47f-e088-4491-8fac-9a0293d5bca2
+# ╠═b7f0a0b4-bad9-4eac-ad28-28c3a449d425
 # ╠═b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
+# ╠═996e4195-bfa7-4202-b391-2048a1cade93
 # ╠═a44b1c72-3bb5-4ff7-9378-275dffba2358
-# ╠═e518738f-6c0b-450d-a119-b17f1f71e5f0
+# ╠═399278d7-807b-4e77-8adf-b6b64fdf817e
 # ╠═7fda0a57-1148-4f0d-b913-c148a7e6236f
 # ╠═8174336f-bb98-4fb5-a275-53d16e4e1ab3
+# ╠═6e308459-f126-4742-8e6f-33a6420bda19
 # ╠═b052b26f-9ac2-49b0-a713-3a81169e7dcb
 # ╠═1146e3f5-d701-42fa-929f-4699efb5a5f6
-# ╠═6e308459-f126-4742-8e6f-33a6420bda19
 # ╠═309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
 # ╠═eb45f538-6384-475e-9de5-6bb6152a3cc1
 # ╠═6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
 # ╟─e5d106d5-069b-464d-8555-8bd546a0a042
 # ╟─a2d3f53b-2c15-4b17-83e9-25f6b975ee65
-# ╠═5be2de51-2391-457a-8b94-c07e364d3eef
-# ╠═5f8a5a6c-a628-46a6-a90c-8df775643e9c
-# ╠═2eb5df98-f294-481d-b0b3-947f020b0d47
-# ╠═b4852dd9-97f5-402f-916e-e387e52c0694
-# ╠═26cb90ad-e3ce-4a9f-9d9b-36e43a103057
-# ╠═7d6088f8-2ffe-4238-9cb9-c0b7e765cc4d
-# ╠═d0da815f-65ea-40d7-ba77-d93afcb9a889
 # ╟─082e201e-6732-432f-9323-162c84b68a25
 # ╠═62d8a4e2-1a24-48c8-b044-6c25147dcf51
 # ╠═8ca25b51-89fa-47af-b2a0-e109e9b0f98a
@@ -2854,6 +2873,8 @@ version = "3.5.0+0"
 # ╠═ec31d541-2087-4cd5-93c5-6a718d61ce4b
 # ╠═293fa922-ee60-4b7d-8085-8d41d5d2363a
 # ╟─30ac4eda-2829-4879-854a-36a08acebb36
+# ╠═d8cfaacb-b3de-41de-a2d1-6d1eeabaa2c7
+# ╠═90f6bf62-752d-4018-beec-fa2239fc2db1
 # ╠═d2590b30-c26a-4502-a374-1e388894abc3
 # ╠═6a218989-d242-4318-9ceb-fceddbfeaabc
 # ╠═89668f54-762b-4cf3-bf7c-44f43b796b29
