@@ -26,9 +26,6 @@ using LinearAlgebra: I, dot
 # ╔═╡ 16f6d020-561c-43ea-bd1f-606890b7e009
 using Roots
 
-# ╔═╡ 6c8cf040-c64e-4a03-b42c-b1df688e3572
-using NamedTupleTools
-
 # ╔═╡ fa55d156-c645-4b16-b253-05f7802cfc36
 using Optimization
 
@@ -170,7 +167,7 @@ Base.@kwdef struct TractableModel
 	ξ = 0.3 # utility weight of consumption
 	ela = 0.15
 	ε = 1 - 1/ela
-	δ = 0.04 #1
+	δ = 0.022 #1
 	ϕ = 0.7 # strength of the comparison motive
 	G = [1//3  1//3  1//3;
 		 0     1//2  1//2;
@@ -258,6 +255,9 @@ md"""
 #### Specifying the loss function
 """
 
+# ╔═╡ 6c8cf040-c64e-4a03-b42c-b1df688e3572
+# using NamedTupleTools
+
 # ╔═╡ 6ac092f8-8f03-4a1f-91f3-1177efd99745
 model_statistics(out) = (;
 	out.ph2y, out.d2y, out.d2ph, out.avg_sensitivity, out.hx2y,
@@ -280,8 +280,15 @@ elas = [0.5, 1.0, 1.25]
 # ╔═╡ b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
 𝒴 = dina_80_groups.income
 
-# ╔═╡ e518738f-6c0b-450d-a119-b17f1f71e5f0
-targets = dina_targets(avg_sensitivity=0.7)
+# ╔═╡ 8174336f-bb98-4fb5-a275-53d16e4e1ab3
+target_weights = (; 
+	ph2y = 1//3,
+	d2y = 1//3,
+	d2ph = 0,
+	avg_sensitivity = 1//3,
+	hx2y = 0, #1//3,
+	kind = :weights
+)
 
 # ╔═╡ 6e308459-f126-4742-8e6f-33a6420bda19
 local_solver = NLopt.LN_BOBYQA()
@@ -305,20 +312,10 @@ par = TractableModel(; ϕ = _ϕ_, ela = 1.0, ξ=_ξ_, ρ = _ρ_)
 out = general_equilibrium(par, 𝒴)
 
 # ╔═╡ 5f8a5a6c-a628-46a6-a90c-8df775643e9c
-bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.10)]
-
-# ╔═╡ 8174336f-bb98-4fb5-a275-53d16e4e1ab3
-target_weights = (; 
-	ph2y = 0, #1//3,
-	d2y = 1//3,
-	d2ph = 0,
-	avg_sensitivity = 1//3,
-	hx2y = 1//3,
-	kind = :weights
-)
+bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.20)]
 
 # ╔═╡ b4852dd9-97f5-402f-916e-e387e52c0694
-moments(out, targets) = let
+moments(out, targets, target_weights) = let
 	df = DataFrame([
 		model_statistics(out), targets, target_weights
 	])
@@ -333,72 +330,42 @@ moments(out, targets) = let
 end
 
 # ╔═╡ 2eb5df98-f294-481d-b0b3-947f020b0d47
-deviation(out, targets) = @combine(moments(out, targets), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
+deviation(out, targets, target_weights) = @combine(moments(out, targets, target_weights), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
 
 # ╔═╡ 6d3a317e-8e14-457b-99a5-90baf85bfbaf
-function loss(targets, 𝒴)
+function loss(targets, 𝒴, other_params=(;))
 	function (x, p; return_details=false, append = (;))
 		named_x = NamedTuple{(:ξ, :ϕ, :ρ)}(x)
-		named_p = NamedTuple{(:ela,)}(p)
+		#named_p = NamedTuple{(:ela,)}(p)
 	
-		model = TractableModel(; named_x..., named_p...)
+		model = TractableModel(; named_x..., #=named_p...,=# other_params...)
 		out = general_equilibrium(model, 𝒴)
 	
 		#targets = dina_targets(; avg_sensitivity=0.7)
-		loss = abs(deviation(out, targets))
+		loss = abs(deviation(out, targets, target_weights))
 	
 		if return_details
 			
-			return (; loss, named_x..., named_p..., append..., model_statistics(out)..., out.p)
+			return (; loss, named_x..., #=named_p..., =# other_params, append..., model_statistics(out)..., out.p)
 		else
 			return loss
 		end
 	end	
 end
 
-# ╔═╡ 6f3e7b25-95f2-4f77-b087-14c6543117c8
-let
-	n₀ = 1
-	p = [1.0] #, 0.7] # ela
-	
-	s = SobolSeq(first.(bounds), last.(bounds))
-	s = skip(s, n₀-1, exact = true)
-	
-	map(enumerate(first(s, 1_000))) do (i, x)
-		ℓ = loss(targets, 𝒴)
-		(; i = i + n₀ - 1, ℓ(x, p, return_details=true)...)
-	end |> DataFrame |> x -> sort(x, :loss)
-end
-
 # ╔═╡ 1146e3f5-d701-42fa-929f-4699efb5a5f6
-function calibrate(ela, bounds; local_solver = NLopt.LN_NELDERMEAD())
-	_p_ = [ela]
-
+function calibrate(other_params, bounds, targets, target_weights, 𝒴; local_solver = NLopt.LN_NELDERMEAD())
 	lb = first.(bounds)
 	ub = last.(bounds)
 	x0 = lb .+ ub ./ 2
 
-	ℓ = loss(targets, 𝒴)
+	ℓ = loss(targets, 𝒴, other_params)
 	f = OptimizationFunction(ℓ)
-	prob = Optimization.OptimizationProblem(f, x0, _p_; lb, ub)
+	prob = Optimization.OptimizationProblem(f, x0, []; lb, ub)
 
 	sol = solve(prob, MultistartOptimization.TikTak(100), local_solver)
 	ℓ(sol.u, prob.p, return_details=true, append = (; sol.retcode))
 end
-
-# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
-map(elas) do ela
-	calibrate(ela, bounds; local_solver)
-end |> DataFrame
-
-# ╔═╡ 309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
-calibrate(0.5, bounds; local_solver)
-
-# ╔═╡ eb45f538-6384-475e-9de5-6bb6152a3cc1
-calibrate(1.0, bounds; local_solver)
-
-# ╔═╡ 6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
-calibrate(1.25, bounds; local_solver)
 
 # ╔═╡ 7d6088f8-2ffe-4238-9cb9-c0b7e765cc4d
 
@@ -854,6 +821,40 @@ scf_targets(; avg_sensitivity) = (;
 # ╔═╡ a44b1c72-3bb5-4ff7-9378-275dffba2358
 scf_targets(avg_sensitivity=0.7)
 
+# ╔═╡ e518738f-6c0b-450d-a119-b17f1f71e5f0
+t = scf_targets(avg_sensitivity=0.7)
+
+# ╔═╡ 7fda0a57-1148-4f0d-b913-c148a7e6236f
+targets = (; t.ph2y, t.d2y, t.d2ph, t.avg_sensitivity, t.hx2y, t.kind)
+
+# ╔═╡ 6f3e7b25-95f2-4f77-b087-14c6543117c8
+let
+	n₀ = 1
+	ela = 0.7
+	
+	s = SobolSeq(first.(bounds), last.(bounds))
+	s = skip(s, n₀-1, exact = true)
+	
+	map(enumerate(first(s, 1_000))) do (i, x)
+		ℓ = loss(targets, 𝒴, (; ela))
+		(; i = i + n₀ - 1, ℓ(x, p, return_details=true)...)
+	end |> DataFrame |> x -> sort(x, :loss)
+end
+
+# ╔═╡ b052b26f-9ac2-49b0-a713-3a81169e7dcb
+df_out = map(elas) do ela
+	calibrate((; ela, δ = 0.05), bounds, targets, target_weights, 𝒴; local_solver)
+end |> DataFrame
+
+# ╔═╡ 309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
+calibrate((; ela=0.5), bounds, targets, target_weights, 𝒴; local_solver)
+
+# ╔═╡ eb45f538-6384-475e-9de5-6bb6152a3cc1
+calibrate((; ela=1.0), bounds, targets, target_weights, 𝒴; local_solver)
+
+# ╔═╡ 6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
+calibrate((; ela=1.25), bounds, targets, target_weights, 𝒴; local_solver)
+
 # ╔═╡ 121b5939-216b-4864-9845-30ec53989f56
 md"""
 ## Macro History
@@ -891,7 +892,6 @@ DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
 Optimization = "7f7a1694-90dd-40f0-9382-eb1efda571ba"
 OptimizationMultistartOptimization = "e4316d97-8bbb-4fd3-a7d8-3851d2a72823"
 OptimizationNLopt = "4e6fcdb7-1186-4e1f-a706-475e75c168bb"
@@ -914,7 +914,6 @@ DataDeps = "~0.7.9"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 HypertextLiteral = "~0.9.4"
-NamedTupleTools = "~0.14.0"
 Optimization = "~3.8.2"
 OptimizationMultistartOptimization = "~0.1.0"
 OptimizationNLopt = "~0.1.0"
@@ -1970,11 +1969,6 @@ git-tree-sha1 = "a7c3d1da1189a1c2fe843a3bfa04d18d20eb3211"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "1.0.1"
 
-[[deps.NamedTupleTools]]
-git-tree-sha1 = "befc30261949849408ac945a1ebb9fa5ec5e1fd5"
-uuid = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
-version = "0.14.0"
-
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
 git-tree-sha1 = "18efc06f6ec36a8b801b23f076e3c6ac7c3bf153"
@@ -2791,19 +2785,20 @@ version = "3.5.0+0"
 # ╠═b7ff7f0f-a9e3-46c2-bf39-84c6ef67d272
 # ╠═a44b1c72-3bb5-4ff7-9378-275dffba2358
 # ╠═e518738f-6c0b-450d-a119-b17f1f71e5f0
-# ╟─b052b26f-9ac2-49b0-a713-3a81169e7dcb
+# ╠═7fda0a57-1148-4f0d-b913-c148a7e6236f
+# ╠═8174336f-bb98-4fb5-a275-53d16e4e1ab3
+# ╠═b052b26f-9ac2-49b0-a713-3a81169e7dcb
 # ╠═1146e3f5-d701-42fa-929f-4699efb5a5f6
 # ╠═6e308459-f126-4742-8e6f-33a6420bda19
 # ╠═309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
 # ╠═eb45f538-6384-475e-9de5-6bb6152a3cc1
 # ╠═6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
 # ╟─e5d106d5-069b-464d-8555-8bd546a0a042
-# ╠═a2d3f53b-2c15-4b17-83e9-25f6b975ee65
+# ╟─a2d3f53b-2c15-4b17-83e9-25f6b975ee65
 # ╠═5be2de51-2391-457a-8b94-c07e364d3eef
 # ╠═5f8a5a6c-a628-46a6-a90c-8df775643e9c
 # ╠═2eb5df98-f294-481d-b0b3-947f020b0d47
 # ╠═b4852dd9-97f5-402f-916e-e387e52c0694
-# ╠═8174336f-bb98-4fb5-a275-53d16e4e1ab3
 # ╠═26cb90ad-e3ce-4a9f-9d9b-36e43a103057
 # ╠═7d6088f8-2ffe-4238-9cb9-c0b7e765cc4d
 # ╠═d0da815f-65ea-40d7-ba77-d93afcb9a889
