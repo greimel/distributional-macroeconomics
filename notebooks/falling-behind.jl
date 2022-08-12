@@ -20,6 +20,9 @@ using DINA
 # ╔═╡ 16f6d020-561c-43ea-bd1f-606890b7e009
 using Roots
 
+# ╔═╡ 5be2de51-2391-457a-8b94-c07e364d3eef
+using Sobol
+
 # ╔═╡ fa55d156-c645-4b16-b253-05f7802cfc36
 using Optimization
 
@@ -28,9 +31,6 @@ using OptimizationMultistartOptimization
 
 # ╔═╡ 4644fac4-a6ed-48f4-b822-40f1df4977f8
 using OptimizationNLopt
-
-# ╔═╡ 5be2de51-2391-457a-8b94-c07e364d3eef
-using Sobol
 
 # ╔═╡ 8ca25b51-89fa-47af-b2a0-e109e9b0f98a
 using Statistics
@@ -260,11 +260,36 @@ md"""
 #### Specifying the loss function
 """
 
+# ╔═╡ 5f8a5a6c-a628-46a6-a90c-8df775643e9c
+bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.5)]
+
 # ╔═╡ 6ac092f8-8f03-4a1f-91f3-1177efd99745
 model_statistics(out) = (;
 	out.ph2y, out.d2y, out.d2ph, out.avg_sensitivity, out.hx2y,
 	kind = :model
 )
+
+# ╔═╡ b4852dd9-97f5-402f-916e-e387e52c0694
+moments(out, targets, target_weights) = let
+	df = DataFrame([
+		model_statistics(out), targets, target_weights
+	])
+
+	@chain df begin
+		stack(Not(:kind), variable_name = :target)
+		unstack(:kind, :value)
+		disallowmissing!
+		@transform(:abs_pc_dev = :data ≈  
+			0.0         ? 
+			abs(:model) :
+		    abs((:model - :data)/:data)
+		)
+	end
+	
+end
+
+# ╔═╡ 2eb5df98-f294-481d-b0b3-947f020b0d47
+deviation(out, targets, target_weights) = @combine(moments(out, targets, target_weights), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
 
 # ╔═╡ 279101cf-0d99-4446-b25a-b7e2dd7b75f4
 md"""
@@ -307,54 +332,6 @@ target_weights = (;
 	kind = :weights
 )
 
-# ╔═╡ 6e308459-f126-4742-8e6f-33a6420bda19
-local_solver = 
-#	NLopt.LN_BOBYQA()
-	NLopt.LN_NELDERMEAD()
-
-# ╔═╡ e5d106d5-069b-464d-8555-8bd546a0a042
-md"""
-## Calibration targets
-"""
-
-# ╔═╡ a2d3f53b-2c15-4b17-83e9-25f6b975ee65
-md"""
-* ``ξ``: $(@bind _ξ_ Slider(0.0:0.01:1.0, default = 0.3, show_value = true))
-* ``ϕ``: $(@bind _ϕ_ Slider(0.0:0.01:1.0, default = 0.2, show_value = true))
-* ``ρ``: $(@bind _ρ_ Slider(0.0:0.001:0.2, default = 0.01, show_value = true))
-"""
-
-# ╔═╡ e0135a19-bf81-46c0-8b25-15e320a39e78
-par = TractableModel(; ϕ = _ϕ_, ela = 1.0, ξ=_ξ_, ρ = _ρ_)
-
-# ╔═╡ a6d14acc-8b2a-4736-a774-a03174f3ca42
-out = general_equilibrium(par, 𝒴)
-
-# ╔═╡ 5f8a5a6c-a628-46a6-a90c-8df775643e9c
-bounds = [(eps(), 1-eps()), (0, 0.7), (eps(), 0.5)]
-
-# ╔═╡ b4852dd9-97f5-402f-916e-e387e52c0694
-moments(out, targets, target_weights) = let
-	df = DataFrame([
-		model_statistics(out), targets, target_weights
-	])
-
-	@chain df begin
-		stack(Not(:kind), variable_name = :target)
-		unstack(:kind, :value)
-		disallowmissing!
-		@transform(:abs_pc_dev = :data ≈  
-			0.0         ? 
-			abs(:model) :
-		    abs((:model - :data)/:data)
-		)
-	end
-	
-end
-
-# ╔═╡ 2eb5df98-f294-481d-b0b3-947f020b0d47
-deviation(out, targets, target_weights) = @combine(moments(out, targets, target_weights), :loss = mean(:abs_pc_dev, weights(:weights))).loss |> only
-
 # ╔═╡ 6d3a317e-8e14-457b-99a5-90baf85bfbaf
 function loss(targets, 𝒴, other_params=(;))
 	function (x, p; return_details=false, append = (;))
@@ -375,6 +352,11 @@ function loss(targets, 𝒴, other_params=(;))
 		end
 	end	
 end
+
+# ╔═╡ 6e308459-f126-4742-8e6f-33a6420bda19
+local_solver = 
+#	NLopt.LN_BOBYQA()
+	NLopt.LN_NELDERMEAD()
 
 # ╔═╡ 1146e3f5-d701-42fa-929f-4699efb5a5f6
 function calibrate(other_params, bounds, targets, target_weights, 𝒴; local_solver = NLopt.LN_NELDERMEAD())
@@ -400,13 +382,54 @@ df_out = map(Iterators.product(elas, sens)) do (ela, avg_sensitivity)
 	)
 end |> vec |> DataFrame
 
+# ╔═╡ 75d3c067-11ba-4f94-ad8a-c344d7cad1f2
+md"""
+## Working with the calibrated parameters
+"""
+
+# ╔═╡ 849367db-a99b-4b06-ada0-fed03967fbfd
+cali_params = (:ξ, :ϕ, :ρ)
+
+# ╔═╡ 91ec91fc-4993-453a-84e4-8c91cae83089
+label_dict = Dict(0.15 => "micro", 1.0 => "CD", 1.25 => "macro")
+
+# ╔═╡ e2f6885b-d255-406b-b9b3-7851baca2ad3
+par_df_calibrated = @chain df_out begin
+	select(
+		collect(cali_params) => ByRow((x...) -> NamedTuple{cali_params}(x)) => 		:cali_params,
+		:other_params
+	)
+	@select(
+		:label = label_dict[:other_params.ela],
+		:par = TractableModel(; :cali_params..., :other_params...)
+	)
+end
+
+# ╔═╡ e5d106d5-069b-464d-8555-8bd546a0a042
+md"""
+## Calibration targets
+"""
+
+# ╔═╡ a2d3f53b-2c15-4b17-83e9-25f6b975ee65
+md"""
+* ``ξ``: $(@bind _ξ_ Slider(0.0:0.01:1.0, default = 0.3, show_value = true))
+* ``ϕ``: $(@bind _ϕ_ Slider(0.0:0.01:1.0, default = 0.2, show_value = true))
+* ``ρ``: $(@bind _ρ_ Slider(0.0:0.001:0.2, default = 0.01, show_value = true))
+"""
+
+# ╔═╡ e0135a19-bf81-46c0-8b25-15e320a39e78
+par = TractableModel(; ϕ = _ϕ_, ela = 1.0, ξ=_ξ_, ρ = _ρ_)
+
+# ╔═╡ a6d14acc-8b2a-4736-a774-a03174f3ca42
+out = general_equilibrium(par, 𝒴)
+
 # ╔═╡ 082e201e-6732-432f-9323-162c84b68a25
 md"""
 ## Analysis
 """
 
-# ╔═╡ 62d8a4e2-1a24-48c8-b044-6c25147dcf51
-df = let
+# ╔═╡ 9b7c1348-2807-4ca4-8d3b-b8c914a243cc
+par_df_baseline = let
 	ϕ = 0.2
 	pars = [
 		"micro" => TractableModel(; ϕ = 0.0),
@@ -416,15 +439,17 @@ df = let
 		"macro" => TractableModel(; ϕ = 0.0, ela = 1.25),
 		"macro" => TractableModel(; ϕ, ela = 1.25)
 	]
+	DataFrame(label = first.(pars), par = last.(pars))
+end
 
-
-	𝒴₀ = [0.5, 1.0, 2.5]
+# ╔═╡ 62d8a4e2-1a24-48c8-b044-6c25147dcf51
+function run_experiments(par_df, 𝒴₀)	
 	𝒴₁ = copy(𝒴₀)
 	𝒴₁[3] *= 2.0
 
 	𝒴s = ["1980" => 𝒴₀, "2007" => 𝒴₁]
 
-	mapreduce(vcat, pars) do (label, par)
+	mapreduce(vcat, eachrow(par_df)) do (; label, par)
 		# initial equilibrium
 		p₈₀ = market_price(par, 𝒴₀)
 		out_80 = merge(choices(p₈₀, par, 𝒴₀), (; label, time = "early", 𝒴_label="1980"))
@@ -436,7 +461,12 @@ df = let
 		[out_80, out_PE, out_GE]
 	end |> DataFrame
 end
-	
+
+# ╔═╡ 5d2486ce-5b0a-4200-acab-ff5fa4acf6ef
+#df = run_experiments(par_df_baseline, [0.5, 1.0, 2.5])
+
+# ╔═╡ 5c5d6ad4-4883-425a-a198-eb74cffdd4ff
+df = run_experiments(par_df_calibrated, 𝒴1)
 
 # ╔═╡ d0925b77-4f4f-4a97-a6bf-982b318c1f2a
 Makie.current_default_theme().axis
@@ -537,6 +567,7 @@ vars3 = [:∑debt => "aggregate debt", :p => "house price", :d2y => "debt to inc
 	@transform(:change = :late - :early)
 	@transform(:pc_change = :change / :early)
 	@subset(:𝒴_label == "GE")
+	@transform(:ϕ = round(:ϕ, digits=2))
 	data(_) * mapping(
 		:ela => nonnumeric => L"elasticity of substitution $\frac{1}{1-\varepsilon}$",
 		:pc_change => "percentage change",
@@ -2819,10 +2850,17 @@ version = "3.5.0+0"
 # ╠═309a39ef-a3a8-45b0-8891-a8cd0aebfe5a
 # ╠═eb45f538-6384-475e-9de5-6bb6152a3cc1
 # ╠═6f14d6c3-ba2c-41f1-acbf-8125fec69d7c
+# ╟─75d3c067-11ba-4f94-ad8a-c344d7cad1f2
+# ╠═849367db-a99b-4b06-ada0-fed03967fbfd
+# ╠═e2f6885b-d255-406b-b9b3-7851baca2ad3
+# ╠═91ec91fc-4993-453a-84e4-8c91cae83089
 # ╟─e5d106d5-069b-464d-8555-8bd546a0a042
 # ╟─a2d3f53b-2c15-4b17-83e9-25f6b975ee65
 # ╟─082e201e-6732-432f-9323-162c84b68a25
+# ╠═9b7c1348-2807-4ca4-8d3b-b8c914a243cc
 # ╠═62d8a4e2-1a24-48c8-b044-6c25147dcf51
+# ╠═5d2486ce-5b0a-4200-acab-ff5fa4acf6ef
+# ╠═5c5d6ad4-4883-425a-a198-eb74cffdd4ff
 # ╠═8ca25b51-89fa-47af-b2a0-e109e9b0f98a
 # ╠═d0925b77-4f4f-4a97-a6bf-982b318c1f2a
 # ╠═616bc951-ad6c-4475-8394-3104a7d336b8
@@ -2845,7 +2883,7 @@ version = "3.5.0+0"
 # ╟─b4aa9303-f440-4cea-82b4-943a3c14bfac
 # ╠═fcabed90-a37b-4f1d-aea9-4914a4f95a1c
 # ╠═bd7a67c1-e465-41c4-8cb3-dfa58e79386b
-# ╟─bb63db54-1065-46e7-989c-50d080230938
+# ╠═bb63db54-1065-46e7-989c-50d080230938
 # ╟─5fc360fe-62d3-446e-91d4-88bb5bdf3d9f
 # ╟─a128a97c-0192-4cb7-8021-e5abb9f152da
 # ╟─787ca466-6d72-45f1-b6fc-878ddd2ab75b
