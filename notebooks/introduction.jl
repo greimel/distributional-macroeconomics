@@ -7,13 +7,27 @@ using InteractiveUtils
 # ╔═╡ 597b5e3e-c281-4315-8251-bcf6525a6eaf
 using PlutoUI
 
+# ╔═╡ 15beb495-81ee-4d80-89db-2b6cb4500f3b
+using PlutoTeachingTools
+
+# ╔═╡ 30be491a-662c-4baf-9242-47bf724f7c94
+present_button()
+
+# ╔═╡ 07590a45-f524-4f9c-bb98-718ea373e418
+md"""
+# The Income and Wealth Distribution in Macroeconomics
+"""
+
 # ╔═╡ de8afbd6-6e5f-4155-be79-e55fcd1bc307
 md"""
 # Measuring Inequality
 """
 
 # ╔═╡ e4134887-c3a9-4360-b2f1-8faf9e5fc42d
-
+md"""
+* [Distributional National Accounts](https://gabriel-zucman.eu/usdina/): detailed _micro-data_ on income and wealth for the US, 1946-now (Piketty, Zucman & Saez, 2018, QJE)
+* [World Inequality Database](https://wid.world): comparable data on inequality for many countries in the World
+"""
 
 # ╔═╡ cb32ed19-f6d7-441d-935d-d4f343a6d2cf
 md"""
@@ -67,7 +81,12 @@ md"""
 
 # ╔═╡ bf6ab362-16e4-42a0-89ef-c6543e84e4b1
 md"""
-## Summary
+## Modeling Inequality: Summary and Outlook
+* 
+* Outlook
+  * _Income and Wealth Distribution in Macroeconomics: A Continuous-Time Approach_ (Achdou, Han, Lasry, Lions, Moll, REStud, 2021)
+  * Solving models with aggregate uncertainty [(Auclert, Bardoczy, Rognlie, Straub, 2021, Ecma)](https://onlinelibrary.wiley.com/doi/abs/10.3982/ECTA17434)
+  * [EconPDEs.jl](https://github.com/matthieugomez/EconPDEs.jl)
 """
 
 # ╔═╡ 44062795-2591-4cda-a48f-cfd5512b8ca9
@@ -75,9 +94,47 @@ md"""
 # Recent Research 1: Causes of Inequality
 """
 
+# ╔═╡ 1fae9911-c120-42f0-bd76-31a5b80c8c85
+md"""
+
+> How to model the exogenous income process?
+
+* [Gabaix, Lasry, Lions & Moll (2016, Ecma)](https://scholar.harvard.edu/files/xgabaix/files/dynamics_of_inequality.pdf) Superstar entrepreneurs (type dependence) necessary to generate fast increase of Pareto Tail
+* [Kim & Jones (2018, JPE)](https://web.stanford.edu/~chadj/papers.html#inequality) Schumpeterian Creative Destruction leads to Pareto Distribution
+
+> How to model returns on wealth?
+
+* [Moll & Restrepo (2022, Ecma)](https://www.econometricsociety.org/publications/econometrica/2022/07/01/uneven-growth-automation’s-impact-income-and-wealth-inequality): Automation's impact on income inequality (return to wealth increasing in wealth)
+
+"""
+
 # ╔═╡ c60d372e-cca2-4c26-8ac3-6f5a75415f73
 md"""
-# Recent Research 2: Consequences of Inequality
+# Recent Research 2: Consequences of Rising Inequality
+"""
+
+# ╔═╡ 8e57dcb5-d202-4ee5-94d5-b99e1cadd9d5
+md"""
+## Household Debt and Financial Crises
+
+> What if inequality changes exogenously?
+
+* Kumhof, Ranciere & Winant (2015, AER): financial crises become for likely
+* Mian, Sufi & Straub (2021, QJE): Savings of the increases, Debt of non-rich increases, interest rates go up
+* Drechsel-Grau & Greimel (2021): Rising house prices and mortgage debt
+
+"""
+
+# ╔═╡ 61d761ca-3c7f-471a-b0a3-182a1071ac09
+md"""
+# Recent Research 3: Distributional Macroeconomics
+
+* Consumer Credit and Default
+* Macroeconomics of Housing Markets
+* Environmental Macroeconomics
+* Family Macroeconomics (intra-household decision-making)
+* Distributional Effects of Monetary Policy
+* Optimal Taxation
 """
 
 # ╔═╡ f98217db-d290-4e4f-9e83-bce6584b3f79
@@ -91,9 +148,11 @@ TableOfContents()
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 
 [compat]
+PlutoTeachingTools = "~0.2.5"
 PlutoUI = "~0.7.48"
 """
 
@@ -103,7 +162,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.2"
 manifest_format = "2.0"
-project_hash = "502a5e5263da26fcd619b7b7033f402a42a81ffc"
+project_hash = "69f995e0dc6a1c35a46792be048dc8abd510ce38"
 
 [[deps.AbstractPlutoDingetjes]]
 deps = ["Pkg"]
@@ -121,6 +180,12 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[deps.CodeTracking]]
+deps = ["InteractiveUtils", "UUIDs"]
+git-tree-sha1 = "cc4bd91eba9cdbbb4df4746124c22c0832a460d6"
+uuid = "da1fd8a2-8d9e-5ec2-8556-3022fb5608a2"
+version = "1.1.1"
+
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
 git-tree-sha1 = "eb7f0f8307f71fac7c606984ea5fb2817275d6e4"
@@ -136,6 +201,10 @@ version = "0.5.2+0"
 deps = ["Printf"]
 uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 
+[[deps.Distributed]]
+deps = ["Random", "Serialization", "Sockets"]
+uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+
 [[deps.Downloads]]
 deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
@@ -149,6 +218,12 @@ deps = ["Statistics"]
 git-tree-sha1 = "335bfdceacc84c5cdf16aadc768aa5ddfc5383cc"
 uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 version = "0.8.4"
+
+[[deps.Formatting]]
+deps = ["Printf"]
+git-tree-sha1 = "8339d61043228fdd3eb658d86c926cb282ae72a8"
+uuid = "59287772-0a20-5a39-b81b-1366585eb4c0"
+version = "0.4.2"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -177,6 +252,23 @@ deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "3c837543ddb02250ef42f4738347454f95079d4e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
+
+[[deps.JuliaInterpreter]]
+deps = ["CodeTracking", "InteractiveUtils", "Random", "UUIDs"]
+git-tree-sha1 = "0f960b1404abb0b244c1ece579a0ec78d056a5d1"
+uuid = "aa1ae85d-cabe-5617-a682-6adf51b2e16a"
+version = "0.9.15"
+
+[[deps.LaTeXStrings]]
+git-tree-sha1 = "f2355693d6778a178ade15952b7ac47a4ff97996"
+uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+version = "1.3.0"
+
+[[deps.Latexify]]
+deps = ["Formatting", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdown", "OrderedCollections", "Printf", "Requires"]
+git-tree-sha1 = "ab9aa169d2160129beb241cb2750ca499b4e90e9"
+uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+version = "0.15.17"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -207,10 +299,22 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[deps.LoweredCodeUtils]]
+deps = ["JuliaInterpreter"]
+git-tree-sha1 = "dedbebe234e06e1ddad435f5c6f4b85cd8ce55f7"
+uuid = "6f1432cf-f94c-5a45-995e-cdbf5db27b0b"
+version = "2.2.2"
+
 [[deps.MIMEs]]
 git-tree-sha1 = "65f28ad4b594aebe22157d6fac869786a255b7eb"
 uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
 version = "0.1.4"
+
+[[deps.MacroTools]]
+deps = ["Markdown", "Random"]
+git-tree-sha1 = "42324d08725e200c23d4dfb549e0d5d89dede2d2"
+uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+version = "0.5.10"
 
 [[deps.Markdown]]
 deps = ["Base64"]
@@ -237,6 +341,11 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 version = "0.3.20+0"
 
+[[deps.OrderedCollections]]
+git-tree-sha1 = "85f8e6578bf1f9ee0d11e7bb1b1456435479d47c"
+uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+version = "1.4.1"
+
 [[deps.Parsers]]
 deps = ["Dates", "SnoopPrecompile"]
 git-tree-sha1 = "cceb0257b662528ecdf0b4b4302eb00e767b38e7"
@@ -247,6 +356,24 @@ version = "2.5.0"
 deps = ["Artifacts", "Dates", "Downloads", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "Serialization", "TOML", "Tar", "UUIDs", "p7zip_jll"]
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 version = "1.8.0"
+
+[[deps.PlutoHooks]]
+deps = ["InteractiveUtils", "Markdown", "UUIDs"]
+git-tree-sha1 = "072cdf20c9b0507fdd977d7d246d90030609674b"
+uuid = "0ff47ea0-7a50-410d-8455-4348d5de0774"
+version = "0.0.5"
+
+[[deps.PlutoLinks]]
+deps = ["FileWatching", "InteractiveUtils", "Markdown", "PlutoHooks", "Revise", "UUIDs"]
+git-tree-sha1 = "8f5fa7056e6dcfb23ac5211de38e6c03f6367794"
+uuid = "0ff47ea0-7a50-410d-8455-4348d5de0420"
+version = "0.1.6"
+
+[[deps.PlutoTeachingTools]]
+deps = ["Downloads", "HypertextLiteral", "LaTeXStrings", "Latexify", "Markdown", "PlutoLinks", "PlutoUI", "Random"]
+git-tree-sha1 = "ea3e4ac2e49e3438815f8946fa7673b658e35bdb"
+uuid = "661c6b06-c737-4d37-b85c-46df65de6f69"
+version = "0.2.5"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "FixedPointNumbers", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "MIMEs", "Markdown", "Random", "Reexport", "URIs", "UUIDs"]
@@ -270,6 +397,18 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "1.2.2"
+
+[[deps.Requires]]
+deps = ["UUIDs"]
+git-tree-sha1 = "838a3a4188e2ded87a4f9f184b4b0d78a1e91cb7"
+uuid = "ae029012-a4dd-5104-9daa-d747884805df"
+version = "1.3.0"
+
+[[deps.Revise]]
+deps = ["CodeTracking", "Distributed", "FileWatching", "JuliaInterpreter", "LibGit2", "LoweredCodeUtils", "OrderedCollections", "Pkg", "REPL", "Requires", "UUIDs", "Unicode"]
+git-tree-sha1 = "dad726963ecea2d8a81e26286f625aee09a91b7c"
+uuid = "295af30f-e4ad-537b-8983-00126c2a3abe"
+version = "3.4.0"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -347,17 +486,23 @@ version = "17.4.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╠═30be491a-662c-4baf-9242-47bf724f7c94
+# ╟─07590a45-f524-4f9c-bb98-718ea373e418
 # ╟─de8afbd6-6e5f-4155-be79-e55fcd1bc307
-# ╠═e4134887-c3a9-4360-b2f1-8faf9e5fc42d
+# ╟─e4134887-c3a9-4360-b2f1-8faf9e5fc42d
 # ╟─cb32ed19-f6d7-441d-935d-d4f343a6d2cf
 # ╟─3be29490-6e7f-48fb-a4f9-b442efac6bb7
 # ╟─1ea84570-6433-11ed-3978-955b4b70b598
 # ╟─9b24fd2b-776f-4c69-b89c-c2f464e73d38
-# ╠═bf6ab362-16e4-42a0-89ef-c6543e84e4b1
+# ╟─bf6ab362-16e4-42a0-89ef-c6543e84e4b1
 # ╟─44062795-2591-4cda-a48f-cfd5512b8ca9
+# ╟─1fae9911-c120-42f0-bd76-31a5b80c8c85
 # ╟─c60d372e-cca2-4c26-8ac3-6f5a75415f73
+# ╟─8e57dcb5-d202-4ee5-94d5-b99e1cadd9d5
+# ╟─61d761ca-3c7f-471a-b0a3-182a1071ac09
 # ╟─f98217db-d290-4e4f-9e83-bce6584b3f79
 # ╠═597b5e3e-c281-4315-8251-bcf6525a6eaf
+# ╠═15beb495-81ee-4d80-89db-2b6cb4500f3b
 # ╠═438d5210-374b-41df-887d-bc3f3c625fa8
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
