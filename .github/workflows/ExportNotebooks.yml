@@ -23,8 +23,18 @@ jobs:
               with:
                   version: 1.7
             - name: Run Pluto notebooks and generate website
-              run: cp generate.jl generate2.jl; julia -e 'import Pkg; Pkg.add("Pluto"); import Pluto; Pluto.activate_notebook_environment("generate2.jl"); Pkg.instantiate(); include("generate.jl")'
-              working-directory: generate
+              shell: julia --color=yes --project=. {0} 
+              run: |
+                dir0 = pwd()
+                dir1 = joinpath(dir0, "generate")
+                cd(dir1)
+                run(`cp generate.jl generate2.jl`)
+                import Pkg
+                Pkg.add(Pkg.PackageSpec(name="Pluto", version="0.18.0"))
+                import Pluto
+                Pluto.activate_notebook_environment(joinpath(dir1, "generate2.jl"))
+                Pkg.instantiate()
+                include(joinpath(dir1, "generate.jl"))
             - name: Build and Deploy
               uses: JamesIves/github-pages-deploy-action@releases/v3
               with:
