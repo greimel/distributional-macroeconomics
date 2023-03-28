@@ -1,8 +1,11 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ f5450eab-0f9f-4b7f-9b80-992d3c553ba9
+
 
 # ╔═╡ 4e45bb36-2569-4cdc-9097-2de27e17f9b7
 md"""
@@ -271,10 +274,14 @@ end
   ╠═╡ =#
 
 # ╔═╡ 34b0b379-3d1b-4acd-ae71-6a6c64f066af
+#=╠═╡
 Q_star_sas = solve(DiscreteDP(R0, Q0, household.β), PFI).mc.p |> sparse
+  ╠═╡ =#
 
 # ╔═╡ 90feb1df-3bf5-4db3-a0d2-f836ed14bccb
+#=╠═╡
 results_sa.results.mc.p ≈ Q_star_sas
+  ╠═╡ =#
 
 # ╔═╡ 5c33d75f-0241-45c0-9afa-db73f753fed6
 md"""

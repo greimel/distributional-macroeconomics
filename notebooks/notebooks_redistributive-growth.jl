@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
@@ -14,9 +14,12 @@ macro bind(def, element)
     end
 end
 
+# ╔═╡ f5450eab-0f9f-4b7f-9b80-992d3c553ba9
+
+
 # ╔═╡ b5f3a5a5-206d-49ae-9b15-612f22cf3bfe
 md"""
-`redistributive-growth_solution.jl` | **Version 1.0** | _last updated on May 25, 2022_
+`redistributive-growth.jl` | **Version 1.0** | _last updated on May 25, 2022_
 """
 
 # ╔═╡ 578fba17-11eb-4057-8f18-fb7835e701d6
@@ -61,7 +64,7 @@ md"""
 md"""
 We consider the special case $\rho \rightarrow 0$ in which the production function has a Cobb-Douglas form:
 
-$$Y = F(K, H, l, h) = A (H^\alpha h^{1-\alpha})^\eta (K^\alpha l^{1-\alpha})^{1-\eta}$$
+$$F(K, H, l, h) = A (H^\alpha h^{1-\alpha})^\eta (K^\alpha l^{1-\alpha})^{1-\eta}$$
 """
 
 # ╔═╡ aa4b89ef-b941-42ba-ab60-e40f0741fb25
@@ -163,31 +166,7 @@ md"""
 
 # ╔═╡ 0f68c9f7-4b5e-40c7-b392-9f8d2dccde0c
 md"""
-**Solution**
-
-
-Equation 1 is the first-order condition with respect to capital in the profit maximization problem of the representative firm:
-
-$$1 + r = F_K(K, H, l, h) = \alpha (1-\eta) A (H^\alpha h^{1-\alpha})^\eta (K^{\alpha(1-\eta)-1} l^{(1-\alpha)(1-\eta)}) = \alpha (1-\eta) \frac{Y}{K}$$
-
-Equation 4 can be derived as follows:
-
-The first-order condition in the household's problem with respect to shares is 
-
-$$f_t = \frac{f_{t+1}+d_t}{1+r_{t+1}}$$
-
-Repeatedly applying this equation to substitute out $f_{t+k}$ yields 
-
-$$f_t = \sum_{k=0}^\infty \frac{d_{t+k}}{\prod_{l=0}^k (1+r_{t+l+1})}$$
-
-For the steady state, this implies (if $r>0$):
-
-$$f = \sum_{k=0}^\infty \frac{d}{(1+r)^k} = \frac{d}{r}$$ 
-
-Finally, because we have a constant-returns-to-scale production function 
-
-$$d = Y - (wl + qw + (1+r) K + \omega R_H H) = (1-\omega)R_H H$$
-
+Your answer goes here ...
 """
 
 # ╔═╡ d086f933-75ff-45e1-8b0c-88673f1a46dc
@@ -306,15 +285,12 @@ md"""
 
 The steady state interest rate $r$ = $(round(model_equations_1(K, H, mod).r*100,digits=1))% seems quite big at a first glance. 
 
-👉 Is steady state interest rate in the model roughly consistent with interest rates in the real world? Provide a brief explanation. (max. 100 words)
+👉 Is the steady state interest rate in the model roughly consistent with interest rates in the real world? Provide a brief explanation. (max. 100 words)
 """
-
-# ╔═╡ fb9f2924-ef89-4a52-bb27-2c13f72c7464
-annual_r = (1+model_equations_1(K, H, mod).r)^(1/30) - 1
 
 # ╔═╡ e9fcc415-f33e-4dbe-a422-792bf96e5974
 answer_2 = md"""
-Since the model features households that live two periods, one should not interpret 1 period as 1 year, but maybe rather as 30 years. In this case, the steady-state interest rate of $(round(model_equations_1(K, H, mod).r*100,digits=1))% corresponds to an annual rate of $(round(annual_r*100,digits=1))%. This is roughly in line with the interest rates that are observed in the real world. (If anything, this interest rate is too low if we take into account that the calibration tries to match the US economy in 1980 when real interest rates were higher than nowadays.)
+Your answer goes here ...
 """
 
 # ╔═╡ 7b77b272-6832-4f21-b4a3-5fe88d0bd209
@@ -436,35 +412,20 @@ md"""
 """
 
 # ╔═╡ 8659bc54-5551-402a-b284-5e74ef6cd9d1
-mod_ϕ = RedistributiveGrowthModel(ϕ=mod.ϕ+0.1)
+# Your
 
 # ╔═╡ f13d0b20-fa76-4038-b9dc-d351e9fd5c6e
-model_equations_1(K_init, H_init, mod_ϕ)
+# code
 
 # ╔═╡ f1af621e-76e4-45db-8fee-988cd3d16241
-res_ϕ = optimize(x -> objective_function(x, mod_ϕ), [log(K_init), log(H_init)])
+# goes
 
 # ╔═╡ 360602ad-7605-42eb-a6fd-8aa0733b7f48
-(K_ϕ, H_ϕ) = exp.(Optim.minimizer(res_ϕ))
-
-# ╔═╡ 84bb0e1f-c366-484c-bb0b-b3db539e1469
-begin 
-	trends_vars_ϕ = compute_trends_variables(K_ϕ, H_ϕ, mod_ϕ)
-	DataFrame([trends_vars, trends_vars_ϕ])
-end
-
-# ╔═╡ 925243a9-6b01-4bef-8bdb-1d3ac494724e
-trends(trends_vars_ϕ, trends_vars)
-
-# ╔═╡ fa1e341c-608b-4703-b463-c7080071f530
-(K_ϕ, H_ϕ)
-
-# ╔═╡ 3a058cf3-1665-4f8c-8436-d3cec15545e3
-model_equations_1(K_ϕ, H_ϕ, mod_ϕ)
+# here
 
 # ╔═╡ 8772b001-b85c-4d24-9b82-4bd2b2f3af9a
 answer_3 = md"""
-The verbal answer is omitted here because it depends on the growth driver considered. If the feedback that I provided on Canvas is not sufficiently clear, let me know.
+Your answer goes here ...
 """
 
 # ╔═╡ 117cb9fb-4a30-4764-9dec-4b273fdba205
@@ -481,74 +442,21 @@ $$(1-\alpha + x)Y = p \bar{L} + f + K$$
 👉 Add the exogenous increase in savings to the model and repeat exercise 3 for this alternative growth driver. (max. 200 words)
 """
 
-# ╔═╡ b3478606-bafc-4660-b154-c1ba696eb4b4
-md"""
-**Solution**
-"""
-
 # ╔═╡ cc0e0ddc-26f9-4381-975f-882581808f37
-Base.@kwdef struct RedistributiveGrowthModel2
-	L̄ = 1 # supply of land
-	ϕ = 0.2 # fraction with high human capital
-	h̃ = 8/0.2 # inelastic supply of high-skilled labor
-	l̃ = 10/(1-0.2) # inelastic supply of low-skilled labor
-	α = 0.33 # capital share
-	η = 0.45 # relative productivity of intangible capital & high-skilled labor
-	ω = 0.9 # fraction of intangibles that can be "stolen" by innovators
-	ψ = 1. # cost for producing intangibles
-	A = 1. # productivity
-	x = 0.
-end
-
-# ╔═╡ 6bb9538e-7748-49bc-aec3-f6f04c988e85
-mod_x = RedistributiveGrowthModel2(x = 0.1)
-
-# ╔═╡ 029f086d-d68a-42e8-bc48-a5ea7b420f01
-function model_equations_2_x(K, H, mod_x)
-
-	(; Y, r, R_H, f, p) = model_equations_1(K, H, mod_x)
-
-	(; α, ω, L̄, ψ, x) = mod_x
-	
-	eq_1 = H - ω/ψ * R_H                # eq. 3 (rearranged)
-	eq_2 = (1 - α + x) * Y - p * L̄ - f - K  # eq. 6 (rearranged)
-	
-	return (eq_1, eq_2)
-
-end
+# Your
 
 # ╔═╡ 0c40a31e-5eac-4502-ad93-164745772c23
-function objective_function_x(log_K_log_H, mod_x)
-
-	K = exp(log_K_log_H[1])
-	H = exp(log_K_log_H[2])
-
-	(eq_1, eq_2) = model_equations_2_x(K, H, mod_x)
-
-	return eq_1^2 + eq_2^2
-
-end
+# code
 
 # ╔═╡ 2d89dafc-552d-42f7-bf41-898f3f59980f
-res_x = optimize(x -> objective_function_x(x, mod_x), [log(K_init), log(H_init)])
+# goes
 
 # ╔═╡ ff563901-710b-4604-a7d4-d61910826b7f
-(K_x, H_x) = exp.(Optim.minimizer(res_x))
-
-# ╔═╡ d12f6238-bc59-446b-8111-e29eaefe359e
-begin 
-	trends_vars_x = compute_trends_variables(K_x, H_x, mod_x)
-	DataFrame([trends_vars, trends_vars_x])
-end
-
-# ╔═╡ 577eba8c-778a-44e8-9faf-13e07440be07
-trends(trends_vars_x, trends_vars)
+# here
 
 # ╔═╡ c9bde4ee-2315-4d69-9981-2c7e3de869f6
 answer_4 = md"""
-- extra inflow of savings reduces interest rate and increases asset prices (houses, shares)
-- lower interest rates make physical capital cheaper and, as a result, both $K/Y$ $\uparrow$ and $H/(H+K)$ $\downarrow$
-- more expensive houses lead to increase in mortgage borrowing
+Your answer goes here ...
 """
 
 # ╔═╡ 3062ccf9-bb99-420a-b0a6-d1f6aa2b4a04
@@ -1738,7 +1646,7 @@ version = "0.9.1+5"
 # ╟─81c720e2-e702-4aa0-b0a4-5067c116ec59
 # ╟─e98af1be-d7ed-4f5f-b924-27e8fd41bf18
 # ╟─633a25b9-54ae-4882-b73a-b1d388d186f7
-# ╟─0f68c9f7-4b5e-40c7-b392-9f8d2dccde0c
+# ╠═0f68c9f7-4b5e-40c7-b392-9f8d2dccde0c
 # ╟─d086f933-75ff-45e1-8b0c-88673f1a46dc
 # ╟─5cce5a48-5137-45d8-9182-e9e2da0992af
 # ╠═93b1f04f-82cf-48e2-80eb-8de7dd3a2a8c
@@ -1756,8 +1664,7 @@ version = "0.9.1+5"
 # ╟─37449817-f60c-44ef-b91b-1bc93f67bd4c
 # ╠═58817926-b6d6-40a4-9a67-a87770e0963e
 # ╟─bd656d98-2a68-4c5a-811f-2a1ace5d61d7
-# ╠═fb9f2924-ef89-4a52-bb27-2c13f72c7464
-# ╟─e9fcc415-f33e-4dbe-a422-792bf96e5974
+# ╠═e9fcc415-f33e-4dbe-a422-792bf96e5974
 # ╟─7b77b272-6832-4f21-b4a3-5fe88d0bd209
 # ╟─902217fd-d669-4324-8474-5ae2d0ff145f
 # ╟─9a145cc8-cd00-4ac2-9e97-6e5107eb8a8a
@@ -1779,23 +1686,14 @@ version = "0.9.1+5"
 # ╠═f13d0b20-fa76-4038-b9dc-d351e9fd5c6e
 # ╠═f1af621e-76e4-45db-8fee-988cd3d16241
 # ╠═360602ad-7605-42eb-a6fd-8aa0733b7f48
-# ╠═84bb0e1f-c366-484c-bb0b-b3db539e1469
-# ╠═925243a9-6b01-4bef-8bdb-1d3ac494724e
-# ╟─fa1e341c-608b-4703-b463-c7080071f530
-# ╠═3a058cf3-1665-4f8c-8436-d3cec15545e3
-# ╟─8772b001-b85c-4d24-9b82-4bd2b2f3af9a
+# ╠═8772b001-b85c-4d24-9b82-4bd2b2f3af9a
 # ╟─117cb9fb-4a30-4764-9dec-4b273fdba205
 # ╟─b5df5021-ef85-49f1-ae28-391a7b55929c
-# ╟─b3478606-bafc-4660-b154-c1ba696eb4b4
 # ╠═cc0e0ddc-26f9-4381-975f-882581808f37
-# ╠═6bb9538e-7748-49bc-aec3-f6f04c988e85
-# ╠═029f086d-d68a-42e8-bc48-a5ea7b420f01
 # ╠═0c40a31e-5eac-4502-ad93-164745772c23
 # ╠═2d89dafc-552d-42f7-bf41-898f3f59980f
 # ╠═ff563901-710b-4604-a7d4-d61910826b7f
-# ╠═d12f6238-bc59-446b-8111-e29eaefe359e
-# ╠═577eba8c-778a-44e8-9faf-13e07440be07
-# ╟─c9bde4ee-2315-4d69-9981-2c7e3de869f6
+# ╠═c9bde4ee-2315-4d69-9981-2c7e3de869f6
 # ╟─3062ccf9-bb99-420a-b0a6-d1f6aa2b4a04
 # ╟─ca779c4e-35ca-43c1-be4f-624214e7f87e
 # ╟─b7374016-c764-4183-831f-4df4035bd156

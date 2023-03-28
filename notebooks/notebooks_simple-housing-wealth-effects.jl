@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
@@ -13,6 +13,9 @@ macro bind(def, element)
         el
     end
 end
+
+# ╔═╡ f5450eab-0f9f-4b7f-9b80-992d3c553ba9
+
 
 # ╔═╡ 49914c8d-b321-4042-8b8e-acd74bab1021
 md"""
@@ -509,10 +512,14 @@ url = "https://www2.census.gov/programs-surveys/popproj/datasets/2017/2017-poppr
   ╠═╡ =#
 
 # ╔═╡ 515d0102-69e3-41a5-9126-b36af0d96468
+#=╠═╡
 df_pop = DataFrame(CSV.File(HTTP.get(url).body))
+  ╠═╡ =#
 
 # ╔═╡ 6ce85450-6b32-4b2b-af25-f8f00d15c004
+#=╠═╡
 names(df_pop)
+  ╠═╡ =#
 
 # ╔═╡ c67760b5-5bc6-4cf5-aebe-bb1d6a5c28e1
 ages_url = "https://greimel.github.io/distributional-macroeconomics/assets/datasets/age.csv"

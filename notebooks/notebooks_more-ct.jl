@@ -1,8 +1,11 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ f5450eab-0f9f-4b7f-9b80-992d3c553ba9
+
 
 # ╔═╡ 3087683c-dcbf-11ec-1982-cb5f45565e07
 using EconPDEs
@@ -155,6 +158,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ d7be8daa-d8f8-43bb-b9f8-b426eeca3302
+#=╠═╡
 let
 	par = (; σ = 2, ε = 0.01, ξ = 0.1, p = 1, r = 0.01, δ = 0.5)
 	h = 1.2345
@@ -168,6 +172,7 @@ let
 	(; ξ, ε, r, δ, p) = par
 	@test u_h(cc, h, par) / u_c(cc, h, par) ≈ ξ/(1-ξ) * (cc/h)^ε ≈ p * (r + δ)
 end
+  ╠═╡ =#
 
 # ╔═╡ 4e446dca-b71a-4d77-a4c3-c315a8c319d4
 md"""
