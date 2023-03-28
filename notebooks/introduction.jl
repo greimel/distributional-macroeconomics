@@ -27,6 +27,12 @@ md"""
 md"""
 * [Distributional National Accounts](https://gabriel-zucman.eu/usdina/): detailed _micro-data_ on income and wealth for the US, 1946-now (Piketty, Zucman & Saez, 2018, QJE)
 * [World Inequality Database](https://wid.world): comparable data on inequality for many countries in the World
+* even better: admin data (CBS or similar)
+
+#### Main insights
+
+* income and wealth distributions have Pareto tails
+* Pareto tail coefficient is strongly increasing over time in many countries
 """
 
 # ╔═╡ cb32ed19-f6d7-441d-935d-d4f343a6d2cf
@@ -55,7 +61,7 @@ md"""
   * determine _state variables_ of interest (e.g. income ``y`` and wealth ``w``)
   * determine _equilibrium objects_ (e.g. interest rate ``r``)
   * Solution strategy
-    * derive transition function of an _individual_ ``(y_t, w_t) \stackrel{A(r)}{\mapsto} (y_{t+1}, y_{t+1})``
+    * derive transition function of an _individual_ ``(y_t, w_t) \stackrel{A(r)}{\mapsto} (y_{t+1}, w_{t+1})``
     * simulate _stationary distribution_ ``F_r(y, w)``
     * iterate on _equilibrium objects_ until _equilibrium conditions_ hold \
       e.g. market clearing ``\int w \; d F_r(y, w) \stackrel{!}{=} K``
@@ -67,7 +73,7 @@ md"""
 * individual agents solve _Income Fluctuations Problem_
 ```math
 \begin{align}
-&\max_{(c_t, w_{t+1})_t} \sum_{t=0}^\infty \beta^t u(c_t) \\
+&\max_{(c_t, w_{t+1})_t} E_0\sum_{t=0}^\infty \beta^t u(c_t) \\
 &\begin{aligned}\text{s.t. }& c_t + w_{t+1} ≤ y_t + (1+r) w_t \\
 & y_t \sim \text{Markov chain} \\
 & w_{t+1} \geq \bar w \\
@@ -76,17 +82,16 @@ md"""
 \end{align}
 ```
 * model solution: policy functions ``c_t^*(w_t, y_t), w_{t+1}^*(w_t, y_t)``
-* transition function ``\Pr((w_t, y_t), (w_{t+1}, y_{t+1})) = \Pr(y_t, y_{t+1}) \cdot 1_{w^*_{t+1}(w_t, y_t)}``
+* transition function ``\Pr((w_t, y_t), (w_{t+1}, y_{t+1})) = \Pr(y_t, y_{t+1}) \cdot 1_{w^*_{t+1}(w_t, y_t)}(w_{t+1})``
 """
 
 # ╔═╡ bf6ab362-16e4-42a0-89ef-c6543e84e4b1
 md"""
-## Modeling Inequality: Summary and Outlook
-* 
-* Outlook
-  * _Income and Wealth Distribution in Macroeconomics: A Continuous-Time Approach_ (Achdou, Han, Lasry, Lions, Moll, REStud, 2021)
-  * Solving models with aggregate uncertainty [(Auclert, Bardoczy, Rognlie, Straub, 2021, Ecma)](https://onlinelibrary.wiley.com/doi/abs/10.3982/ECTA17434)
-  * [EconPDEs.jl](https://github.com/matthieugomez/EconPDEs.jl)
+## Modeling Inequality: Outlook
+
+* _Income and Wealth Distribution in Macroeconomics: A Continuous-Time Approach_ (Achdou, Han, Lasry, Lions, Moll, REStud, 2021)
+* Solving models with aggregate uncertainty [(Auclert, Bardoczy, Rognlie, Straub, 2021, Ecma)](https://onlinelibrary.wiley.com/doi/abs/10.3982/ECTA17434)
+* [EconPDEs.jl](https://github.com/matthieugomez/EconPDEs.jl)
 """
 
 # ╔═╡ 44062795-2591-4cda-a48f-cfd5512b8ca9
@@ -162,7 +167,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.2"
 manifest_format = "2.0"
-project_hash = "69f995e0dc6a1c35a46792be048dc8abd510ce38"
+project_hash = "a084e953ecc8d9d6d85465607b1a1d49f1e47fec"
 
 [[deps.AbstractPlutoDingetjes]]
 deps = ["Pkg"]
