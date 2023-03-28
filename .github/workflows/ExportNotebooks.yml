@@ -11,30 +11,37 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v2
-            - name: Set up notebook state cache
+
+            - name: 🙌 Install Julia
+              uses: julia-actions/setup-julia@v1
+              with:
+                  version: "1.7"
+
+            - name: ⏱ Cache notebook states
               uses: actions/cache@v2
               with:
                 path: pluto_state_cache
                 key: ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}-${{ hashFiles('**/*.jl') }}
                 restore-keys: |
                     ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
-            - name: Install Julia
-              uses: julia-actions/setup-julia@v1
+
+            - name: ⏱ Cache .julia
+              uses: actions/cache@v2
               with:
-                  version: 1.7
+                path: ~/.julia
+                key: ${{ runner.os }}-dotjulia-v1-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}-${{ github.run_id }}
+                restore-keys: |
+                    ${{ runner.os }}-dotjulia-v1-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
+
+
             - name: Run Pluto notebooks and generate website
               shell: julia --color=yes --project=. {0} 
               run: |
-                dir0 = pwd()
-                dir1 = joinpath(dir0, "generate")
-                cd(dir1)
-                run(`cp generate.jl generate2.jl`)
+                dir = pwd()
                 import Pkg
-                Pkg.add(Pkg.PackageSpec(name="Pluto", version="0.18.0"))
-                import Pluto
-                Pluto.activate_notebook_environment(joinpath(dir1, "generate2.jl"))
+                Pkg.activate(joinpath(dir, "pluto-deployment-environment"))
                 Pkg.instantiate()
-                include(joinpath(dir1, "generate.jl"))
+                include(joinpath(dir, "generate/generate.jl"))
             - name: Build and Deploy
               uses: JamesIves/github-pages-deploy-action@releases/v3
               with:
