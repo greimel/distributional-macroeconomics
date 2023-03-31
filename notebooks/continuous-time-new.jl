@@ -537,13 +537,13 @@ df_τs = let
 	
 	π̃ = ones(size(copy(out0.df.π)))
 	π̃ /= sum(π̃)
-	df = @transform!(copy(df), @subset(:τ == τs[1]), :π̃ = @c π̃)
+	df = @transform!(copy(df), @subset(:τ == τs[1]), :π̃ = @bycol π̃)
 	
 	for iτ ∈ 1:length(τs)-1
 		Aτ = transition_matrix(m, optional[iτ], grid)
 		π̃ .= (I + Δτ[iτ] * Aτ') * π̃
 		τ = τs[iτ + 1]
-		@transform!(df, @subset(:τ == τ), :π̃ = @c π̃)
+		@transform!(df, @subset(:τ == τ), :π̃ = @bycol π̃)
 	end
 
 	disallowmissing!(df, :π̃)

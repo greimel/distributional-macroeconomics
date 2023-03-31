@@ -263,7 +263,7 @@ aggregates(sim_df, par) = @chain sim_df begin
 	)
 	stack(Not([:t, :parameters]))
 	@groupby(:variable, :parameters)	
-	@transform(:normed = @c normalize(:value, (:t, 1)))
+	@transform(:normed = @bycol normalize(:value, (:t, 1)))
 end
 
 # ╔═╡ a0208167-05b7-4876-b848-86f6c24b485a
@@ -277,7 +277,7 @@ end
 	stack(Not([:grp, :t, :parameters]))
 	@subset(:variable ∉ ["wgt", "y", "h", "m"])
 	@groupby(:variable, :grp, :parameters)
-	@transform(:value = @c normalize(:value, (:t, 1)))
+	@transform(:value = @bycol normalize(:value, (:t, 1)))
 	data(_) * mapping(:t, :value, color = :grp => "", col = :parameters, row = :variable) * visual(Lines, markersize = 5)
 	draw(
 		legend = (position=:top, titleposition=:left),

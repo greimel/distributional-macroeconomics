@@ -422,7 +422,7 @@ data_statistics
 
 # ╔═╡ 4fcbf785-3df6-464e-94fd-54208c8306a9
 @chain get_scf(2019) begin
-	@transform(:age_bin = @c cut(:AGE, weights(:WGT), 20))
+	@transform(:age_bin = @bycol cut(:AGE, weights(:WGT), 20))
 	@transform(:age_bin = Meta.parse(get(:age_bin)))
 	@groupby(:age_bin)
 	@combine("house value" = mean(:HOUSES, weights(:WGT)),

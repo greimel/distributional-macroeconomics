@@ -73,6 +73,38 @@ md"""
 ## The US Household Debt Boom
 """
 
+# ╔═╡ c84d353f-5d92-4217-96ea-24ab261a8c82
+debt_fig = let
+	df = @chain agg_df begin
+		stack(dbt_var, [:year, inc])
+		@transform(:value = - :value / {inc})
+		@groupby(:variable)
+		@transform("relative to 1980" = @bycol normalize(:value, :year => 1980))
+		@transform("relative to total debt in 1980" = @bycol normalize(:value, :year => 1980, :variable => "hwdeb"))
+		stack(["relative to 1980", "relative to total debt in 1980"], [:variable, :year], variable_name = "normalization")
+	end
+
+	fg = @chain df begin
+		data(_) * mapping(:year, :value, layout = :normalization, color = :variable => "") * visual(Lines)
+		draw(; legend = (position = :bottom, titleposition = :left), facet = (linkyaxes = false, ))
+	end
+
+	Label(fg.figure[0, :], "Growth of Household-Debt-To-Income in the USA")
+	fg
+end
+
+# ╔═╡ 1876c367-2842-4e78-9c0e-9cdac86fcdc1
+d2y_fig = @chain df3 begin
+	@select(:variable, :value, :year, :three_groups)
+	@subset!(:variable ∈ ["ownermort", "peinc"])
+	unstack(:variable, :value)
+	@transform(:mort2inc = :ownermort / :peinc)
+	@groupby(:three_groups)
+	@transform(:normalized = @bycol normalize(:mort2inc, :year => 1980))
+	data(_) * visual(Lines) * mapping(:year, :normalized, color = :three_groups => "")
+	draw(axis = (title = "Mortgage-to-income by income group", ))
+end
+
 # ╔═╡ 19d82011-2f06-4092-a224-5391d1e9cc86
 md"""
 ## Household balance sheets
@@ -177,6 +209,40 @@ begin
 	dina_df
 end
 
+# ╔═╡ 98cf07d7-7de1-481f-8339-3549db9c9024
+df3 = let
+	@chain gdpdef begin
+		@transform!(:prices = @bycol normalize(:GDPDEF, :year => 1980))
+	end
+	
+	id_var = [:group_id, :three_groups, :age, :year, wgt]
+	@chain dina_df begin
+		select(id_var..., var...)
+		@subset(:age ∉ [65])
+		stack(Not(id_var))
+		@groupby(:three_groups, :year, :variable)
+		@combine(:value = mean(:value, weights({wgt})))
+		leftjoin!(_, select(gdpdef, :year, :prices), on = :year)
+		@transform(:real_value = :value / :prices)
+	end
+end
+
+# ╔═╡ fef4153f-0ce6-4fb0-a1ee-63b32cdeedd5
+ineq_fig = let
+	fg = @chain df3 begin
+		@subset(:variable == "peinc")
+		@groupby(:three_groups)
+		@transform(:normalized = @bycol normalize(:real_value, :year => 1980))
+		data(_) * visual(Lines) * mapping(:year, :normalized, color = :three_groups => "")
+		draw(axis = (title="Growth of real pre-tax incomes across income groups", ))
+	end
+
+	ax = content(fg.figure[1,1])
+	vlines!(ax, [1980, 2007], linestyle = (:dash, :loose), color = :gray)
+
+	fg
+end
+
 # ╔═╡ de6cf037-a090-4046-9410-06fd05315875
 agg_df = let
 	id_var = [:group_id, :age, :year, wgt]
@@ -185,30 +251,10 @@ agg_df = let
 		select(id_var..., var...)
 		stack(Not(id_var))
 		@groupby(:variable, :year)
-		@combine(:value = mean(:value, weights($(wgt))))
+		@combine(:value = mean(:value, weights({wgt})))
 		unstack(:variable, :value)
 		transform!(([d, inc] => ByRow(/) => string(d) * "2inc" for d in dbt_var)...)
 	end
-end
-
-# ╔═╡ c84d353f-5d92-4217-96ea-24ab261a8c82
-debt_fig = let
-	df = @chain agg_df begin
-		stack(dbt_var, [:year, inc])
-		@transform(:value = - :value / $inc)
-		@groupby(:variable)
-		@transform("relative to 1980" = @c normalize(:value, :year => 1980))
-		@transform("relative to total debt in 1980" = @c normalize(:value, :year => 1980, :variable => "hwdeb"))
-		stack(["relative to 1980", "relative to total debt in 1980"], [:variable, :year], variable_name = "normalization")
-	end
-
-	fg = @chain df begin
-		data(_) * mapping(:year, :value, layout = :normalization, color = :variable => "") * visual(Lines)
-		draw(; legend = (position = :bottom, titleposition = :left), facet = (linkyaxes = false, ))
-	end
-
-	Label(fg.figure[0, :], "Growth of Household-Debt-To-Income in the USA")
-	fg
 end
 
 # ╔═╡ 06768ed4-72c8-441f-b5ed-31bf5070f217
@@ -294,52 +340,6 @@ DATE	GDPDEF
 			)) |> DataFrame
 
 	gdpdef.year = year.(gdpdef.DATE)
-end
-
-# ╔═╡ 98cf07d7-7de1-481f-8339-3549db9c9024
-df3 = let
-	@chain gdpdef begin
-		@transform!(:prices = @c normalize(:GDPDEF, :year => 1980))
-	end
-	
-	id_var = [:group_id, :three_groups, :age, :year, wgt]
-	@chain dina_df begin
-		select(id_var..., var...)
-		@subset(:age ∉ [65])
-		stack(Not(id_var))
-		@groupby(:three_groups, :year, :variable)
-		@combine(:value = mean(:value, weights($(wgt))))
-		leftjoin!(_, select(gdpdef, :year, :prices), on = :year)
-		@transform(:real_value = :value / :prices)
-	end
-end
-
-# ╔═╡ fef4153f-0ce6-4fb0-a1ee-63b32cdeedd5
-ineq_fig = let
-	fg = @chain df3 begin
-		@subset(:variable == "peinc")
-		@groupby(:three_groups)
-		@transform(:normalized = @c normalize(:real_value, :year => 1980))
-		data(_) * visual(Lines) * mapping(:year, :normalized, color = :three_groups => "")
-		draw(axis = (title="Growth of real pre-tax incomes across income groups", ))
-	end
-
-	ax = content(fg.figure[1,1])
-	vlines!(ax, [1980, 2007], linestyle = (:dash, :loose), color = :gray)
-
-	fg
-end
-
-# ╔═╡ 1876c367-2842-4e78-9c0e-9cdac86fcdc1
-d2y_fig = @chain df3 begin
-	@select(:variable, :value, :year, :three_groups)
-	@subset!(:variable ∈ ["ownermort", "peinc"])
-	unstack(:variable, :value)
-	@transform(:mort2inc = :ownermort / :peinc)
-	@groupby(:three_groups)
-	@transform(:normalized = @c normalize(:mort2inc, :year => 1980))
-	data(_) * visual(Lines) * mapping(:year, :normalized, color = :three_groups => "")
-	draw(axis = (title = "Mortgage-to-income by income group", ))
 end
 
 # ╔═╡ d1fe8ba8-0747-4165-8bb9-6ceb3be5cd16
@@ -434,7 +434,7 @@ end
 
 # ╔═╡ 715f6225-a6f7-4f37-b7b6-c4b2ce8bc29e
 @chain get_scf(2019) begin
-	@transform(:q_nw = @c cut(:NETWORTH, weights(:WGT), 5))
+	@transform(:q_nw = @bycol cut(:NETWORTH, weights(:WGT), 5))
 	stack([:ASSET, :FIN, :NFIN, :HOUSES, :STOCKS], [:WGT, :q_nw])
 	@groupby(:q_nw, :variable)
 	@combine(:value = mean(:value, weights(:WGT)))
@@ -450,7 +450,7 @@ end
 
 # ╔═╡ 978af04d-7de1-4896-8877-8f80db8354c9
 @chain get_scf(2019) begin
-	@transform(:q_nw = @c cut(:NETWORTH, weights(:WGT), 5))
+	@transform(:q_nw = @bycol cut(:NETWORTH, weights(:WGT), 5))
 	stack([:DEBT, :NH_MORT, :CCBAL], [:WGT, :q_nw])
 	@groupby(:q_nw, :variable)
 	@combine(:value = mean(:value, weights(:WGT)))
@@ -584,15 +584,19 @@ StatsBase = "~0.33.21"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.5"
+julia_version = "1.9.0-rc1"
 manifest_format = "2.0"
-project_hash = "11772a2959b1ffe36127ef637a3877f85f251065"
+project_hash = "47c3751286d1de260f8ea33daf513921fa712312"
 
 [[deps.AbstractFFTs]]
-deps = ["ChainRulesCore", "LinearAlgebra"]
+deps = ["LinearAlgebra"]
 git-tree-sha1 = "16b6dbc4cf7caee4e1e75c49485ec67b667098a0"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "1.3.1"
+weakdeps = ["ChainRulesCore"]
+
+    [deps.AbstractFFTs.extensions]
+    AbstractFFTsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.AbstractPlutoDingetjes]]
 deps = ["Pkg"]
