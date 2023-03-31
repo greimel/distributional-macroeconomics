@@ -366,7 +366,7 @@ outtt = let
 
 	(; s_ind, π) = @chain df begin
 		@subset(:p_i == 2)
-		@select(:s_ind, :π = @c :π ./ sum(:π))
+		@select(:s_ind, :π = @bycol :π ./ sum(:π))
 	end
 
 	#states_subdf = select(DataFrame(ss.states), Not([:p_i, :p]))[s_ind, :]
