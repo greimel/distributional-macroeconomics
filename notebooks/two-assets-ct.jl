@@ -4,214 +4,606 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 5cbd313e-b357-4b00-bb7d-4c87f8522cdd
-using EconPDEs
-
-# ╔═╡ d704e278-6ae8-4166-bade-599e71e54336
-using DataFrameMacros
-
-# ╔═╡ d3612723-d4eb-4887-b902-fa47e6a26226
-using InfinitesimalGenerators
-
-# ╔═╡ 5bc621c2-1d87-49a9-8dc6-d81d5f998640
-using QuantEcon: gth_solve
-
-# ╔═╡ abff0506-1792-420d-80d8-cb3645483443
-using Arpack
-
-# ╔═╡ 70930f84-fe69-4fa3-a37c-eec9a377526c
-using StructArrays
-
-# ╔═╡ 6f92c837-1760-423e-9777-9db9ad758475
-using PlutoUI
-
-# ╔═╡ 563c267e-0c6a-4b90-81a7-fc8ff4c73c75
-using AlgebraOfGraphics, CairoMakie
-
-# ╔═╡ 6d5523f2-a517-48df-9f31-bbd516e1208e
-using Parameters
-
-# ╔═╡ 9fa33ac0-bb2f-4055-b124-8c7c19621226
+# ╔═╡ b48b0674-1bcb-48e5-9b05-57dea5877715
 using LinearAlgebra
 
-# ╔═╡ 276e171b-271d-4610-b9bb-01b212193123
+# ╔═╡ 1ee8ccc3-d498-48c6-b299-1032165e4ab9
+using StructArrays
+
+# ╔═╡ 7aca19ff-374d-4832-b442-d59d9a5f3629
+using EconPDEs
+
+# ╔═╡ 731cf94b-8a88-4fd6-8728-851c43500f1e
+using NamedTupleTools: delete
+
+# ╔═╡ 3b6ffffc-b8ab-42df-9046-ec3b4f5e0122
+using QuantEcon: gth_solve
+
+# ╔═╡ 2a7472f3-aa80-43f2-a959-05c3870d424d
+using InfinitesimalGenerators: InfinitesimalGenerators
+
+# ╔═╡ 9aa61364-51a3-45d0-b1c2-757b864de132
+using PlutoTest
+
+# ╔═╡ 026cfe16-ff0f-4f68-b412-b1f6c1902824
+using CairoMakie, AlgebraOfGraphics
+
+# ╔═╡ 9d99416e-8119-4a40-b577-0135050a0e4e
 using SparseArrays
 
-# ╔═╡ aecea3fe-f0ee-4953-857b-29d6a5640530
-using DataFrames
+# ╔═╡ 6188aab9-86bf-4ec4-bb10-43b59f71e3e2
+using DataFrames, DataFrameMacros, Chain
 
-# ╔═╡ 9353566b-a70e-4dbe-8f02-b16d2c0570d2
-using Chain: @chain
+# ╔═╡ 9696e6ca-6953-43e2-8d47-fbfe24ba4250
+using PlutoUI
 
-# ╔═╡ 0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
-using Roots: find_zero, Brent
-
-# ╔═╡ cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
+# ╔═╡ c89f1918-01ee-11ed-22fa-edd66e0f6c59
 md"""
-`continuous-time-moll.jl` | **Version 1.0** | *last updated: June 21, 2022* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+# Solving the HJB: Implicit scheme
 """
 
-# ╔═╡ 0edf9214-7213-4b1d-8fa6-54a365525d29
+# ╔═╡ 629b8291-0f13-419e-b1c0-d10d5e708720
 md"""
-# Huggett model in continuous time
-
-In this notebook, we consider a Huggett economy in continuous time. Income is a Poisson process with two states. 
-
-More information on the algorithms can be found in the [Online Appendix of Achdou et al. (2021)](https://benjaminmoll.com/wp-content/uploads/2020/02/HACT_Numerical_Appendix.pdf). The Julia code in this notebook follows the closely the [Matlab code snippets](https://benjaminmoll.com/codes/) that Ben Moll uploaded on his website."""
-
-# ╔═╡ 1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
-md"""
-## Model
+## Setup
 """
 
-# ╔═╡ 64d44910-988c-4e24-baf6-6408da65bd21
-@with_kw struct HuggettPoisson
+# ╔═╡ 73c1ff42-ac94-4175-8c30-9d6a751c913a
+md"""
+## Solving the HJB equation
+"""
+
+# ╔═╡ 828dee22-1ee7-41c4-b68b-f88facea86d9
+md"""
+### HJB Moll
+"""
+
+# ╔═╡ 3ab0c985-5317-4ea4-bddc-6289ab90bcad
+function two_asset_kinked_cost_new(d,a, (; χ₀, χ₁))
+	χ₀ * abs(d) + χ₁ * d^2/2 *(max(a,10^(-5)))^(-1)
+end
+
+# ╔═╡ f2ce6352-450e-4cde-a2fe-3586461c3bdf
+function two_asset_kinked_FOC_new(pa, pb, a, (; χ₀, χ₁))
+	min(pa / pb - 1 +  χ₀, 0.0) * a / χ₁ + max(pa/pb - 1 -  χ₀, 0.0) * a / χ₁
+end
+
+# ╔═╡ 9c1ef8d1-57bc-4da2-83ec-fb8f1a8ce296
+function two_asset_kinked_cost(d,a, (; chi0, chi1))
+	chi0 * abs(d) + chi1 * d^2/2 *(max(a,10^(-5)))^(-1)
+end
+
+# ╔═╡ 91b63bfc-f4a4-41c1-a472-7d13df27b93c
+function two_asset_kinked_FOC(pa,pb,a, (; chi0, chi1))
+	min(pa / pb - 1 + chi0, 0.0) * a / chi1 + max(pa/pb - 1 - chi0, 0.0) * a / chi1
+end
+
+# ╔═╡ 68a97aab-7924-4472-aa47-7903add8aea4
+function solve_HJB_base(maxit = 35)
+	ga = 2 #CRRA utility with parameter gamma
+	ra = 0.05
+	rb_pos = 0.03
+	rb_neg = 0.12
+	rho = 0.06 #discount rate
+	chi0 = 0.03
+	chi1 = 2;
+
+
+	xi = 0.1 #fraction of income that is automatically deposited
+
+	if ra - 1/chi1 > 0
+    	@warn("Warning: ra - 1/chi1 > 0")
+	end
+
+
+	#Income process (two-state Poisson process):
+	w = 4;
+	Nz = 2;
+	z      = [.8, 1.3]
+	la_mat = [-1/3 1/3; 1/3 -1/3];
+
+	crit = 10^(-5);
+	Delta = 100;
+	maxit = 35
+
+	#grids
+	I = 100;
+	bmin = -2;
+	#bmin = 0;
+	bmax = 40;
+	b = range(bmin,bmax,length=I)
+	db = (bmax-bmin)/(I-1);
+
+	J= 50;
+	amin = 0;
+	amax = 70;
+	a = range(amin,amax,length=J);
+	da = (amax-amin)/(J-1);
+
+	bb = b * ones(1,J)
+	aa = ones(I,1) * a'
+	zz = ones(J,1) * z'
+
+	dist = zeros(maxit)
+
+
+	bbb = zeros(I,J,Nz)
+	aaa = zeros(I,J,Nz)
+	zzz = zeros(I,J,Nz)
+	for nz = 1:Nz
+	    bbb[:,:,nz] .= bb
+	    aaa[:,:,nz] .= aa
+	    zzz[:,:,nz] .= z[nz]
+	end
+
 	
-	σ::Float64 = 2.   # risk aversion coefficient u'(c) = c^(-σ)
-	ρ::Float64 = 0.05 # rate of time preference
-
-	z::Matrix{Float64} = reshape([0.1, 0.2], 1, :)   # income state (row vector)
-	λ::Matrix{Float64} = reshape([0.02, 0.03], 1, :) # intensities (row vector)
-
-	# asset grid parameters
-	N_a::Int64 = 500
-	aₘᵢₙ::Float64 = - 0.1
-	aₘₐₓ::Float64 = 1.
-	Δa::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
+	Bswitch = [
+	    LinearAlgebra.I(I*J)*la_mat[1,1] LinearAlgebra.I(I*J)*la_mat[1,2];
+	    LinearAlgebra.I(I*J)*la_mat[2,1] LinearAlgebra.I(I*J)*la_mat[2,2]
+	]
 	
+	#Preallocation
+	VbF = zeros(I,J,Nz);
+	VbB = zeros(I,J,Nz);
+	VaF = zeros(I,J,Nz);
+	VaB = zeros(I,J,Nz);
+	c = zeros(I,J,Nz);
+	updiag = zeros(I*J,Nz);
+	lowdiag = zeros(I*J,Nz);
+	centdiag = zeros(I*J,Nz);
+	AAi = Array{AbstractArray}(undef, Nz)
+	BBi = Array{AbstractArray}(undef, Nz)
+
+	d_B = zeros(I,J,Nz)
+	d_F = zeros(I,J,Nz)
+	Id_B = zeros(I,J,Nz)
+	Id_F = zeros(I,J,Nz)
+	c = zeros(I,J,Nz)
+	u = zeros(I,J,Nz)
+
+	
+	#INITIAL GUESS
+	v0 = (((1-xi)*w*zzz + ra.*aaa + rb_neg.*bbb).^(1-ga))/(1-ga)/rho
+	v = copy(v0)
+
+
+	#return at different points in state space
+	#matrix of liquid returns
+	Rb = rb_pos .* (bbb .> 0) .+ rb_neg .* (bbb .< 0)
+	raa = ra .* ones(1,J)
+	#if ra>>rb, impose tax on ra*a at high a, otherwise some households
+	#accumulate infinite illiquid wealth (not needed if ra is close to or less than rb)
+	tau = 10
+	raa = ra .* (1 .- (1.33 .* amax ./ a) .^ (1-tau))#; plot(a,raa.*a)
+	#matrix of illiquid returns
+
+	Ra = zeros(I,J,Nz)
+	Ra[:,:,1] .= raa'
+	Ra[:,:,2] .= raa'
+
+	for n=1:maxit
+	    V = v;   
+	    #DERIVATIVES W.R.T. b
+	    # forward difference
+	    VbF[1:I-1,:,:] .= (V[2:I,:,:] .- V[1:I-1,:,:]) ./ db;
+	    VbF[I,:,:] = ((1-xi)*w*zzz[I,:,:] + Rb[I,:,:] .* bmax).^(-ga); #state constraint boundary condition
+			
+	    # backward difference
+	    VbB[2:I,:,:] = (V[2:I,:,:]-V[1:I-1,:,:])/db;
+	    VbB[1,:,:] = ((1-xi)*w*zzz[1,:,:] + Rb[1,:,:].*bmin).^(-ga); #state constraint boundary condition
+	
+	    #DERIVATIVES W.R.T. a
+	    # forward difference
+	    VaF[:,1:J-1,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
+	    # backward difference
+	    VaB[:,2:J,:] = (V[:,2:J,:]-V[:,1:J-1,:])/da;
+	 
+	    #useful quantities
+	    c_B = max.(VbB,10^(-6)).^(-1/ga);
+	    c_F = max.(VbF,10^(-6)).^(-1/ga); 
+		dBB = two_asset_kinked_FOC.(VaB,VbB,aaa, Ref((; chi0, chi1)))
+	    dFB = two_asset_kinked_FOC.(VaB,VbF,aaa, Ref((; chi0, chi1)))
+	    #VaF(:,J,:) = VbB(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
+	    dBF = two_asset_kinked_FOC.(VaF,VbB,aaa, Ref((; chi0, chi1)))
+	    #VaF(:,J,:) = VbF(:,J,:).*(1-ra.*chi1 - chi1*w*zzz(:,J,:)./a(:,J,:));
+	    dFF = two_asset_kinked_FOC.(VaF,VbF,aaa, Ref((; chi0, chi1)))
+	    
+	    #UPWIND SCHEME
+	    d_B .= (dBF .> 0) .* dBF .+ (dBB .< 0) .* dBB;
+	   
+		#state constraints at amin and amax
+	    d_B[:,1,:] = (dBF[:,1,:] .> 10^(-12)) .* dBF[:,1,:] #make sure d>=0 at amax, don't use VaB(:,1,:)
+	    d_B[:,J,:] = (dBB[:,J,:] .< -10^(-12)) .* dBB[:,J,:] #make sure d<=0 at amax, don't use VaF(:,J,:)
+	    d_B[1,1,:] = max.(d_B[1,1,:],0)
+	    #split drift of b and upwind separately
+	    sc_B = (1-xi) .* w .* zzz .+ Rb .* bbb .- c_B;
+	    sd_B = (-d_B - two_asset_kinked_cost.(d_B, aaa, Ref((; chi0, chi1))))
+	    
+	    d_F .= (dFF .> 0) .* dFF + (dFB .< 0) .* dFB
+	    #state constraints at amin and amax
+	    d_F[:,1,:] = (dFF[:,1,:] .> 10^(-12)) .* dFF[:,1,:] #make sure d>=0 at amin, don't use VaB(:,1,:)
+	    d_F[:,J,:] = (dFB[:,J,:] .< -10^(-12)) .* dFB[:,J,:] #make sure d<=0 at amax, don't use VaF(:,J,:)
+	
+	    #split drift of b and upwind separately
+	    sc_F = (1-xi)*w*zzz .+ Rb.*bbb .- c_F;
+	    sd_F = (-d_F .- two_asset_kinked_cost.(d_F,aaa, Ref((; chi0, chi1))));
+	    sd_F[I,:,:] = min.(sd_F[I,:,:],0.0)
+	    
+	    Ic_B = (sc_B .< -10^(-12))
+	    Ic_F = (sc_F .> 10^(-12)) .* (1 .- Ic_B)
+	    Ic_0 = 1 .- Ic_F .- Ic_B
+	    
+	    Id_F .= (sd_F .> 10^(-12))
+	    Id_B .= (sd_B .< -10^(-12)) .* (1 .- Id_F)
+	    Id_B[1,:,:] .= 0
+	    Id_F[I,:,:] .= 0
+		Id_B[I,:,:] .= 1 #don't use VbF at bmax so as not to pick up articial state constraint
+	    Id_0 = 1 .- Id_F .- Id_B
+	    
+	    c_0 = (1-xi) * w * zzz + Rb .* bbb
+	  
+	    c .= c_F .* Ic_F + c_B .* Ic_B + c_0 .* Ic_0
+	    u .= c .^ (1-ga) ./(1-ga)
+	    
+	    #CONSTRUCT MATRIX BB SUMMARING EVOLUTION OF b
+	    X = -Ic_B .* sc_B ./db .- Id_B .* sd_B ./ db
+	    Y = (Ic_B .* sc_B .- Ic_F .* sc_F) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
+	    Z = Ic_F.*sc_F/db + Id_F.*sd_F/db;
+	    
+	    for i = 1:Nz
+	        centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
+	    end
+	
+	    lowdiag[1:I-1,:] = X[2:I,1,:]
+	    updiag[2:I,:] = Z[1:I-1,1,:]
+	    for j = 2:J
+	        lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
+	        updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
+	    end
+	
+	    for nz = 1:Nz
+	    	BBi[nz] = spdiagm(
+				I*J, I*J, 
+				0 => centdiag[:,nz],
+				1 => updiag[2:end,nz],
+				-1 => lowdiag[1:end-1,nz]
+						 )
+	    end
+	
+	    BB = cat(BBi..., dims = (1,2))
+	
+	
+	    #CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+	    dB = Id_B .* dBB .+ Id_F .* dFB
+	    dF = Id_B .* dBF .+ Id_F .* dFF
+	    MB = min.(dB,0.0)
+	    MF = max.(dF,0.0) .+ xi .* w .* zzz .+ Ra .* aaa
+	    MB[:,J,:] = xi .* w .* zzz[:,J,:] .+ dB[:,J,:] .+ Ra[:,J,:] .* amax #this is hopefully negative
+	    MF[:,J,:] .= 0.0
+	    chi = -MB ./ da
+	    yy =  (MB - MF) ./da
+	    zeta = MF ./ da
+	
+	    # MATRIX AAi
+	    for nz=1:Nz
+	        #This will be the upperdiagonal of the matrix AAi
+	        AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
+	        for j=1:J
+	            AAupdiag=[AAupdiag; zeta[:,j,nz]]
+	        end
+	        
+	        #This will be the center diagonal of the matrix AAi
+	        AAcentdiag = yy[:,1,nz]
+	        for j=2:J-1
+	            AAcentdiag = [AAcentdiag; yy[:,j,nz]];
+	        end
+	        AAcentdiag = [AAcentdiag; yy[:,J,nz]];
+	        
+	        #This will be the lower diagonal of the matrix AAi
+	        AAlowdiag = chi[:,2,nz]
+	        for j=3:J
+	            AAlowdiag = [AAlowdiag; chi[:,j,nz]]
+	        end
+	
+			#@info AAcentdiag
+			#@info AAlowdiag
+			#@info AAupdiag
+	
+		    #Add up the upper, center, and lower diagonal into a sparse matrix
+	        AAi[nz] = spdiagm(
+				I*J, I*J,
+				0 => AAcentdiag,
+				-I => AAlowdiag,
+				I => AAupdiag[begin+I:end-I]
+			)
+	
+	    end
+	
+		AA = cat(AAi..., dims = (1,2))
+	    
+	    A = AA + BB + Bswitch
+	
+		
+	    if maximum(abs, sum(A,dims=2)) > 10^(-12)
+	        @warn("Improper Transition Matrix")
+	        break
+	    end
+	    
+	#    if maximum(abs, sum(A, dims=2)) > 10^(-9)
+	#       @warn("Improper Transition Matrix")
+	#       break
+	#    end
+	    
+	    B = (1/Delta + rho)*LinearAlgebra.I(I*J*Nz) - A
+	    
+	    u_stacked = reshape(u,I*J*Nz,1)
+	    V_stacked = reshape(V,I*J*Nz,1)
+	    
+	    vec = u_stacked + V_stacked/Delta;
+	    
+	    V_stacked = B\vec #SOLVE SYSTEM OF EQUATIONS
+	        
+	    V = reshape(V_stacked,I,J,Nz)   
+	    
+	    
+	    Vchange = V - v
+	    v = V
+	    	   
+	    dist[n] = maximum(abs, Vchange)
+	    @info "Value Function, Iteration $n | max Vchange = $(dist[n])"
+	    if dist[n]<crit
+	        @info("Value Function Converged, Iteration = $n")
+	        break
+	    end 
+	end
+
+	d = Id_B .* d_B + Id_F .* d_F
+	m = d + xi*w*zzz + Ra.*aaa;
+	s = (1-xi)*w*zzz + Rb.*bbb - d - two_asset_kinked_cost.(d, aaa, Ref((; chi0, chi1))) - c
+
+	sc = (1-xi)*w*zzz + Rb.*bbb - c;
+	sd = - d - two_asset_kinked_cost.(d,aaa, Ref((; chi0, chi1)))
+
+	df = DataFrame(
+		a = vec(aaa),
+		b = vec(bbb),
+		z = vec(zzz),
+		c = vec(c), 
+		d = vec(d),
+		s = vec(s),
+		m = vec(m),
+		u = vec(u),
+		sc = vec(sc),
+		sd = vec(sd),
+		v = vec(v)
+	)
 end
 
-# ╔═╡ 95764a2a-0a92-447c-98a8-df22167abda6
-function generator((; λ))
-	λ₁₂, λ₂₁ = λ
-	Λ = [-λ₁₂ λ₁₂;
-	    λ₂₁ -λ₂₁]
+# ╔═╡ 75c6bed0-86a2-4393-83a7-fbd7862a3975
+df_base = solve_HJB_base()
+
+# ╔═╡ 830448b7-1700-4312-91ce-55f86aaa33a4
+md"""
+### HJB Greimel
+"""
+
+# ╔═╡ 03ec6276-09a4-4f66-a864-19e2e0d825eb
+md"""
+if ``r_a \gg r_b``, impose tax on ``ra \cdot a`` at high ``a``, otherwise some households accumulate infinite illiquid wealth (not needed if ``r_a`` is close to or less than ``r_b``)
+"""
+
+# ╔═╡ 98f11cbd-8b05-464b-be44-3b76277c6d0d
+R_a(a, (; ra, amax, τ)) = ra * (1 - (1.33 * amax / a) ^ (1-τ)) * a
+
+# ╔═╡ 8a6cd6dd-49f6-496a-bb50-e43e06c4a1db
+R_b(b, (; rb_pos, rb_neg)) = (b ≥ 0 ? rb_pos : rb_neg) * b
+
+# ╔═╡ a6356900-5530-494f-9d01-03041805ebe6
+function check((; ra, χ₁))
+	if ra - 1/χ₁ > 0
+    	@warn("Warning: ra - 1/χ₁ > 0")
+	end
 end
 
-# ╔═╡ a5233ee4-ba60-4428-8de5-4b012ed43408
-function construct_A_switch((; λ, N_a))
-	id = I(N_a)
-	λ₁₂, λ₂₁ = λ
-	A_switch_1 = hcat(-λ₁₂ * id,  λ₁₂ * id)
-	A_switch_2 = hcat( λ₂₁ * id, -λ₂₁ * id)
+# ╔═╡ f6c0329e-1a02-4292-96b7-11c8cd9c3b54
+util(c, (; γ)) = c^(1-γ)/(1-γ)
 
-	[-λ₁₂ * id   λ₁₂ * id;
-	  λ₂₁ * id  -λ₂₁ * id]
+# ╔═╡ 5a6c37d8-af66-46a1-9c93-581057c41f94
+u_prime(c, (; γ)) = c^(-γ)
 
-	#A_switch   = vcat(A_switch_1, A_switch_2)
+# ╔═╡ cdcca65f-59df-4990-97b7-2b511bdb61e6
+u_prime_inv(x, (; γ)) = x^(-1/γ)
+
+# ╔═╡ 920e3393-fd38-4154-8d90-ce9dc712ed1a
+function get_d(VaB, VaF, Vb, (; a, b), model)
+	(; amax, amin, bmin, bmax) = model
+	dxB = two_asset_kinked_FOC_new(VaB,Vb,a, model)
+	dxF = two_asset_kinked_FOC_new(VaF,Vb,a, model)
+
+	if dxF > 0 && dxB < 0
+		d = dxF + dxB
+	elseif dxF > 0
+		d = dxF
+	elseif dxB < 0
+		d = dxB
+	else
+		d = 0.0
+	end
+
+	if a == amin
+		d = dxF * (dxF > 10^(-12))
+	end
+	if a == amax
+		d = dxB * (dxB < -10^(-12))
+	end
+	if a == amin && b == bmin
+		d = max(d, 0.0)
+	end
+
+	sd = -d - two_asset_kinked_cost_new(d, a, model)
+
+	(; d, dxB, dxF, sd)
 end
 
-# ╔═╡ ac27dd69-1216-4a02-ba62-ebb098b33fa1
-md"""
-We work with an equi-spaced asset grid with $N_a$ grid points. The difference between two grid points is denoted by $\Delta a$. (Section 7 in the online appendix explains how to deal with non-uniform grids.)
-"""
+# ╔═╡ 4023a748-5e4f-4137-811b-0e93567021dd
+function get_c(Vb, (; b, z), model)
+	(; γ, ξ, w) = model
+	c = u_prime_inv.(max.(Vb,10^(-6)), Ref((; γ)))
+	sc = (1-ξ) * w * z + R_b(b, model) - c
 
-# ╔═╡ 3dd0c186-04f0-425c-93dc-825c7d4b606e
-function construct_a(m)
-	(; N_a, aₘᵢₙ, aₘₐₓ) = m
-	[aᵢ for aᵢ in range(aₘᵢₙ, aₘₐₓ, N_a)] |> hcat # asset grid (column vector)
+	(; c, sc)
 end
 
-# ╔═╡ 23a991be-7c8b-45e2-bd75-af5e146fc6b0
-m = HuggettPoisson();
+# ╔═╡ 541a5b4f-0d49-4c36-85c8-799e3260c77d
+function get_c₀((; b, z), model)
+	(; γ, ξ, w) = model
+	sc = 0.0
+	c = (1-ξ) * w * z + R_b(b, model)
+	(; c, sc)
+end
 
-# ╔═╡ 2289c7a7-3493-4bfb-8ffe-31b074d17b14
+# ╔═╡ 09a8d045-6867-43a9-a021-5a39c22171a5
+function get_c_upwind(VbB, VbF, state, model)
+	out_F = get_c(VbF, state, model)
+	if out_F.sc > 10^(-12)
+		return out_F
+	end
+	out_B = get_c(VbB, state, model)
+	if out_B.sc < -10^(-12)
+		return out_B
+	end
+	return get_c₀(state, model)
+end
+
+# ╔═╡ f8b728e7-4f8a-465e-a8cf-413cec8e9c66
+function initial_guess((; a, b, z), model)
+	(; ξ, w, ϱ, rb_neg, ra) = model
+	c_init = (1-ξ) * w * z + ra * a + rb_neg * b
+	# should be
+	# c_init = (1-xi) * w * z + R_a(a, model) + rb_neg * R_b(b, model)
+	util(c_init, model) / ϱ
+end
+
+# ╔═╡ 2befd2fa-ca64-4606-b55d-6163709f2e6e
+function ȧ_fixed((; a, z), model)
+	(; ξ, w) = model
+	ξ * w * z + R_a(a, model)
+end
+
+# ╔═╡ 9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
+function get_d_upwind(VaB, VaF, VbB, VbF, state, model)
+	(; amax, amin, bmin, bmax) = model
+	(; a, b) = state
+	
+	outB = get_d(VaB, VaF, VbB, state, model)
+	outF = get_d(VaB, VaF, VbF, state, model)
+
+	d_B = outB.d
+	d_F = outF.d
+	sd_B = outB.sd
+	sd_F = outF.sd
+	
+	if b == bmax
+		sd_F = min(sd_F, 0.0)
+	end
+
+	Id_F = false
+	Id_B = false
+	Id_0 = false
+
+	if b == bmax
+		Id_B = true
+		dB = min(outB.dxB, 0.0)
+		dF = max(outB.dxF, 0.0)
+		d = d_B
+		sd = outB.sd
+	elseif sd_F > 10^(-12) #&& b < bmax
+		Id_F = true
+		dB = min(outF.dxB, 0.0)
+		dF = max(outF.dxF, 0.0)
+		d = d_F
+		sd = outF.sd
+	elseif sd_B < -10^(-12) && b > bmin
+		Id_B = true
+		dB = min(outB.dxB, 0.0)
+		dF = max(outB.dxF, 0.0)
+		d = d_B
+		sd = outB.sd
+		vb_d = VbB
+	else
+		Id_0 = true
+		dB = 0.0
+		dF = 0.0
+		d = 0.0
+		sd = 0.0
+	end
+
+	if a < amax
+		MF = dF + ȧ_fixed(state, model)
+		MB = dB
+	else # a == amax
+		MF = 0.0
+		MB = dB + ȧ_fixed(state, model) #this is hopefully negative
+	end
+	
+	(; d_B, d_F, dB, dF, sd_B, sd_F, Id_B, Id_F, Id_0, d, sd, MF, MB)
+end	
+
+# ╔═╡ ed6045c0-b76c-4691-9f05-c943c542d13f
+begin
+	Base.@kwdef struct TwoAssets
+		γ = 2 #CRRA utility with parameter gamma
+		ra = 0.05
+		rb_pos = 0.03
+		rb_neg = 0.12
+		ϱ = 0.06 #discount rate
+		χ₀ = 0.03
+		χ₁ = 2
+		ξ = 0.1 #fraction of income that is automatically deposited
+		#Income process (two-state Poisson process):
+		w = 4
+		Nz = 2
+		z      = [.8, 1.3]
+		Λ = [-1/3 1/3; 1/3 -1/3]
+		crit = 10^(-5)
+		Δ = 100
+		#grids
+		I = 100
+		bmin = -2
+		bmax = 40
+		b = range(bmin,bmax,length=I)
+		db = (bmax-bmin)/(I-1)
+		J = 50
+		amin = 0
+		amax = 70
+		a = range(amin,amax,length=J)
+		da = (amax-amin)/(J-1)
+		τ = 10
+	end
+	
+	function (model::TwoAssets)(state::NamedTuple, (; vb_up, vb_down, va_up, va_down))
+		out_d = get_d_upwind(va_down, va_up, vb_down, vb_up, state, model)
+		out_c = get_c_upwind(vb_down, vb_up, state, model)
+		
+		(; out_d, out_c)
+
+		(; c, sc) = out_c
+		(; sd, MF, MB) = out_d
+
+		endo = util(c, model) + 
+			va_down * MB + va_up * MF +  
+			vb_down * (min(sd, 0.0) + min(sc, 0.0)) +
+			vb_up   * (max(sd, 0.0) + max(sc, 0.0))
+
+		(; out_d, out_c, endo)
+	end
+end
+
+# ╔═╡ 9136b68d-65a0-4ab3-9ce1-866f65ebf875
 md"""
-## HJB equation (implicit method)
+### EconPDEs
 """
 
-# ╔═╡ 0caee0bf-77c0-4542-a68e-9052d230ca74
-md"""
-$$\rho v_1(a) = \max_c u(c) + v_1'(a) (z_1 + ra - c) + \lambda_1(v_2(a) - v_1(a))$$
-$$\rho v_2(a) = \max_c u(c) + v_2'(a) (z_2 + ra - c) + \lambda_2(v_1(a) - v_2(a))$$
-
-```math
-\rho \pmatrix{v_1(a) \\ v_2(a)} = \pmatrix{u(c^*_1(a)) \\ u(c^*_2(a))} + \pmatrix{v'_1(a)(z_1 + ra - c_1^*(a)) \\ v'_1(a)(z_1 + ra - c_2^*(a))} + \pmatrix{-\lambda_1 & \lambda_1 \\ \lambda_2 & -\lambda_2} \pmatrix{v_1(a) \\ v_2(a)} 
-```
-"""
-
-# ╔═╡ 38555a5e-5d39-4c61-9381-94c8fb67a257
-md"""
-**Algorithm**
-
-(Notation: $v_{i,j}$ is short-hand notation for $v_j(a_i)$.)
-
-Start with an initial guess for the value function $v_{i,j}^0$. A natural choice is
-$$v_{i,j}^0 = \frac{u(z_j + ra_i)}{\rho}$$.
-
-For i = 1, ... maxit 
-
-(1) Approximate $(v_{i,j}^n)'$, $j=1,2$ using a finite difference method:
-
-(Notation: Superscript $n$ is omitted.) 
-
-- forward difference $v_{i,j,F}' = \frac{v_{i+1,j} - v_{i,j}}{\Delta a}$
-- backward diffrence $v_{i,j,B}' = \frac{v_{i,j} - v_{i-1,j}}{\Delta a}$
-
-The state constraint $a \ge a_\text{min}$ needs to be enforced by setting $v'_{1,j,B} = u'(z_j + ra_\text{min})$.
-
-- savings according to forward difference $s_{i,j,F} = z_j + ra_i - (u')^{-1}(v'_{i,j,F})$
-- savings according to backward difference $s_{i,j,B} = z_j + ra_i - (u')^{-1}(v'_{i,j,B})$
-
-The finite difference approximation of $(v_{i,j}^n)'$ is
-
-$$v'_{i,j} = v'_{i,j,F} 1_{s_{i,j,F}>0} + v'_{i,j,B} 1_{s_{i,j,B}<0} + \bar{v}_{i,j} 1_{s_{i,j,F} \le 0 \le s_{i,j,B}}$$
-
-where $\bar{v}_{i,j} = u'(s_j + r a_i)$.
-
-(We assume concavity of the value function here so that the case $s_{i,j,F}>0$ and $s_{i,j,B}<0$ cannot occur.)
-
-(2) Compute the consumption policy implied by the value function $c_{i,j}^n = (u')^{-1}[(v_{i,j}^n)']$
-
-(3) Find updated value function $v^{n+1}$:
-
-```math
-\begin{align}
-&\frac{v_{i,j}^{n+1} - v_{i,j}^{n}}{\Delta} + \rho v_{i,j}^{n+1} = \\
-&u(c_{i,j}^n) + (v_{i,j,F}^{n+1})'[z_j + ra_i - c_{i,j,F}^n]^+ + (v_{i,j,B}^{n+1})'[z_j + ra_i - c_{i,j,B}^n]^- + \lambda_j (v_{i,-j}^{n+1} - v_{i,j}^{n+1})
-\end{align}
-```
-
-where $\Delta$ is the step size.
-
-This is a system of $2N_a$ linear equations. Since $v^{n+1}$ is implicitly defined by the equations above, this approach is referred to as the implicit method.
-
-The system of equations can be written in matrix notation as 
-
-$$\frac{1}{\Delta} (v^{n+1} - v^n) + \rho v^{n+1} = u^n + A^n v^{n+1}$$
-
-The $2N_a \times 2N_a$ matrix $A^n$ can be written as a sum of two matrices $\bar{A}^n$ and $A_\text{switch}$:
-
-$A^n = \bar{A}^n + A_\text{switch} = \begin{pmatrix} \bar{A}_{11}^n & 0 \\ 0 & \bar{A}_{22}^n \end{pmatrix} + \begin{pmatrix} -\lambda_1 I & \lambda_1 I \\ \lambda_2 I & -\lambda_2 I \end{pmatrix}$
-
-where $I$ is a $N_a \times N_a$ identity matrix. Since $A_\text{switch}$ stays unchanged, it can be pre-computed outside the for-loop.
-
-The $N_a \times N_a$ submatrices $\bar{A}_{11}^n$ and $\bar{A}_{22}^n$ are tri-diagonal:
-- The -1 diagonal is filled with $x_{i,j} = - \frac{(s^n_{i,j,B})^-}{\Delta a}$, $i=2, \dots N_a$
-- The main diagonal is filled with $y_{i,j} = - \frac{(s^n_{i,j,F})^+}{\Delta a} + \frac{(s^n_{i,j,B})^-}{\Delta a}$, $i=1, \dots N_a$
-- The +1 diagonal is filled with $z_{i,j} = \frac{(s^n_{i,j,F})^+}{\Delta a}$, $i=1, \dots N_a - 1$
-
-Since $A^n$ is a sparse matrix, computers can solve the system of linear equations quickly even for large $N_a$.
-
-(4) Stop if $v^{n+1}$ is close enough to $v^n$. 
-
-"""
-
-# ╔═╡ fb88f286-0bce-4cb0-9d52-83b373f6fbcf
-md"""
-## Compare with EconPDEs.jl
-"""
-
-# ╔═╡ 56234834-6de9-4e44-95af-c5e3fb828a9d
-u_prime_inv(x, (; σ)) = x^(-1/σ)
-
-# ╔═╡ a10ef170-045c-439e-a23b-122e812853aa
-u_prime(c, (; σ)) = c^(-σ)
-
-# ╔═╡ 68aeb6cf-cff8-49e9-8c39-d94aadd5a444
-u(c, (; σ)) = c > 0 ? σ == 1 ? log(c) : c^(1-σ)/(1-σ) : 10 * c - 100
-
-# ╔═╡ e197b24a-7e51-45e4-8186-11f88bf48de6
+# ╔═╡ 562042f9-3e5d-463d-93c4-c808a0d57974
 function clean_variables(nt, solname, statename, n)
 	map(1:n) do i
 		sol_key = Symbol(solname, i)
@@ -222,924 +614,38 @@ function clean_variables(nt, solname, statename, n)
 	end |> DataFrame
 end
 
-# ╔═╡ b4d6a137-6e4a-4b16-a1d0-d6b9c7c88c50
-
-
-# ╔═╡ 1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
-md"""
-## KF equation
-"""
-
-# ╔═╡ 2e09462e-6030-4e33-bc7a-9d2faed4ca74
-md"""
-$$0 = - \frac{d}{da}[s_1(a)g_1(a)] - \lambda_1 g_1(a) + \lambda_2 g_2(a)$$
-$$0 = - \frac{d}{da}[s_2(a)g_2(a)] - \lambda_2 g_2(a) + \lambda_1 g_1(a)$$
-
-where $s_j(a) + z_j + ra - c_j(a)$
-
-$$1 = \int_{\bar{a}}^\infty g_1(a)da + \int_{\bar{a}}^\infty g_2(a)da$$
-
-**Algorithm**
-
-A finite difference approximation of the KF equation results into the matrix equation $A^T g = 0$ where $A$ is the matrix from implicit algorithm for the HJB equation.
-"""
-
-# ╔═╡ 4ebeb5e8-505d-4ed2-8d37-4a64ceb7d796
-#using QuantEcon: gth_solve
-
-# ╔═╡ 6c895dce-9c0a-499c-9e95-45c29ee5a459
-md"""
-```math
-\begin{align}
-\dot g = (1-m) A g_t + m g_t \\
-g_{t+\Delta} - g_t \approx A g_t \Delta \\
-g_{t+\Delta} = (1-m)(I + \Delta A) g_t + m g_0 \\
-g^* = (1-m)(I + \Delta A) g^* + m g_0 \\
-(I - (1-m)(I + \Delta A)) g^* = m g_0 \\
-(I - \frac{1-m}{m}\Delta A)) g^* = g_0 \\
-\end{align}
-```
-"""
-
-# ╔═╡ a8279bcc-4cdf-4a89-bb75-e7e1f617643d
-function solve_KF_moll(A)
-	N = size(A, 1)
-	AT = copy(transpose(A))
-	b = zeros(N)
-	
-	i_fix = 1
-	b[i_fix] = .1
-	AT[i_fix,:] .= 0.0
-	AT[i_fix,i_fix] = 1.0
-
-	g = AT\b
-
-	g ./ sum(g)
-end
-
-# ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
-function solve_KF(m::HuggettPoisson, A)
-
-	(; N_a, Δa) = m
-	
-	AT = copy(transpose(A))
-	b = zeros(2*N_a, 1)
-
-	
-	i_fix = 1
-	b[i_fix] = .1
-	AT[i_fix,:] .= vec(hcat(zeros(1, i_fix-1), 1., zeros(1,2*N_a-i_fix)))
-
-	try
-		global g_stacked = AT\b
-	catch e
-		if e isa SingularException
-			@warn "SingularException – added noise"
-			
-			global g_stacked = (AT + I * √eps())\b
-		else
-			rethrow(e)
-		end
-	end
-	
-	g_sum = sum(g_stacked) * Δa
-	g_stacked_norm = g_stacked ./ g_sum
-
-	@assert sum(g_stacked_norm) * Δa ≈ 1
-	
-	g = reshape(g_stacked_norm, N_a, 2)
-
-end
-
-# ╔═╡ e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
-md"""
-## Putting everything together
-"""
-
-# ╔═╡ 34779464-624a-446d-b741-81524509aee6
-#using QuantEcon: gth_solve
-
-# ╔═╡ a2da91e4-cedd-446f-81d4-adb008c01d5b
-function stationary_distribution(A; δ = 0.0, ψ = InfinitesimalGenerators.Zeros(size(A, 1)))
-    δ >= 0 ||  throw(ArgumentError("δ needs to be positive"))
-    if δ > 0
-        g = abs.((δ * I - A') \ (δ * ψ))
-    else
-        η, g = InfinitesimalGenerators.principal_eigenvalue(A')
-        abs(η) <= 1e-5 || @warn "Principal Eigenvalue does not seem to be zero"
-    end
-    g ./ sum(g)
-end
-
-# ╔═╡ dd89d622-6066-4d52-a4ca-366822c63661
-function solve_KF_death(A)
-	N = size(A, 1)
-	g₀ = fill(1/N, N)
-	
-	stationary_distribution(A, δ = 1e-14, ψ = g₀)
-end
-
-# ╔═╡ 33a6780e-7f5a-4677-a51c-c002b7b86dc3
-function solve_KF_eigs(A)	
-	stationary_distribution(A)
-end
-
-# ╔═╡ eade1b48-7d1c-4d17-aaf5-14d111a13556
-function solve_KF_iterate(A, Δ, g₀=fill(1/size(A,1), size(A,1)))
-	g = copy(g₀)
-	B = (I + Δ * A')
-	for i ∈ 1:50000
-		g_new = B * g
-
-		crit = maximum(abs, g_new - g)
-		i % 1000 == 0 && @info crit
-		if crit < 1e-12
-			@info "converged after $i iterations"
-			return g
-		end
-		g .= g_new
-	end
-	g
-end
-
-# ╔═╡ deeff3d5-3856-43cb-8469-2a4d6d7fca4f
-md"""
-## Equilibrium interest rate
-"""
-
-# ╔═╡ b6101102-2054-4932-b6b6-5070cd84f2be
-md"""
-$$0 = \int_{\bar{a}}^\infty ag_1(a)da + \int_{\bar{a}}^\infty ag_2(a)da = S(r)$$
-"""
-
-# ╔═╡ a8f1dc13-b73c-44b0-8e63-82431f904313
-initial_bracket = (0.01, 0.03)
-
-# ╔═╡ e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
-md"""
-# Appendix 
-"""
-
-# ╔═╡ ab69ab43-99bf-4a92-9698-70e170761e82
-md"""
-## HJB equation (explicit method)
-"""
-
-# ╔═╡ 5c7c3dc0-7848-4431-829e-508664d9c5af
-md"""
-**Basic dea**
-
-Start with some initial guess $v_{i,j}^0$ and update $v_{i,j}^n$ as follows:
-
-$$\frac{v_{i,j}^{n+1} - v_{i,j}^n}{\Delta} + \rho v_{i,j}^n = u(c_{i,j}^n) + (v_{i,j}^n)'(z_j + ra_i - c_{i,j}^n) + \lambda_i (v_{i,-j}^n - v_{i,j}^n)$$
-
-In contrast to the implicit method, we can rearrange for $v_{i,j}^{n+1}$ in the equation above.
-
-The disadvantage of the explicit method is that it converges only if $\Delta$ is not too large.
-"""
-
-# ╔═╡ b099dbbf-9648-44c5-984c-fdd80ee81469
-function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
-
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
-	da = Δa
-
-	# construct asset grid
-	a = construct_a(m)
-	Λ = generator(m)
-	
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-
-	# initial guess for value function
-	v₀ = zeros(N_a, 2)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
-
-	# initialize vector that keeps track of convergence
-	dist = - ones(maxit)
-
-	# step size for updating the value function
-	Δ = .9 * da / (z[2] .+ r.*aₘₐₓ)
-
-	for it in range(1, maxit)
-
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-	
-		c = dv_upwind .^ (-1/σ)
-		ȧ = z .+ r.*a - c
-		u = c.^(1-σ)/(1-σ)
+# ╔═╡ 4301d6c7-ce24-470d-b033-87d0c9898e9e
+function f_econ_pdes(state::NamedTuple, sol::NamedTuple, m)
+	(; ϱ, Λ, z) = m
+	nz = length(z)
 		
-		# HJB equation
-		v_change = u + dv_upwind .* ȧ + v * Λ' - ρ*v
-
-		#v_switch = zeros(N_a, 2)
-		#v_switch[:,2] = v[:,1]
-		#v_switch[:,1] = v[:,2]
-		#v_change = u + dv_upwind .* ȧ + ones(N_a,1)*λ.*(v_switch - v) - ρ*v
-
-		# updating the value function
-		v .= v + Δ * v_change
-
-		dist[it] = maximum(abs.(v_change))
-
-		if dist[it] < crit
-			
-			return (; v, c, ȧ, it_last=it, dist)
-
-		end
-
-	end
-
-	error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 4bfa5d92-b177-4442-b045-e05cc48b6cc4
-t_expl = @elapsed solve_HJB_explicit(m, 0.03; crit=1e-6)
-
-# ╔═╡ fd0fb774-a805-4739-b570-0d2e191a3294
-md"""
-## Implicit vs. explicit method
-"""
-
-# ╔═╡ 8987f1ce-e290-4930-909a-3e09a9113a7a
-md"""
-On my computer, it takes 0.4 seconds to reach convergence with the implicit method (assuming a tolerance of $10^{-6}$), while it takes approximately 6 seconds with the explicit method.
-"""
-
-# ╔═╡ eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
-md"""
-**Implicit method**
-"""
-
-# ╔═╡ bd2e4d28-c68b-45c9-b68e-b477b44fcd75
-md"""
-**Explicit method**
-"""
-
-# ╔═╡ 6e607792-e297-483f-8917-c871fa0c26d0
-md"""
-## Helper functions
-"""
-
-# ╔═╡ 532d0b24-6ace-4579-bf2a-d12c07ee9436
-function results_to_df(m; v, c, ȧ, g=nothing)
-
-	N_z = 2
-	
-	(; N_a, z) = m
-
-	a = construct_a(m)
-
-	df = DataFrame()
-	df.a = a * ones(1, N_z) |> vec
-	df.z = ones(N_a, 1) * z |> vec
-	df.c = c |> vec
-	df.ȧ = ȧ |> vec
-	df.v = v |> vec
-	
-	if ! isnothing(g)
-		df.g = g |> vec
-	end
-
-	df
-	
-end
-
-# ╔═╡ f3e0b42f-370d-4887-b6a1-d9ecd83c6275
-md"""
-## Julification of the code
-"""
-
-# ╔═╡ b9efca1a-b978-4794-b421-ee9df889a6a8
-function statespace(m)
-	(; N_a, aₘᵢₙ, aₘₐₓ, z) = m
-	a_grid = range(aₘᵢₙ, aₘₐₓ, N_a)
-	z_grid = z |> vec
-
-	[(; a, z) for a ∈ a_grid, z ∈ z_grid]
-end
-
-# ╔═╡ 01234bcc-a428-4922-969f-9a1ba49c8d62
-function statespace_inds(m)
-	(; N_a, z) = m
-	N_z = length(z)
-
-	[(; i_a, i_z) for i_a ∈ 1:N_a, i_z ∈ 1:N_z]
-end
-
-# ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
-function consumption_and_drift((; a, z), dv, (; r, σ))
-	#dv = max(dv, eps(0.0))
-	c = u_prime_inv(dv, (; σ))
-	ȧ = z + r * a - c
-
-	(; c, ȧ, dv)
-end
-
-# ╔═╡ 91c8dce8-07b8-46d2-8c61-e6bccced64e4
-function consumption_and_drift₀((; a, z), (; r, σ))
-	ȧ = 0.0
-	c = z + r * a
-
-	dv = u_prime(c, (; σ))
-
-	(; c, ȧ, dv)
-end
-
-# ╔═╡ 7734c75e-5f2b-4807-8b9a-82e7e010edac
-function consumption_and_drift_upwind(state, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
-	# consumption and savings with forward difference
-	(; dv, ȧ, c) =  consumption_and_drift(state, dvf, (; σ, r))
-	if ȧ > 0 && state.a < aₘₐₓ
-		return (; dv, ȧf = ȧ, ȧb = 0.0, c, ȧ)
-	end
-	# consumption and savings with backward difference
-	(; dv, ȧ, c) = consumption_and_drift(state, dvb, (; σ, r))
-	if ȧ < 0 && state.a > aₘᵢₙ
-		return (; dv, ȧf = 0.0, ȧb = ȧ, c, ȧ)
-	end
-	# consumption and derivate of value function at steady state
-	(; dv, ȧ, c) = consumption_and_drift₀(state, (; σ, r))
-	return (; dv, ȧf = 0.0, ȧb = 0.0, c, ȧ)
-end
-
-# ╔═╡ 12cbc2a7-ddf3-42c5-b592-a438ecdc5165
-begin
-	Base.@kwdef struct HuggettMC
-		σ = 2.0
-		ρ = 0.05
-		r = 0.03
-		w = 1.0
-		aₘᵢₙ = -0.1
-		aₘₐₓ = 1.0
-		an = 500
-		zgrid =  [0.1, 0.2]
-		Λ = [-0.02 0.02;
-			0.03 -0.03]
-	end
+	sol_clean = [clean_variables(sol, :v, :a, nz) sol_clean = clean_variables(sol, :v, :b, nz)]
 		
-	function (m::HuggettMC)(state::NamedTuple, sol::NamedTuple)
-		(; ρ, Λ, zgrid) = m
-		nz = length(zgrid)
-		
-		sol_clean = clean_variables(sol, :v, :a, nz)
-		
-		nts = map(enumerate(eachrow(sol_clean))) do (i, row)
-			dv = (dvf = row.va_up, dvb = row.va_down)
-			out = consumption_and_drift_upwind((; state..., z=zgrid[i]), dv..., m)
-			endo = u(out.c, m) + out.dv * out.ȧ
-			(; i, out..., endo)
-		end
+	nts = map(enumerate(eachrow(sol_clean))) do (i, row)
+		state = (; state..., z=zgrid[i])
+		(; out_d, out_c) = m(state, row)
+		endo = u(out.c, m) + out.dv * out.ȧ
+		(; i, out..., endo)
+	end
 
-		(; v) = sol_clean
-		(; endo, ȧ, c) = DataFrame(nts)
+	(; v) = sol_clean
+	(; endo, ȧ, c) = DataFrame(nts)
 
-		vt = ρ * v - (endo + Λ * v)
+	vt = ρ * v - (endo + Λ * v)
 
-		(; (Symbol(:v, i, :t) => vt[i] for i ∈ 1:nz)...),
-		(; 
-			(Symbol(:c, i) => c[i] for i ∈ 1:nz)...,
-			(Symbol(:s, i) => ȧ[i] for i ∈ 1:nz)...,
-		)
-	end	
-end
-
-# ╔═╡ d7fbe6a6-076e-4a96-9431-7470cf73e576
-out3, agrid3 = let
-	m = HuggettMC()
-		
-	agrid = range(m.aₘᵢₙ, m.aₘₐₓ, m.an)
-	stategrid = OrderedDict(:a => agrid)
-	
-	solend = OrderedDict(
-		(Symbol(:v, i) => [u(m.r * a + m.zgrid[i], m) / m.ρ for a ∈ agrid]) for i ∈ 1:length(m.zgrid)
+	(; (Symbol(:v, i, :t) => vt[i] for i ∈ 1:nz)...),
+	(; 
+#		(Symbol(:c, i) => c[i] for i ∈ 1:nz)...,
+#		(Symbol(:s, i) => ȧ[i] for i ∈ 1:nz)...,
 	)
-	
-	out = pdesolve(m, stategrid, solend; maxdist = √eps())
-	(; out, agrid)
 end
 
-# ╔═╡ e14b58b5-4b5c-4a2a-8063-d2212f722d06
-df3 = mapreduce((x,y) -> leftjoin(x, y, on = [:a, :i_z]), [:v => r"^v", :c => r"^c", :s => r"^s"]) do (v, rgx)
-	@chain out3.optional begin
-		DataFrame
-		@transform(:a = @c agrid3)
-		DataFrames.select(rgx, :a)
-		stack(rgx, value_name = v)
-		@transform(:i_z = parse(Int, :variable[end]))
-		DataFrames.select(Not(:variable))
-	end
-end
-
-# ╔═╡ ffa87f90-65ad-469c-aef3-55dc9f6fe861
-@chain df3 begin
-	stack(Not([:a, :i_z]))
-	data(_) * mapping(:a, :value, color = :i_z => nonnumeric, layout = :variable) * visual(Lines)
-	AlgebraOfGraphics.draw(facet = (linkyaxes = false, ))
-end
-
-# ╔═╡ 3e4b82aa-a6ec-4097-afb5-927b7e16262a
-function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
-	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
-end
-
-# ╔═╡ 1971dce8-ca39-4ced-88af-c65105977ac4
-v₀((; z, a), (; r, σ, ρ)) = u(z + r*a, (; σ))/ρ
-
-# ╔═╡ b7024377-6ffe-4f8a-a58a-0fa809683fd2
-abstract type Scheme end
-
-# ╔═╡ 2517dcff-c838-4b33-9f0e-e6d4bd8a259e
-Base.@kwdef struct Implicit <: Scheme
-	Δ=1000
-	maxit=100
-end
-
-# ╔═╡ 0a1c908e-6432-4e8a-8c8c-7cc903fbca6c
-begin
-	Base.@kwdef struct Explicit <: Scheme
-		Δ
-		maxit
-	end
-	function Explicit((; Δa, z, aₘₐₓ); maxit=100_000)
-		r = 0.02
-		Δ = .9 * Δa / (maximum(z) + r * aₘₐₓ)
-		Explicit(Δ, maxit)
-	end
-end
-
-# ╔═╡ 90d6eba4-fa47-4717-b742-8b38f0b330ac
-function inner_function(ss, v, (; aₘₐₓ, aₘᵢₙ, r, σ, N_a, Δa, z))
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-
-	# forward difference
-	dvf[1:N_a-1,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / Δa
-	#dvf[N_a,:] .= (vec(z) .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-	# backward difference
-	dvb[2:N_a,:] .= (v[2:N_a,:] - v[1:N_a-1,:]) / Δa
-	#dvb[1,:] .= (vec(z) .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-	#I_concave = dvb .> dvf # problems if value function not concave
-
-	out = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))	
-	u = out.c .^ (1-σ)/(1-σ)
-
-	(; u, out.c, out.dv, out.ȧ, out.ȧf, out.ȧb)
-end
-
-# ╔═╡ 005988d8-a327-410e-9e53-09ba99dcee9a
-function update_v(ss, v, par, _, Λ, (; Δ)::Explicit)
-	(; ρ) = par
-	(; u, c, ȧ, ȧf, ȧb, dv) = inner_function(ss, v, par)
-		
-	# HJB equation
-	v_change = u + dv .* ȧ + v * Λ' - ρ*v
-
-	v_new = v + Δ * v_change
-	(; v_new, v_change, u, c, ȧ, ȧf, ȧb)
-end
-
-# ╔═╡ b57ea0a2-bee4-450f-99fa-cc79054fc963
-function construct_A_alt(ȧfs, ȧbs, da, N_a, N_z)
-	T = typeof((; I_from=1, I_to=1, λ=0.0))
-	list = T[]
-	
-	car_inds = CartesianIndices((N_a, N_z)) |> collect .|> Tuple
-	lin_inds = LinearIndices((N_a, N_z))
-
-	for (I_from, (ȧf, ȧb)) in enumerate(zip(ȧfs, ȧbs))
-		i_a, i_z = car_inds[I_from]
-
-		if ȧf > 0 && i_a < N_a
-			I_to = lin_inds[i_a + 1, i_z]
-			λ = ȧf / da
-			push!(list, (; I_from, I_to, λ))
-		end
-		if ȧb < 0 && i_a > 1
-			I_to = lin_inds[i_a - 1, i_z]
-			λ = -ȧb / da
-			push!(list, (; I_from, I_to, λ))
-		end
-	end
-	
-	sa = StructArray(list)
-	NN = N_a * 2
-	A₀ = sparse(sa.I_from, sa.I_to, sa.λ, NN, NN)
-	for i ∈ 1:NN
-		A₀[i, i] = - sum(A₀[i,:])
-	end
-
-	A₀
-end
-
-# ╔═╡ 8777505c-6db4-4e75-a57b-59f4620b0051
-function construct_A(ȧs, da, N_a, N_z)
-
-
-	size_ss = (N_a, N_z)
-	N = N_a * N_z
-	car_inds = CartesianIndices(size_ss) |> collect .|> Tuple
-	lin_inds = LinearIndices(size_ss)
-
-	# initialize list of entries A
-	T = typeof((; I_from=1, I_to=1, λ=0.0))
-	list = T[]
-
-	# create list of entries of A
-	for (I_from, ȧ) in enumerate(ȧs)
-		i_a, i_z = car_inds[I_from]
-
-		i_a_next = nothing
-		λ = nothing
-
-		# in which direction to move?
-		if ȧ > 0 && i_a < N_a
-			i_a_next = i_a + 1
-			λ = ȧ / da
-		elseif ȧ < 0 && i_a > 1
-			i_a_next = i_a - 1
-			λ = -ȧ / da
-		end
-
-		if !isnothing(i_a_next)
-			I_to = lin_inds[i_a_next, i_z]
-			push!(list, (; I_from, I_to, λ))
-		end
-	end
-
-	# construct sparse matrix from list of entries
-	list_sa = StructArray(list)
-	A = sparse(list_sa.I_from, list_sa.I_to, list_sa.λ, N, N)
-	# fill diagonal
-	A[diagind(A)] .= - vec(sum(A, dims=2))
-
-	A
-end
-
-# ╔═╡ 434ecb8d-eae2-4913-97f8-3bdbefbf78ff
-function construct_A_diag(ȧf, ȧb, da, N_a)
-	X = - min.(ȧb,0)/da
-	Z =   max.(ȧf,0)/da
-
-	A11 = spdiagm(-1 => X[2:N_a,1], 1 => Z[1:N_a-1,1])
-	A22 = spdiagm(-1 => X[2:N_a,2], 1 => Z[1:N_a-1,2])
-	A = cat(A11, A22, dims=(1,2))
-	A[diagind(A)] .= - vec(sum(A, dims=2))
-	
-	A
-end
-
-# ╔═╡ b77b52ac-73ad-456c-94e5-5f72e310268f
-function construct_A_moll(ȧf, ȧb, da, N_a)
-	X = - min.(ȧb,0)/da
-	Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
-	Z =   max.(ȧf,0)/da
-
-	A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
-	A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-	A = cat(A11, A22, dims=(1,2))
-
-	A
-end
-
-# ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
-function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), Δ = 1000)
-
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
-	da = Δa
-
-	# construct asset grid
-	a = construct_a(m)
-
-	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
-
-	# precompute A_switch matrix
-	id = sparse(I, N_a, N_a)
-	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
-	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
-	A_switch   = vcat(A_switch_1, A_switch_2)
-
-	# initial guess for value function
-	v₀ = zeros(N_a, 2)
-	for (i, zᵢ) in enumerate(z)
-		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
-	end
-	v = v₀
-
-	# initialize vector that keeps track of convergence
-	dist = - ones(maxit)
-
-	for it in range(1, maxit)
-
-		# STEP 1
-
-		# forward difference
-		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvf[N_a,:] = (z .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
-
-		# backward difference
-		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
-		dvb[1,:] = (z .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
-	
-		I_concave = dvb .> dvf # problems if value function not concave
-
-		# consumption and savings with forward difference
-		cf = dvf .^ (-1/σ)
-		ȧf = z .+ r .* a - cf
-
-		# consumption and savings with backward difference
-		cb = dvb .^ (-1/σ)
-		ȧb = z .+ r .* a - cb
-
-		# consumption and derivate of value function at steady state
-		c0 = z .+ r .* a
-		dv0 = c0 .^ (-σ)
-
-		If = ȧf .> 0 # positive drift => forward difference
-		Ib = ȧb .< 0 # negative drift => backward difference
-		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
-		If[N_a,:] .= 0.
-		I0 = (1 .- If .- Ib) # steady state
-	
-		dv_upwind = dvf.*If + dvb.*Ib + dv0.*I0
-
-		# STEP 2
-	
-		c = dv_upwind .^ (-1/σ)
-		u = c.^(1-σ)/(1-σ)
-
-		# STEP 3
-		A = construct_A_moll(ȧf, ȧb, Δa, N_a) + A_switch
-
-		B = (ρ + 1/Δ) * I - A
-		b = vec(u) + vec(v)/Δ
-		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, 2)
-
-		# STEP 4
-
-		v_change = v_new - v
-		dist[it] = maximum(abs.(v_change))
-		
-		v = v_new
-
-		if dist[it] < crit
-
-			ȧ = z .+ r.*a - c
-
-			return v, c, ȧ, A, it, dist
-
-		end
-
-	end
-
-	@error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 3a92eac0-643f-47ec-b6dc-6d541873ac9a
-solve_HJB_implicit(m, 0.03)
-
-# ╔═╡ bf01f8b6-b618-4ce8-9ff0-3bdf37901ce1
-function update_v(ss, v, par, A_switch, _, (; Δ)::Implicit)
-	(; ρ, N_a, Δa) = par
-	(; u, c, ȧ, ȧf, ȧb, dv) = inner_function(ss, v, par)
-		
-	#A = construct_A_alt(ȧf, ȧb, da, N_a, 2) + A_switch
-	#A = construct_A_diag(ȧf, ȧb, da, N_a) + A_switch
-	A = construct_A_moll(ȧf, ȧb, Δa, N_a) + A_switch
-	# A = construct_A(ȧ, da, N_a, 2) + A_switch
-
-	B = (ρ + 1/Δ) * I - A
-	b = vec(u) + vec(v)/Δ
-	v_new_stacked = B \ b
-	v_new = reshape(v_new_stacked, N_a, 2)
-	v_change = v_new - v
-	(; v_new, v_change, u, c, ȧ, ȧf, ȧb)
-end
-
-# ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
-function solve_HJB_julian(m::HuggettPoisson, r, scheme::Scheme; v₀=v₀, crit = 1e-6)
-
-	(; maxit, Δ) = scheme
-	
-	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
-	par = (; σ, ρ, z, N_a, aₘₐₓ, m.aₘᵢₙ, Δa, r)
-	Λ = generator(m)
-	
-	# construct asset grid
-	ss = statespace(m)
-	
-	# precompute A_switch matrix
-	A_switch = construct_A_switch(m)
-
-	# initial guess for value function
-	v = v₀.(ss, Ref((; r, σ, ρ)))
-
-	# initialize vector that keeps track of convergence
-	dists = []
-
-	for it in range(1, maxit)
-
-		# updating the value function
-		(; v_new, v_change, c, ȧ, ȧf, ȧb) = update_v(ss, v, par, A_switch, Λ, scheme)
-
-		dist = maximum(abs.(v_change))
-		v .= v_new
-		push!(dists, dist)
-		
-		if dist < crit
-			A = construct_A_moll(ȧf, ȧb, Δa, N_a) + construct_A_switch(m)
-			return (; A, v, c, ȧ, it_last=it, dist=dists)
-		end
-	end
-
-	@error("Algorithm did not converge")
-
-end
-
-# ╔═╡ 9e1600df-9b6a-4b84-a152-1fa636f25fe5
-let
-	r = 0.03
-	crit = 1e-6
-	scheme = Implicit()#; maxit, Δ)
-	(; v, c, ȧ, A, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
-
-	N = size(A, 1)
-	g₀ = fill(1/N, N)
-	
-	t0 = @elapsed g0 = solve_KF_iterate(A, 0.05)
-	
-	
-	t1 = @elapsed g1 = solve_KF_moll(A)
-	t2 = @elapsed g2 = solve_KF_death(A)
-	t3 = @elapsed g3 = solve_KF_eigs(A)
-	t4 = @elapsed g4 = gth_solve(Matrix(A))
-	
-
-	@info t0, t1, t2, t3, t4
-	
-	maximum(abs, g0 - g1), maximum(abs, g1 - g2), maximum(abs, g2 - g3),
-	maximum(abs, g3 - g4), maximum(abs, g4 - g0)
-	
-	#norm(g1 - g_stacked)/norm(g1)
-	#g1 ./ (sum(g1) * m.Δa)
-
-#	fig = Figure()
-#	ax = Axis(fig[1,1])
-	
-#	lines!(ax, g1)
-#	lines!(ax, g_stacked)
-
-#	fig
-end
-
-# ╔═╡ e1376e99-a636-4d28-b711-2dd4be66374f
-function solve_df(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	scheme = Implicit(; maxit, Δ)
-	(; v, c, ȧ, A, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
-	g = solve_KF(m, A)
-	df = results_to_df(m; v, c, ȧ, g)
-	
-	return df, it_last, dist
-	
-end
-
-# ╔═╡ 4de350bb-d2be-46b1-8558-a49f54a29dd1
-(df, it_last, dist) = solve_df(m, 0.03; maxit = 100);
-
-# ╔═╡ c57052d4-7a03-4a02-88d9-531df3421cb7
-begin
-	fig = Figure()
-	ax1 = Axis(fig[1,1])
-	lines!(ax1, out3.zero[:v1], label = "Moll")
-	lines!(ax1, df.v[begin:500], label = "EconPDEs")
-
-	ax2 = Axis(fig[1,2])
-	lines!(ax2, out3.zero[:v2])
-	lines!(ax2, df.v[501:end], label = "EconPDEs")
-	
-	fig
-end
-
-# ╔═╡ 1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
-let 
-	
-	df.g_max = min.(df.g,df.g[2]);
-	
-	@chain df begin
-		stack(Not([:a, :z, :g]))
-		data(_) * mapping(:a, :value, layout = :variable, color = :z => nonnumeric) * visual(Lines)
-		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
-	end
-
-end
-
-# ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
-function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	(; Δa) = m
-	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
-	A = dot(df.a, df.g) * Δa
-
-end
-
-# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
-# ╠═╡ disabled = true
-#=╠═╡
-r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
-  ╠═╡ =#
-
-# ╔═╡ 98a7d8e0-1741-4447-b612-e40491fa8673
-t_impl = @elapsed solve_HJB_julian(m, 0.03, Implicit())
-
-# ╔═╡ ae8fd43c-f658-47b1-8781-6f699ade6bdb
-let 
-	df_dist = DataFrame(
-		iteration = range(1, it_last), 
-		time = range(0, t_impl, it_last),
-		log10_dist = log10.(dist[1:it_last])
-		)
-	figure = (; resolution = (500, 250))
-	@chain df_dist begin
-		data(_) * mapping(:time, :log10_dist) * visual(Lines)
-		draw(; figure)
-	end
-end
-
-# ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = √eps())
-	scheme = Explicit(m; maxit)
-	(; v, c, ȧ, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
-	df = results_to_df(m; v, c, ȧ)
-	
-	return df, it_last, dist
-	
-end
-
-# ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
-(df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=√eps());
-
-# ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
-(df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]]) ./ df[:,[:c, :ȧ, :v]]
-
-# ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
-let 
-	df_dist = DataFrame(
-		iteration = range(1, it_last2), 
-		time = range(0, t_expl, it_last2),
-		log10_dist = log10.(dist2[1:it_last2])
-		)
-	figure = (; resolution = (500, 250))
-	@chain df_dist begin
-		data(_) * mapping(:time, :log10_dist) * visual(Lines)
-		draw(; figure)
-	end
-end
-
-# ╔═╡ 1cc42384-d262-496a-801a-033e7b40e6e9
+# ╔═╡ 9c0ec3bd-e8d9-4278-8230-56dcd783be82
 md"""
-### Differentiate
+## Differentiate
 """
 
-# ╔═╡ 9f6051fa-2bd7-40b1-b2f8-5e7b1c477387
+# ╔═╡ 8c293630-e2a2-4123-9523-0e6f01a7f1d0
 begin
 	Δy_up(y, i, Δx) = (y[i+1] - y[i]) / Δx
 	Δy_down(y, i, Δx) = (y[i] - y[i-1]) / Δx
@@ -1165,19 +671,831 @@ begin
 	deriv_names(fun_name, state_name) = (Symbol(fun_name, state_name, "_", :up), Symbol(fun_name, state_name, "_", :down), Symbol(fun_name, state_name, state_name))
 end
 
-# ╔═╡ 518eec58-eb4b-4294-9090-b6645f51a337
+# ╔═╡ 10e8f1f6-820c-432a-8b3e-3abb7652f780
+function cross_difference(y, grids, inds)
+    @assert length(grids) == length(inds) == length(size(y)) == 2
+
+    i1, i2 = Tuple(inds)
+    grid1, grid2 = grids
+
+    Δx1 = Δgrid(grid1, i1)
+    Δx2 = Δgrid(grid2, i2)
+
+    i1_lo = max(i1-1, 1)
+    i1_hi = min(i1+1, length(grid1))
+
+    if i2 == 1
+        a = Δy_up(view(y, i1_hi, :), i2, Δx2.central) # use Δx2.up?
+        b = Δy_up(view(y, i1_lo, :), i2, Δx2.central) # use Δx2.up?
+    elseif i2 == length(grid2)
+        a = Δy_down(view(y, i1_hi, :), i2, Δx2.central) # use Δx2.down?
+        b = Δy_down(view(y, i1_lo, :), i2, Δx2.central) # use Δx2.down?
+    else
+        a = Δy_central(view(y, i1_hi, :), i2, Δx2.central)
+        b = Δy_central(view(y, i1_lo, :), i2, Δx2.central)
+    end
+
+    vab = (a - b) / Δx1.central # adjust Δx1.central when i1 is adjusted?
+end
+
+# ╔═╡ 5267753b-212b-4d80-b4a5-aa74648890df
+function select_all_but_one_dim(y0, dim_inds_drop)
+    y = reshape(view(y0, :), size(y0))
+
+    for (dim_drop, i_drop) ∈ reverse(dim_inds_drop)
+        y = selectdim(y, dim_drop, i_drop)
+    end
+    y
+end
+
+# ╔═╡ 42f3458b-9acd-4daa-9d01-7e76767b1a91
+function selectdims(A0, ds, is)
+	A = reshape(view(A0, :), size(A0)) 
+	for (d, i) ∈ zip(ds, is)
+		A = selectdim(A, d, i)
+    end
+    A
+end
+
+# ╔═╡ 459a01c4-2b9c-437b-8502-c7331729f37d
+function differentiate_1_naive(y, grids, inds, bc, solname=:v)
+    statename = only(keys(grids))
+    i = only(Tuple(inds))
+    n_states = 1
+    grid = only(grids)
+
+    Δx = Δgrid(grid, i)
+    va = Δy(y, bc, i, Δx, solname, statename)
+
+    (; solname => y[Tuple(inds)...], va...)
+end
+
+# ╔═╡ a6528bdc-db07-4d62-8705-6948dc9b7fdb
+function differentiate_2_naive(y, grids, inds, bc, solname=:v)
+    statenames = keys(grids)
+    dim_inds = [(; dim, i) for (dim, i) ∈ enumerate(Tuple(inds))]
+    n_states = length(grids)
+
+	# simple differences
+    nts_simple = map(enumerate(statenames)) do (dim, statename)
+        i = inds[dim]
+        grid = grids[statename]
+        Δx = Δgrid(grid, i)
+
+        dim_inds_drop = dim_inds[Not(dim)]
+
+        y_sub = select_all_but_one_dim(y, dim_inds_drop)
+        bc_sub = select_all_but_one_dim(bc, dim_inds_drop)
+
+        va = Δy(y_sub, bc_sub, i, Δx, solname, statename)
+    end
+
+	out = (; solname => y[Tuple(inds)...], merge(nts_simple...)...)
+
+	# cross differences
+	if n_states == 2
+	    vab = cross_difference(y, grids, inds)
+	    cross_name = Symbol(solname, statenames...)
+		out = (; out..., cross_name => vab)
+	elseif n_states == 3
+		nts_cross = map(dim_inds) do (dim_drop, i_drop)
+	        state_drop = statenames[dim_drop]
+			
+	        sub_grids = delete(grids, state_drop)
+	        sub_inds = [Tuple(inds)...][Not(dim_drop)]
+	        sub_y  = selectdim(y,  dim_drop, i_drop)
+	        sub_bc = selectdim(bc, dim_drop, i_drop)
+	        sub_statenames = filter(!=(state_drop), statenames)
+	
+	        vab = cross_difference(sub_y, sub_grids, sub_inds)
+	        cross_name = Symbol(solname, sub_statenames...)
+	
+	        (; Symbol(solname, sub_statenames...) => vab)
+	    end    
+
+		out = merge(out, merge(nts_cross...))
+	end
+	
+    out
+end
+
+# ╔═╡ abca9b50-f347-484a-9a16-a1e0f48cfdd9
+function differentiate(y, grids, inds, bc, solname=:v)
+    statenames = collect(keys(grids))
+    dim_inds = [(; dim, i) for (dim, i) ∈ enumerate(Tuple(inds))]
+
+    n_states = length(grids)
+
+	# simple upwind differences for each state
+    nts_simple = map(enumerate(statenames)) do (dim, statename)
+        i = inds[dim]
+        grid = grids[statename]
+        Δx = Δgrid(grid, i)
+
+        dim_inds_drop = dim_inds[Not(dim)]
+
+        y_sub = select_all_but_one_dim(y, dim_inds_drop)
+        bc_sub = select_all_but_one_dim(bc, dim_inds_drop)
+
+        va = Δy(y_sub, bc_sub, i, Δx, solname, statename)    
+    end
+
+	out = (; solname => y[Tuple(inds)...], merge(nts_simple...)...)
+	
+    # upwind cross-differences for each combination of state
+	cross = Pair[]
+	for i in 1:n_states
+		for j in 1:i-1
+			
+			drop = dim_inds[Not([i, j])]
+			dim_drop = first.(drop)
+			i_drop   = last.(drop)
+
+			state_drop = statenames[dim_drop]
+			sub_grids = delete(grids, state_drop...)
+	        sub_inds = [Tuple(inds)...][Not(dim_drop)]
+			sub_y  = selectdims(y,  dim_drop, i_drop)
+	        sub_bc = selectdims(bc, dim_drop, i_drop)
+
+			sub_statenames = filter(∉(state_drop), statenames)
+	        vab = cross_difference(sub_y, sub_grids, sub_inds)
+	        cross_name = Symbol(solname, sub_statenames...)
+	        push!(cross, cross_name => vab)
+		end
+	end
+
+	merge(out, (; cross...))
+end
+
+# ╔═╡ 0628188a-d8b6-4f1a-9f57-69ec895bd6b7
+
+
+# ╔═╡ 9689b9fd-c553-4650-99e9-466edd2acdb4
 md"""
-## Imported packages
+## Constructing the Intensity Matrix
 """
 
-# ╔═╡ 5c1387ed-973c-4109-9ace-c473a4efe9ee
+# ╔═╡ 6b298d9f-1526-477a-8d58-2cf76af539d1
+md"""
+### Intensity matrix Moll
+"""
+
+# ╔═╡ 85bc873e-c9d3-4006-81d3-de3db8d18f7b
+function construct_A_moll((; sc), (; Id_B, sd_B, Id_F, sd_F, MB, MF), (; I, J, Nz, db, da))
+
+	updiag = zeros(I*J,Nz)
+	lowdiag = zeros(I*J,Nz)
+	centdiag = zeros(I*J,Nz)
+	AAi = Array{AbstractArray}(undef, Nz)
+	BBi = Array{AbstractArray}(undef, Nz)
+	
+	X = - min.(sc, 0.0) ./db .- Id_B .* sd_B ./ db
+	Y = (min.(sc, 0.0) - max.(sc, 0.0)) ./db .+ (Id_B .* sd_B .- Id_F .* sd_F) ./db;
+	Z = max.(sc, 0.0)/db + Id_F.*sd_F/db;
+	    
+	for i = 1:Nz
+		centdiag[:,i] = reshape(Y[:,:,i],I*J,1)
+	end
+	
+	lowdiag[1:I-1,:] = X[2:I,1,:]
+    updiag[2:I,:] = Z[1:I-1,1,:]
+	for j = 2:J
+	    lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:]; X[2:I,j,:]; zeros(1,Nz)]
+	    updiag[1:j*I,:] = [updiag[1:(j-1)*I,:]; zeros(1,Nz); Z[1:I-1,j,:]];
+    end
+	
+	for nz = 1:Nz
+    	BBi[nz] = spdiagm(
+			I*J, I*J, 
+			0 => centdiag[:,nz],
+			1 => updiag[2:end,nz],
+			-1 => lowdiag[1:end-1,nz]
+		)
+	end
+	
+	BB = cat(BBi..., dims = (1,2))
+	
+	
+	#CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+	chi = -MB ./ da
+	yy =  MB / da - MF / da
+	zeta = MF ./ da
+	
+	# MATRIX AAi
+	for nz=1:Nz
+	    #This will be the upperdiagonal of the matrix AAi
+	    AAupdiag = zeros(I,1); #This is necessary because of the peculiar way spdiags is defined.
+	    for j=1:J
+	        AAupdiag=[AAupdiag; zeta[:,j,nz]]
+	    end
+	        
+	    #This will be the center diagonal of the matrix AAi
+        AAcentdiag = yy[:,1,nz]
+		for j=2:J-1
+	    	AAcentdiag = [AAcentdiag; yy[:,j,nz]];
+	    end
+	    AAcentdiag = [AAcentdiag; yy[:,J,nz]];
+	        
+	    #This will be the lower diagonal of the matrix AAi
+	    AAlowdiag = chi[:,2,nz]
+        for j=3:J
+	        AAlowdiag = [AAlowdiag; chi[:,j,nz]]
+	    end
+
+		#Add up the upper, center, and lower diagonal into a sparse matrix
+	    AAi[nz] = spdiagm(
+			I*J, I*J,
+			0 => AAcentdiag,
+			-I => AAlowdiag,
+			I => AAupdiag[begin+I:end-I]
+		)
+	
+	end
+	
+	AA = cat(AAi..., dims = (1,2))
+
+	(; A = AA + BB)
+#	(; AA, BB)
+end
+
+# ╔═╡ 7401e4ea-d8bb-4e22-b7ec-ab2ab458c910
+md"""
+### Intensity matrix Greimel
+"""
+
+# ╔═╡ 3301c5cc-4860-4d44-8bf5-e9d890dd4e5a
+function construct_A_new((; sc), (; Id_B, sd_B, Id_F, sd_F, MB, MF), (; b, a, z, db, da, Λ), with_exo = false)
+	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
+	N = length(statespace)
+	state_inds = [(; i_b, i_a, i_z) for i_b ∈ eachindex(b), i_a ∈ eachindex(a), i_z ∈ eachindex(z)]
+	linind = LinearIndices(size(statespace))
+
+	T = typeof((; from = 1, to = 1, λ = 0.1))
+	entries_B = T[]
+	entries_A = T[]
+	entries_switch = T[]
+	entries = T[]
+	
+	
+	for (from, (; i_a, i_b, i_z)) ∈ enumerate(state_inds)
+		scᵢ = sc[from]
+		
+		if i_b > 1
+			to = linind[i_b - 1, i_a, i_z]
+			λ = - min(scᵢ, 0.0) / db - Id_B[from] * sd_B[from] / db
+			entry = (; from, to, λ)
+			push!(entries_B, entry)
+			push!(entries, entry)
+		end
+		if i_b < length(b)
+			to = linind[i_b + 1, i_a, i_z]
+			λ = max(scᵢ, 0.0) / db + Id_F[from] * sd_F[from] / db
+			entry = (; from, to, λ)
+			push!(entries_B, entry)
+			push!(entries, entry)
+		end
+
+		if i_a > 1
+			to = linind[i_b, i_a - 1, i_z]
+			λ = - MB[from] / da
+			entry = (; from, to, λ)
+			push!(entries_A, entry)
+			push!(entries, entry)
+		end
+
+		if i_a < length(a)
+			to = linind[i_b, i_a + 1, i_z]
+			λ = MF[from] / da
+			entry = (; from, to, λ)
+			push!(entries_A, entry)
+			push!(entries, entry)
+		end
+
+		for i_z_next ∈ eachindex(z)
+			if i_z_next != i_z
+				to = linind[i_b, i_a, i_z_next]
+				λ = Λ[i_z, i_z_next]
+				entry = (; from, to, λ)
+				#push!(entries_switch, entry)
+				with_exo && push!(entries, entry)
+			end
+		end
+	end
+#=
+	(; from, to, λ) = StructArray(entries_B)
+	B = sparse(from, to, λ, N, N)
+	BB = B - spdiagm(dropdims(sum(B, dims = 2), dims=2))
+
+	(; from, to, λ) = StructArray(entries_A)
+	A = sparse(from, to, λ, N, N)
+	AA = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
+=#	
+	(; from, to, λ) = StructArray(entries)
+	A = sparse(from, to, λ, N, N)
+	A = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
+
+#	(; from, to, λ) = StructArray(entries_switch)
+#	switch = sparse(from, to, λ, N, N)
+#	switch = switch - spdiagm(dropdims(sum(switch, dims = 2), dims=2))
+
+	(; A) #, AA, BB, A_alt = AA + BB)
+end
+
+# ╔═╡ 2fb709ca-5327-41e4-916b-4a0098859c3e
+function solve_HJB_new(model, maxit = 35)
+	(; ϱ) = model
+	(; Δ, crit) = model
+	(; a, b, z) = model
+
+	# initialize vector that keeps track of convergence
+	dists = []
+
+	grids = (; b, a, z)
+	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
+		
+	#INITIAL GUESS
+	v = initial_guess.(statespace, Ref(model))
+
+	bc = zeros(size(v))
+	c_bd = get_c₀.(statespace[end,:,:], Ref(model)) |> StructArray
+	bc[end,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+	c_bd = get_c₀.(statespace[begin,:,:], Ref(model)) |> StructArray
+	bc[begin,:,:] = u_prime.(c_bd.c, Ref(model)) #state constraint boundary condition
+
+	for n=1:maxit
+	    V = v;
+
+		out = map(CartesianIndices(V)) do inds
+		    # Forward and backward differences w.r.t. b and a
+			∂s = differentiate(V, grids, inds, bc)
+			state = statespace[inds]
+			model(state, ∂s)
+		end |> StructArray
+
+		out_d = StructArray(out.out_d)
+		out_c = StructArray(out.out_c)	 
+
+		(; A) = construct_A_new(out_c, out_d, model, true)
+	    		
+	    if maximum(abs, sum(A,dims=2)) > 10^(-12)
+	        @warn("Improper Transition Matrix")
+	        break
+	    end
+	    
+	#    if maximum(abs, sum(A, dims=2)) > 10^(-9)
+	#       @warn("Improper Transition Matrix")
+	#       break
+	#    end
+	    
+	    B = (1/Δ + ϱ)*LinearAlgebra.I - A
+
+	    (; c) = out_c
+	    u = util.(c, Ref(model))
+	    	    
+	    V_new = B\(vec(u) + vec(V)/Δ) #SOLVE SYSTEM OF EQUATIONS
+	        
+	    V = reshape(V_new, size(statespace))
+	    
+	    Vchange = V - v
+	    v .= V
+	    	   
+	    dist = maximum(abs, Vchange)
+		#push!(dists, dist)
+	    @info "Value Function, Iteration $n | max Vchange = $dist"
+	    if dist < crit
+	        @info("Value Function Converged, Iteration = $n")
+
+			(; d, sd) = out_d
+			(; sc) = out_c
+			(; ξ, w) = model
+			
+			m = [d + ξ * w * z + R_a(a, model) for (d, (; z, a)) ∈ zip(d, statespace)]
+			s = sc + sd
+			
+			df_ss = DataFrame(vec(statespace))
+			df_out = DataFrame(
+				c = vec(c), 
+				d = vec(d),
+				s = vec(s),
+				m = vec(m),
+				u = vec(u),
+				sc = vec(sc),
+				sd = vec(sd),
+				v = vec(v)
+			)
+			df = [df_ss df_out]
+			
+			return (; df, out_c, out_d)
+	    end 
+	end
+
+	@error "Algorithm did not converge after $maxit iterations"
+end
+
+# ╔═╡ 48ecc7ee-b943-4497-bc15-1b62d78e9271
+begin
+	m = TwoAssets()
+	(; df, out_c, out_d) = solve_HJB_new(m)
+	df_new = df
+end
+
+# ╔═╡ 8f3da06b-2887-4564-87c7-12a798580f53
+@test df_new.v ≈ df_base.v
+
+# ╔═╡ 0cf5bd0e-51e8-437b-bea6-2027b898a579
+@test df_new.c ≈ df_base.c
+
+# ╔═╡ 87074572-87c8-4f01-8895-a8ebcbeef9a0
+@test df_new.d ≈ df_base.d
+
+# ╔═╡ 4fe6acdd-521e-44b1-a7b6-97f78f72986d
+@test df_new.s ≈ df_base.s
+
+# ╔═╡ b8bf58fc-2f29-4ac6-b556-3efba9570e65
+@test df_new.m ≈ df_base.m
+
+# ╔═╡ 98a32dda-1b6f-4ef9-9945-a9daabc7e19d
+@test df_new.sd ≈ df_base.sd
+
+# ╔═╡ 0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
+@test df_new.sc ≈ df_base.sc
+
+# ╔═╡ b8a7269f-27ae-4c37-b73e-7decb8333ea9
+# ╠═╡ disabled = true
+#=╠═╡
+@chain df begin
+	stack([:s, :d])
+	data(_) * mapping(:b, :a, :value, col = :z => nonnumeric, row = :variable) * visual(Surface)
+	draw(axis = (type = Axis3, ))
+end
+  ╠═╡ =#
+
+# ╔═╡ 32adc0c7-330f-4274-8ed7-70550193cb01
+ss = [(; b, a, z) for b ∈ m.b, a ∈ m.a, z ∈ m.z]
+
+# ╔═╡ 073a97c6-f2a4-4f4c-916f-61182c17ba58
+out3, agrid3 = let
+	
+	bgrid = m.b
+	agrid = m.a
+	zgrid = m.z
+
+	statespace = [(; b, a, z) for b ∈ m.b, a ∈ m.a, z ∈ m.z]
+		
+	#INITIAL GUESS
+	v = initial_guess.(statespace, Ref(m))
+	
+	stategrid = OrderedDict(:b => bgrid, :a => agrid)
+	
+	solend = OrderedDict(
+		Symbol(:v, i) => v[:,:,i] for i ∈ 1:length(zgrid)
+	)
+	@info solend
+	out = pdesolve((a, b) -> f_econ_pdes(a, b, m), stategrid, solend; maxdist = √eps())
+	(; out, a, b) #grid)
+end
+
+# ╔═╡ 3c9786bf-b51a-47a2-ba7c-55e2218afd4a
+let
+	y = reshape(df.v, size(ss))[:,20,1]
+	bc = zeros(size(y))
+	inds = (10, )
+	grids = (; m.b)
+	@info length(grids) length(size(y)) length(inds)
+	
+	differentiate(y, grids, inds, bc)
+end
+
+# ╔═╡ ad653a73-7cfa-4a11-9347-908730a6b9db
+let
+	y = reshape(df.v, size(ss))[:,:,1]
+	bc = zeros(size(y))
+	differentiate(y, (; m.b, m.a), (10,20), bc)
+end
+
+# ╔═╡ 4d631fea-181b-4a53-87cc-f5fa2229a64c
+let
+	y = reshape(df.v, size(ss))
+	grids = (; m.b, m.a, m.z)
+	inds = (10,20,1)
+	bc = zeros(size(y))
+	out   = differentiate(y, grids , inds, bc)
+	check = differentiate_2_naive(y, grids, inds, bc)
+
+	out, check
+end
+
+# ╔═╡ d7b46231-2db5-46a5-85ce-eda87b1a29b8
+construct_A_new(out_c, out_d, m)
+
+# ╔═╡ 39c77283-4ef8-406f-aa00-ee3cec4db5e1
+begin
+	@time (; A) = construct_A_moll(out_c, out_d, m)
+	@time A_new = construct_A_new(out_c, out_d, m).A
+
+	@test A ≈ A_new
+end
+
+# ╔═╡ 0ede8e50-9767-4930-9507-e98c75c0b566
+function construct_A_new_simple((; s, m), (; b, a, z, db, da, Λ); with_exo = false)
+	statespace = [(; b, a, z) for b ∈ b, a ∈ a, z ∈ z]
+	N = length(statespace)
+	state_inds = [(; i_b, i_a, i_z) for i_b ∈ eachindex(b), i_a ∈ eachindex(a), i_z ∈ eachindex(z)]
+	linind = LinearIndices(size(statespace))
+
+	T = typeof((; from = 1, to = 1, λ = 0.1))
+	entries_B = T[]
+	entries_A = T[]
+	entries_switch = T[]
+	entries = T[]
+	
+	
+	for (from, (; i_a, i_b, i_z)) ∈ enumerate(state_inds)		
+		if i_b > 1
+			to = linind[i_b - 1, i_a, i_z]
+			λ = - min(s[from], 0.0) / db
+			entry = (; from, to, λ)
+			push!(entries_B, entry)
+			push!(entries, entry)
+		end
+		if i_b < length(b)
+			to = linind[i_b + 1, i_a, i_z]
+			λ = max(s[from], 0.0) / db
+			entry = (; from, to, λ)
+			push!(entries_B, entry)
+			push!(entries, entry)
+		end
+
+		if i_a > 1
+			to = linind[i_b, i_a - 1, i_z]
+			λ = - min(m[from], 0.0) / da
+			entry = (; from, to, λ)
+			push!(entries_A, entry)
+			push!(entries, entry)
+		end
+
+		if i_a < length(a)
+			to = linind[i_b, i_a + 1, i_z]
+			λ = max(m[from], 0.0) / da
+			entry = (; from, to, λ)
+			push!(entries_A, entry)
+			push!(entries, entry)
+		end
+
+		for i_z_next ∈ eachindex(z)
+			if i_z_next != i_z
+				to = linind[i_b, i_a, i_z_next]
+				λ = Λ[i_z, i_z_next]
+				entry = (; from, to, λ)
+				#push!(entries_switch, entry)
+				with_exo && push!(entries, entry)
+			end
+		end
+	end
+
+	(; from, to, λ) = StructArray(entries_B)
+	B = sparse(from, to, λ, N, N)
+	BB = B - spdiagm(dropdims(sum(B, dims = 2), dims=2))
+
+	(; from, to, λ) = StructArray(entries_A)
+	A = sparse(from, to, λ, N, N)
+	AA = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
+	
+	(; from, to, λ) = StructArray(entries)
+	A = sparse(from, to, λ, N, N)
+	A = A - spdiagm(dropdims(sum(A, dims = 2), dims=2))
+
+#	(; from, to, λ) = StructArray(entries_switch)
+#	switch = sparse(from, to, λ, N, N)
+#	switch = switch - spdiagm(dropdims(sum(switch, dims = 2), dims=2))
+
+	(; A, AA, BB)#, A_alt = AA + BB)
+end
+
+# ╔═╡ 1b963435-7a4b-4246-8e45-9a5f56083428
+md"""
+# Solving for the stationary distribution
+"""
+
+# ╔═╡ b03dc60d-6d0c-42ff-8828-8089a42e1541
+function solve_KF_iterate(A, Δ, g₀=fill(1/size(A,1), size(A,1)))
+	g = copy(g₀)
+	B = (I + Δ * A')
+	for i ∈ 1:50000
+		g_new = B * g
+
+		crit = maximum(abs, g_new - g)
+		i % 1000 == 0 && @info crit
+		if !isfinite(crit)
+			throw(ArgumentError("Got non-finite results. Try different Δ."))
+		end
+		if crit < 1e-12
+			@info "converged after $i iterations"
+			return g
+		end
+		g .= g_new
+	end
+	g
+end
+
+# ╔═╡ 86a90e5b-b6d4-4d3c-9395-996e4c709007
+function solve_KF_moll(A)
+	N = size(A, 1)
+	AT = copy(transpose(A))
+	b = zeros(N)
+	
+	i_fix = 1
+	b[i_fix] = .1
+	AT[i_fix,:] .= 0.0
+	AT[i_fix,i_fix] = 1.0
+
+	g = AT\b
+
+	g ./ sum(g)
+end
+
+# ╔═╡ b4bec84c-6428-454c-85c8-9a9bd3a64c91
+function stationary_distribution(A; δ = 0.0, ψ = InfinitesimalGenerators.Zeros(size(A, 1)))
+    δ >= 0 ||  throw(ArgumentError("δ needs to be positive"))
+    if δ > 0
+        g = abs.((δ * I - A') \ (δ * ψ))
+    else
+        η, g = InfinitesimalGenerators.principal_eigenvalue(A')
+        abs(η) <= 1e-5 || @warn "Principal Eigenvalue does not seem to be zero"
+    end
+    g ./ sum(g)
+end
+
+# ╔═╡ 6ab0e37f-143f-4ba6-b2e4-2da82bac53aa
+function solve_KF_death(A)
+	N = size(A, 1)
+	g₀ = fill(1/N, N)
+	
+	stationary_distribution(A, δ = 1e-14, ψ = g₀)
+end
+
+# ╔═╡ d9cb7453-8de2-4b76-89d5-14035c00c51f
+function solve_KF_eigs(A)	
+	stationary_distribution(A)
+end
+
+# ╔═╡ 8fc2b293-9f5e-420d-b6e3-260db9fed4b8
+df_π = let model = m
+	(; da, db) = model
+	
+	(; m, s) = df
+	m = reshape(m, size(ss))
+	s = reshape(s, size(ss))
+
+	(; A) = construct_A_new_simple((; m, s), model; with_exo=true)
+
+	df_new = copy(df)
+	df_new.π1 = solve_KF_death(A)
+	df_new.π2 = solve_KF_eigs(A)
+	df_new.π3 = solve_KF_moll(A)
+	
+	df_new
+end
+
+# ╔═╡ 7aa6d452-5566-405e-8e91-906b6bb2196c
+@chain df_π begin
+	data(_) * mapping(:b, :a, :π1, layout = :z => nonnumeric) * visual(Surface)
+	draw(axis = (type = Axis3, ))
+end
+
+# ╔═╡ bf78e6b1-32db-4741-8435-b2bd89db0f1f
+df_base
+
+# ╔═╡ d33f5357-3bb6-446c-92cd-3b14b1e1d40f
+let model = m
+	(; db, da, Nz, I, J, Λ) = model
+	la_mat = Λ
+	(; s, m) = df_base
+
+	Bswitch = [
+	    LinearAlgebra.I(I*J)*la_mat[1,1] LinearAlgebra.I(I*J)*la_mat[1,2];
+	    LinearAlgebra.I(I*J)*la_mat[2,1] LinearAlgebra.I(I*J)*la_mat[2,2]
+	]
+	
+	s = reshape(s, size(ss))
+	m = reshape(m, size(ss))
+	
+	updiag = zeros(I*J,Nz)
+	lowdiag = zeros(I*J,Nz)
+	centdiag = zeros(I*J,Nz)
+	AAi = Array{AbstractArray}(undef, Nz)
+	BBi = Array{AbstractArray}(undef, Nz)
+	
+	X = -min.(s,0)./db
+	Y = min.(s,0)./db .- max.(s,0)./db
+	Z = max.(s,0)./db
+
+#	sum(Y .> 0)
+#	centdiag = reshape(Y[:,:,1], I*J, 1)
+	for i = 1:Nz
+	    centdiag[:,i] .= reshape(Y[:,:,i],I*J)
+	end
+	centdiag
+
+	lowdiag[1:I-1,:] = X[2:I,1,:]
+	updiag[2:I,:] = Z[1:I-1,1,:]
+	
+	for j = 2:J
+	    lowdiag[1:j*I,:] = [lowdiag[1:(j-1)*I,:];X[2:I,j,:];zeros(1,Nz)]
+	    updiag[1:j*I,:] = [updiag[1:(j-1)*I,:];zeros(1,Nz);Z[1:I-1,j,:]]
+	end
+
+	for nz=1:Nz
+	    BBi[nz] = spdiagm(
+			I*J, I*J,
+			0  => centdiag[:,nz],
+			1  => updiag[2:end,nz],
+			-1 => lowdiag[1:end-1,nz]
+		)
+	end
+	
+	BB = cat(BBi..., dims=(1,2))
+
+	
+	#CONSTRUCT MATRIX AA SUMMARIZING EVOLUTION OF a
+	chi = -min.(m,0) ./ da
+	yy =  min.(m,0) ./ da .- max.(m,0) ./ da
+	zeta = max.(m,0) ./ da
+	
+
+	#MATRIX AAi
+	for nz=1:Nz
+	    #This will be the upperdiagonal of the matrix AAi
+	    AAupdiag = zeros(0) #This is necessary because of the peculiar way spdiags is defined.
+	    for j=1:J
+	        AAupdiag=[AAupdiag; zeta[:,j,nz]]
+	    end
+	    
+	    #This will be the center diagonal of the matrix AAi
+	    AAcentdiag = yy[:,1,nz]
+	    for j=2:J-1
+	        AAcentdiag = [AAcentdiag; yy[:,j,nz]]
+	    end
+	    AAcentdiag=[AAcentdiag; yy[:,J,nz]]
+	    
+	    #This will be the lower diagonal of the matrix AAi
+	    AAlowdiag = chi[:,2,nz]
+	    for j=3:J
+	        AAlowdiag=[AAlowdiag; chi[:,j,nz]]
+	    end
+
+	    #Add up the upper, center, and lower diagonal into a sparse matrix
+	    AAi[nz] = spdiagm(
+			I*J,I*J,
+			0  => AAcentdiag,
+			-I => AAlowdiag,#[1:end-I],
+			I  => AAupdiag[I+1:end]
+		)
+	    
+	end
+		
+	AA = cat(AAi..., dims = (1,2))
+	A = AA + BB + Bswitch
+
+	M = I*J*Nz
+	AT = A'
+	# Fix one value so matrix isn't singular:
+	vec_ = zeros(M,1)
+	iFix = 1657
+	vec_[iFix] = .01
+	AT[iFix,:] .= 0.0
+	AT[iFix,:] .= [zeros(iFix-1); 1; zeros(M-iFix)]
+	
+	# Solve system:
+	g_stacked = AT\vec_
+	
+	g_sum = g_stacked' *ones(M,1)*da*db
+	g_stacked = g_stacked ./ g_sum
+	
+	fig = Figure()
+	ax = Axis3(fig[1,1])
+	surface!(ax, reshape(g_stacked, size(ss))[:,:,1])
+	ax = Axis3(fig[1,2])
+	surface!(ax, reshape(g_stacked, size(ss))[:,:,2])
+
+	fig
+#	g(:,:,1) = reshape(g_stacked(1:I*J),I,J);
+#	g(:,:,2) = reshape(g_stacked(I*J+1:I*J*2),I,J);
+
+end
+
+# ╔═╡ 3a43bab0-c058-4665-8939-a3920c9986d1
+md"""
+# Appendix
+"""
+
+# ╔═╡ 311f99f6-baeb-402e-8512-999d91829ec9
 TableOfContents()
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
-Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
@@ -1185,27 +1503,26 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 EconPDEs = "a3315474-fad9-5060-8696-cee5f38a87b7"
 InfinitesimalGenerators = "2fce0c6f-5f0b-5c85-85c9-2ffe1d5ee30d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
+PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
-Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
-AlgebraOfGraphics = "~0.6.8"
-Arpack = "~0.5.3"
-CairoMakie = "~0.8.7"
-Chain = "~0.4.10"
+AlgebraOfGraphics = "~0.6.9"
+CairoMakie = "~0.8.8"
+Chain = "~0.5.0"
 DataFrameMacros = "~0.2.1"
 DataFrames = "~1.3.4"
 EconPDEs = "~1.0.1"
-InfinitesimalGenerators = "~0.4.0"
-Parameters = "~0.12.3"
+InfinitesimalGenerators = "~0.4.1"
+NamedTupleTools = "~0.14.0"
+PlutoTest = "~0.2.2"
 PlutoUI = "~0.7.39"
-QuantEcon = "~0.16.3"
-Roots = "~1.4.1"
-StructArrays = "~0.6.8"
+QuantEcon = "~0.16.4"
+StructArrays = "~0.6.11"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1379,9 +1696,9 @@ uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
 version = "0.5.1"
 
 [[deps.Chain]]
-git-tree-sha1 = "339237319ef4712e6e5df7758d0bccddf5c237d9"
+git-tree-sha1 = "8c4920235f6c561e401dfe569beb8b924adad003"
 uuid = "8be319e6-bccf-4806-a6f7-6fae938471bc"
-version = "0.4.10"
+version = "0.5.0"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
@@ -2143,6 +2460,11 @@ git-tree-sha1 = "b086b7ea07f8e38cf122f5016af580881ac914fe"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.7"
 
+[[deps.NamedTupleTools]]
+git-tree-sha1 = "befc30261949849408ac945a1ebb9fa5ec5e1fd5"
+uuid = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
+version = "0.14.0"
+
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
 git-tree-sha1 = "18efc06f6ec36a8b801b23f076e3c6ac7c3bf153"
@@ -2287,6 +2609,12 @@ deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Stat
 git-tree-sha1 = "9888e59493658e476d3073f1ce24348bdc086660"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.3.0"
+
+[[deps.PlutoTest]]
+deps = ["HypertextLiteral", "InteractiveUtils", "Markdown", "Test"]
+git-tree-sha1 = "17aa9b81106e661cffa1c4c36c17ee1c50a86eda"
+uuid = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
+version = "0.2.2"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
@@ -2772,105 +3100,89 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
-# ╟─0edf9214-7213-4b1d-8fa6-54a365525d29
-# ╟─1c23af35-64f5-4b96-9eab-98ee9b1ecb4c
-# ╠═64d44910-988c-4e24-baf6-6408da65bd21
-# ╠═95764a2a-0a92-447c-98a8-df22167abda6
-# ╠═a5233ee4-ba60-4428-8de5-4b012ed43408
-# ╟─ac27dd69-1216-4a02-ba62-ebb098b33fa1
-# ╠═3dd0c186-04f0-425c-93dc-825c7d4b606e
-# ╠═23a991be-7c8b-45e2-bd75-af5e146fc6b0
-# ╟─2289c7a7-3493-4bfb-8ffe-31b074d17b14
-# ╟─0caee0bf-77c0-4542-a68e-9052d230ca74
-# ╟─38555a5e-5d39-4c61-9381-94c8fb67a257
-# ╠═4d7ee33f-ff78-4ea9-838b-a8320df4651f
-# ╟─fb88f286-0bce-4cb0-9d52-83b373f6fbcf
-# ╠═5cbd313e-b357-4b00-bb7d-4c87f8522cdd
-# ╠═56234834-6de9-4e44-95af-c5e3fb828a9d
-# ╠═a10ef170-045c-439e-a23b-122e812853aa
-# ╠═68aeb6cf-cff8-49e9-8c39-d94aadd5a444
-# ╠═e197b24a-7e51-45e4-8186-11f88bf48de6
-# ╠═12cbc2a7-ddf3-42c5-b592-a438ecdc5165
-# ╠═d7fbe6a6-076e-4a96-9431-7470cf73e576
-# ╠═c57052d4-7a03-4a02-88d9-531df3421cb7
-# ╠═d704e278-6ae8-4166-bade-599e71e54336
-# ╠═e14b58b5-4b5c-4a2a-8063-d2212f722d06
-# ╠═ffa87f90-65ad-469c-aef3-55dc9f6fe861
-# ╠═b4d6a137-6e4a-4b16-a1d0-d6b9c7c88c50
-# ╟─1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
-# ╟─2e09462e-6030-4e33-bc7a-9d2faed4ca74
-# ╠═4ebeb5e8-505d-4ed2-8d37-4a64ceb7d796
-# ╠═6c895dce-9c0a-499c-9e95-45c29ee5a459
-# ╠═a8279bcc-4cdf-4a89-bb75-e7e1f617643d
-# ╠═dd89d622-6066-4d52-a4ca-366822c63661
-# ╠═33a6780e-7f5a-4677-a51c-c002b7b86dc3
-# ╠═eb565042-1823-4d5a-b4d1-ee314dccd4e0
-# ╟─e5cfdbc2-f592-40bb-ba5d-07f455dd5bd4
-# ╠═34779464-624a-446d-b741-81524509aee6
-# ╠═a2da91e4-cedd-446f-81d4-adb008c01d5b
-# ╠═d3612723-d4eb-4887-b902-fa47e6a26226
-# ╠═5bc621c2-1d87-49a9-8dc6-d81d5f998640
-# ╠═9e1600df-9b6a-4b84-a152-1fa636f25fe5
-# ╠═abff0506-1792-420d-80d8-cb3645483443
-# ╠═eade1b48-7d1c-4d17-aaf5-14d111a13556
-# ╠═e1376e99-a636-4d28-b711-2dd4be66374f
-# ╠═4de350bb-d2be-46b1-8558-a49f54a29dd1
-# ╠═98a7d8e0-1741-4447-b612-e40491fa8673
-# ╠═3a92eac0-643f-47ec-b6dc-6d541873ac9a
-# ╠═1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
-# ╟─deeff3d5-3856-43cb-8469-2a4d6d7fca4f
-# ╟─b6101102-2054-4932-b6b6-5070cd84f2be
-# ╠═19e28c66-a389-4903-82a5-c963cf0b90b9
-# ╠═a8f1dc13-b73c-44b0-8e63-82431f904313
-# ╠═bd353706-be2d-480d-8ebb-cf20cab0dbec
-# ╟─e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
-# ╟─ab69ab43-99bf-4a92-9698-70e170761e82
-# ╟─5c7c3dc0-7848-4431-829e-508664d9c5af
-# ╠═b099dbbf-9648-44c5-984c-fdd80ee81469
-# ╠═f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-# ╠═4894a323-c8c8-4f34-b311-20c64176b89d
-# ╠═4bfa5d92-b177-4442-b045-e05cc48b6cc4
-# ╠═ebd88b43-e277-4c79-b443-1661a3c438b8
-# ╟─fd0fb774-a805-4739-b570-0d2e191a3294
-# ╟─8987f1ce-e290-4930-909a-3e09a9113a7a
-# ╟─eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
-# ╟─ae8fd43c-f658-47b1-8781-6f699ade6bdb
-# ╟─bd2e4d28-c68b-45c9-b68e-b477b44fcd75
-# ╟─264fc65e-d09a-4c67-94de-f845d42d18a3
-# ╟─6e607792-e297-483f-8917-c871fa0c26d0
-# ╠═532d0b24-6ace-4579-bf2a-d12c07ee9436
-# ╟─f3e0b42f-370d-4887-b6a1-d9ecd83c6275
-# ╠═70930f84-fe69-4fa3-a37c-eec9a377526c
-# ╠═b9efca1a-b978-4794-b421-ee9df889a6a8
-# ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
-# ╠═01234bcc-a428-4922-969f-9a1ba49c8d62
-# ╠═e57a2dfa-0937-49cf-9161-fa1e39fb5e80
-# ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
-# ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
-# ╠═1971dce8-ca39-4ced-88af-c65105977ac4
-# ╠═b7024377-6ffe-4f8a-a58a-0fa809683fd2
-# ╠═2517dcff-c838-4b33-9f0e-e6d4bd8a259e
-# ╠═0a1c908e-6432-4e8a-8c8c-7cc903fbca6c
-# ╠═e204ae15-fefd-4f01-8d5e-3772aefe9b0f
-# ╠═005988d8-a327-410e-9e53-09ba99dcee9a
-# ╠═bf01f8b6-b618-4ce8-9ff0-3bdf37901ce1
-# ╠═90d6eba4-fa47-4717-b742-8b38f0b330ac
-# ╠═b57ea0a2-bee4-450f-99fa-cc79054fc963
-# ╠═8777505c-6db4-4e75-a57b-59f4620b0051
-# ╠═434ecb8d-eae2-4913-97f8-3bdbefbf78ff
-# ╠═b77b52ac-73ad-456c-94e5-5f72e310268f
-# ╟─1cc42384-d262-496a-801a-033e7b40e6e9
-# ╠═9f6051fa-2bd7-40b1-b2f8-5e7b1c477387
-# ╟─518eec58-eb4b-4294-9090-b6645f51a337
-# ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
-# ╠═6f92c837-1760-423e-9777-9db9ad758475
-# ╠═563c267e-0c6a-4b90-81a7-fc8ff4c73c75
-# ╠═6d5523f2-a517-48df-9f31-bbd516e1208e
-# ╠═9fa33ac0-bb2f-4055-b124-8c7c19621226
-# ╠═276e171b-271d-4610-b9bb-01b212193123
-# ╠═aecea3fe-f0ee-4953-857b-29d6a5640530
-# ╠═9353566b-a70e-4dbe-8f02-b16d2c0570d2
-# ╠═0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
+# ╟─c89f1918-01ee-11ed-22fa-edd66e0f6c59
+# ╟─629b8291-0f13-419e-b1c0-d10d5e708720
+# ╠═b48b0674-1bcb-48e5-9b05-57dea5877715
+# ╟─73c1ff42-ac94-4175-8c30-9d6a751c913a
+# ╠═75c6bed0-86a2-4393-83a7-fbd7862a3975
+# ╠═48ecc7ee-b943-4497-bc15-1b62d78e9271
+# ╠═8f3da06b-2887-4564-87c7-12a798580f53
+# ╠═0cf5bd0e-51e8-437b-bea6-2027b898a579
+# ╠═87074572-87c8-4f01-8895-a8ebcbeef9a0
+# ╠═4fe6acdd-521e-44b1-a7b6-97f78f72986d
+# ╠═b8bf58fc-2f29-4ac6-b556-3efba9570e65
+# ╠═98a32dda-1b6f-4ef9-9945-a9daabc7e19d
+# ╠═0cb7f068-f1a2-4486-b46c-2a91b2bbed3b
+# ╟─828dee22-1ee7-41c4-b68b-f88facea86d9
+# ╠═68a97aab-7924-4472-aa47-7903add8aea4
+# ╠═3ab0c985-5317-4ea4-bddc-6289ab90bcad
+# ╠═f2ce6352-450e-4cde-a2fe-3586461c3bdf
+# ╠═9c1ef8d1-57bc-4da2-83ec-fb8f1a8ce296
+# ╠═91b63bfc-f4a4-41c1-a472-7d13df27b93c
+# ╠═b8a7269f-27ae-4c37-b73e-7decb8333ea9
+# ╟─830448b7-1700-4312-91ce-55f86aaa33a4
+# ╠═32adc0c7-330f-4274-8ed7-70550193cb01
+# ╠═ed6045c0-b76c-4691-9f05-c943c542d13f
+# ╠═2fb709ca-5327-41e4-916b-4a0098859c3e
+# ╟─03ec6276-09a4-4f66-a864-19e2e0d825eb
+# ╠═98f11cbd-8b05-464b-be44-3b76277c6d0d
+# ╠═8a6cd6dd-49f6-496a-bb50-e43e06c4a1db
+# ╠═a6356900-5530-494f-9d01-03041805ebe6
+# ╠═f6c0329e-1a02-4292-96b7-11c8cd9c3b54
+# ╠═5a6c37d8-af66-46a1-9c93-581057c41f94
+# ╠═cdcca65f-59df-4990-97b7-2b511bdb61e6
+# ╠═920e3393-fd38-4154-8d90-ce9dc712ed1a
+# ╠═9c1544ef-fdc9-4c9e-a36c-fe5b3ea89728
+# ╠═4023a748-5e4f-4137-811b-0e93567021dd
+# ╠═541a5b4f-0d49-4c36-85c8-799e3260c77d
+# ╠═09a8d045-6867-43a9-a021-5a39c22171a5
+# ╠═1ee8ccc3-d498-48c6-b299-1032165e4ab9
+# ╠═f8b728e7-4f8a-465e-a8cf-413cec8e9c66
+# ╠═2befd2fa-ca64-4606-b55d-6163709f2e6e
+# ╟─9136b68d-65a0-4ab3-9ce1-866f65ebf875
+# ╠═562042f9-3e5d-463d-93c4-c808a0d57974
+# ╠═4301d6c7-ce24-470d-b033-87d0c9898e9e
+# ╠═7aca19ff-374d-4832-b442-d59d9a5f3629
+# ╠═073a97c6-f2a4-4f4c-916f-61182c17ba58
+# ╟─9c0ec3bd-e8d9-4278-8230-56dcd783be82
+# ╠═8c293630-e2a2-4123-9523-0e6f01a7f1d0
+# ╠═10e8f1f6-820c-432a-8b3e-3abb7652f780
+# ╠═5267753b-212b-4d80-b4a5-aa74648890df
+# ╠═42f3458b-9acd-4daa-9d01-7e76767b1a91
+# ╠═731cf94b-8a88-4fd6-8728-851c43500f1e
+# ╠═459a01c4-2b9c-437b-8502-c7331729f37d
+# ╠═a6528bdc-db07-4d62-8705-6948dc9b7fdb
+# ╠═abca9b50-f347-484a-9a16-a1e0f48cfdd9
+# ╠═3c9786bf-b51a-47a2-ba7c-55e2218afd4a
+# ╠═ad653a73-7cfa-4a11-9347-908730a6b9db
+# ╠═4d631fea-181b-4a53-87cc-f5fa2229a64c
+# ╠═0628188a-d8b6-4f1a-9f57-69ec895bd6b7
+# ╟─9689b9fd-c553-4650-99e9-466edd2acdb4
+# ╠═d7b46231-2db5-46a5-85ce-eda87b1a29b8
+# ╠═39c77283-4ef8-406f-aa00-ee3cec4db5e1
+# ╟─6b298d9f-1526-477a-8d58-2cf76af539d1
+# ╠═85bc873e-c9d3-4006-81d3-de3db8d18f7b
+# ╟─7401e4ea-d8bb-4e22-b7ec-ab2ab458c910
+# ╠═3301c5cc-4860-4d44-8bf5-e9d890dd4e5a
+# ╠═0ede8e50-9767-4930-9507-e98c75c0b566
+# ╟─1b963435-7a4b-4246-8e45-9a5f56083428
+# ╠═3b6ffffc-b8ab-42df-9046-ec3b4f5e0122
+# ╠═8fc2b293-9f5e-420d-b6e3-260db9fed4b8
+# ╠═7aa6d452-5566-405e-8e91-906b6bb2196c
+# ╠═6ab0e37f-143f-4ba6-b2e4-2da82bac53aa
+# ╠═d9cb7453-8de2-4b76-89d5-14035c00c51f
+# ╠═b03dc60d-6d0c-42ff-8828-8089a42e1541
+# ╠═86a90e5b-b6d4-4d3c-9395-996e4c709007
+# ╠═b4bec84c-6428-454c-85c8-9a9bd3a64c91
+# ╠═2a7472f3-aa80-43f2-a959-05c3870d424d
+# ╠═bf78e6b1-32db-4741-8435-b2bd89db0f1f
+# ╠═d33f5357-3bb6-446c-92cd-3b14b1e1d40f
+# ╟─3a43bab0-c058-4665-8939-a3920c9986d1
+# ╠═9aa61364-51a3-45d0-b1c2-757b864de132
+# ╠═026cfe16-ff0f-4f68-b412-b1f6c1902824
+# ╠═9d99416e-8119-4a40-b577-0135050a0e4e
+# ╠═6188aab9-86bf-4ec4-bb10-43b59f71e3e2
+# ╠═9696e6ca-6953-43e2-8d47-fbfe24ba4250
+# ╠═311f99f6-baeb-402e-8512-999d91829ec9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
