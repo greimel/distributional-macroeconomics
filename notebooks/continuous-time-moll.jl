@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ 5cbd313e-b357-4b00-bb7d-4c87f8522cdd
 using EconPDEs
 
+# ╔═╡ 02c84fbb-f2cb-4051-8bda-62f5e2a4c6d1
+using PlutoTest
+
 # ╔═╡ d704e278-6ae8-4166-bade-599e71e54336
 using DataFrameMacros
 
@@ -109,7 +112,7 @@ We work with an equi-spaced asset grid with $N_a$ grid points. The difference be
 # ╔═╡ 3dd0c186-04f0-425c-93dc-825c7d4b606e
 function construct_a(m)
 	(; N_a, aₘᵢₙ, aₘₐₓ) = m
-	[aᵢ for aᵢ in range(aₘᵢₙ, aₘₐₓ, N_a)] |> hcat # asset grid (column vector)
+	range(aₘᵢₙ, aₘₐₓ, N_a) # asset grid (column vector)
 end
 
 # ╔═╡ 23a991be-7c8b-45e2-bd75-af5e146fc6b0
@@ -199,7 +202,7 @@ Since $A^n$ is a sparse matrix, computers can solve the system of linear equatio
 
 # ╔═╡ fb88f286-0bce-4cb0-9d52-83b373f6fbcf
 md"""
-## Compare with EconPDEs.jl
+## Solving HJB with `EconPDEs.jl`
 """
 
 # ╔═╡ 56234834-6de9-4e44-95af-c5e3fb828a9d
@@ -209,7 +212,7 @@ u_prime_inv(x, (; σ)) = x^(-1/σ)
 u_prime(c, (; σ)) = c^(-σ)
 
 # ╔═╡ 68aeb6cf-cff8-49e9-8c39-d94aadd5a444
-u(c, (; σ)) = c > 0 ? σ == 1 ? log(c) : c^(1-σ)/(1-σ) : 10 * c - 100
+u(c, (; σ)) = c > 0 ? σ == 1 ? log(c) : c^(1-σ)/(1-σ) : 10.0 * c - 100.0
 
 # ╔═╡ e197b24a-7e51-45e4-8186-11f88bf48de6
 function clean_variables(nt, solname, statename, n)
@@ -222,27 +225,108 @@ function clean_variables(nt, solname, statename, n)
 	end |> DataFrame
 end
 
-# ╔═╡ e14b58b5-4b5c-4a2a-8063-d2212f722d06
-df3 = mapreduce((x,y) -> leftjoin(x, y, on = [:a, :i_z]), [:v => r"^v", :c => r"^c", :s => r"^s"]) do (v, rgx)
-	@chain out3.optional begin
+# ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
+function consumption_and_drift((; a, z), dv, (; r, σ))
+	#dv = max(dv, eps(0.0))
+	c = u_prime_inv(dv, (; σ))
+	ȧ = z + r * a - c
+
+	(; c, ȧ, dv)
+end
+
+# ╔═╡ 91c8dce8-07b8-46d2-8c61-e6bccced64e4
+function consumption_and_drift₀((; a, z), (; r, σ))
+	ȧ = zero(a)
+	c = z + r * a
+
+	dv = u_prime(c, (; σ))
+
+	(; c, ȧ, dv)
+end
+
+# ╔═╡ 7734c75e-5f2b-4807-8b9a-82e7e010edac
+function consumption_and_drift_upwind(state, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
+	# consumption and savings with forward difference
+	(; dv, ȧ, c) =  consumption_and_drift(state, dvf, (; σ, r))
+	if ȧ > 0 && state.a < aₘₐₓ
+		return (; dv, ȧf = ȧ, ȧb = 0.0, c, ȧ)
+	end
+	# consumption and savings with backward difference
+	(; dv, ȧ, c) = consumption_and_drift(state, dvb, (; σ, r))
+	if ȧ < 0 && state.a > aₘᵢₙ
+		return (; dv, ȧf = 0.0, ȧb = ȧ, c, ȧ)
+	end
+	# consumption and derivate of value function at steady state
+	(; dv, ȧ, c) = consumption_and_drift₀(state, (; σ, r))
+	return (; dv, ȧf = 0.0, ȧb = 0.0, c, ȧ)
+end
+
+# ╔═╡ 12cbc2a7-ddf3-42c5-b592-a438ecdc5165
+begin
+	Base.@kwdef struct HuggettMC
+		σ = 2.0
+		ρ = 0.05
+		r = 0.03
+		w = 1.0
+		aₘᵢₙ = -0.1
+		aₘₐₓ = 1.0
+		an = 500
+		zgrid =  [0.1, 0.2]
+		Λ = [-0.02 0.02;
+			0.03 -0.03]
+	end
+
+	function HuggettMC(m::HuggettPoisson, r; σ=m.σ, ρ=m.ρ, aₘᵢₙ=m.aₘᵢₙ, aₘₐₓ=m.aₘₐₓ, an = m.N_a)
+		Λ = generator(m)
+		HuggettMC(; σ, ρ, r, w=1, aₘᵢₙ, aₘₐₓ, an, zgrid=vec(m.z), Λ)
+	end
+	
+	function (M::HuggettMC)(state::NamedTuple, sol::NamedTuple)
+		(; ρ, Λ, zgrid) = M
+		nz = length(zgrid)
+		
+		sol_clean = clean_variables(sol, :v, :a, nz)
+		
+		nts = map(enumerate(eachrow(sol_clean))) do (i, row)
+			dv = (dvf = row.va_up, dvb = row.va_down)
+			out = consumption_and_drift_upwind((; state..., z=zgrid[i]), dv..., M)
+			endo = u(out.c, M) + out.dv * out.ȧ
+			(; i, out..., endo)
+		end
+
+		(; v) = sol_clean
+		(; endo, ȧ, c) = DataFrame(nts)
+
+		vt = ρ * v - (endo + Λ * v)
+
+		(; (Symbol(:v, i, :t) => vt[i] for i ∈ 1:nz)...),
+		(; 
+			(Symbol(:c, i) => c[i] for i ∈ 1:nz)...,
+			(Symbol(:s, i) => ȧ[i] for i ∈ 1:nz)...,
+		)
+	end	
+end
+
+# ╔═╡ ad4b46b0-b6fb-4711-9501-0912eda3d6c3
+function optional_to_df(optional, agrid, zgrid)
+	@chain optional begin
 		DataFrame
-		@transform(:a = @bycol agrid3)
-		DataFrames.select(rgx, :a)
-		stack(rgx, value_name = v)
-		@transform(:i_z = parse(Int, :variable[end]))
-		DataFrames.select(Not(:variable))
+		@transform!(:a = @bycol collect(agrid))
+		stack(Not(:a))
+		@aside @info _
+		@transform!(:i_z = parse(Int, :variable[end]))
+		@transform!(:variable = :variable[1:end-1])
+		unstack(:variable, :value)
+		@transform!(:z = zgrid[:i_z])
+		select(Not(:i_z))		
+		rename!(:s => :ȧ)
 	end
 end
 
-# ╔═╡ ffa87f90-65ad-469c-aef3-55dc9f6fe861
-@chain df3 begin
-	stack(Not([:a, :i_z]))
-	data(_) * mapping(:a, :value, color = :i_z => nonnumeric, layout = :variable) * visual(Lines)
-	AlgebraOfGraphics.draw(facet = (linkyaxes = false, ))
-end
-
-# ╔═╡ b4d6a137-6e4a-4b16-a1d0-d6b9c7c88c50
-
+# ╔═╡ 16b48db6-ef8d-4d7b-9e9f-b281143d0a90
+md"""
+### Check results
+"""
 
 # ╔═╡ 1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
 md"""
@@ -508,6 +592,9 @@ end
 # ╔═╡ 4bfa5d92-b177-4442-b045-e05cc48b6cc4
 t_expl = @elapsed solve_HJB_explicit(m, 0.03; crit=1e-6)
 
+# ╔═╡ bae3209a-1ad6-4e1f-833d-f1074e8239dc
+
+
 # ╔═╡ fd0fb774-a805-4739-b570-0d2e191a3294
 md"""
 ## Implicit vs. explicit method
@@ -579,105 +666,42 @@ function statespace_inds(m)
 	[(; i_a, i_z) for i_a ∈ 1:N_a, i_z ∈ 1:N_z]
 end
 
-# ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
-function consumption_and_drift((; a, z), dv, (; r, σ))
-	#dv = max(dv, eps(0.0))
-	c = u_prime_inv(dv, (; σ))
-	ȧ = z + r * a - c
-
-	(; c, ȧ, dv)
-end
-
-# ╔═╡ 91c8dce8-07b8-46d2-8c61-e6bccced64e4
-function consumption_and_drift₀((; a, z), (; r, σ))
-	ȧ = 0.0
-	c = z + r * a
-
-	dv = u_prime(c, (; σ))
-
-	(; c, ȧ, dv)
-end
-
-# ╔═╡ 7734c75e-5f2b-4807-8b9a-82e7e010edac
-function consumption_and_drift_upwind(state, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))
-	# consumption and savings with forward difference
-	(; dv, ȧ, c) =  consumption_and_drift(state, dvf, (; σ, r))
-	if ȧ > 0 && state.a < aₘₐₓ
-		return (; dv, ȧf = ȧ, ȧb = 0.0, c, ȧ)
-	end
-	# consumption and savings with backward difference
-	(; dv, ȧ, c) = consumption_and_drift(state, dvb, (; σ, r))
-	if ȧ < 0 && state.a > aₘᵢₙ
-		return (; dv, ȧf = 0.0, ȧb = ȧ, c, ȧ)
-	end
-	# consumption and derivate of value function at steady state
-	(; dv, ȧ, c) = consumption_and_drift₀(state, (; σ, r))
-	return (; dv, ȧf = 0.0, ȧb = 0.0, c, ȧ)
-end
-
-# ╔═╡ 12cbc2a7-ddf3-42c5-b592-a438ecdc5165
-begin
-	Base.@kwdef struct HuggettMC
-		σ = 2.0
-		ρ = 0.05
-		r = 0.03
-		w = 1.0
-		aₘᵢₙ = -0.1
-		aₘₐₓ = 1.0
-		an = 500
-		zgrid =  [0.1, 0.2]
-		Λ = [-0.02 0.02;
-			0.03 -0.03]
-	end
-		
-	function (m::HuggettMC)(state::NamedTuple, sol::NamedTuple)
-		(; ρ, Λ, zgrid) = m
-		nz = length(zgrid)
-		
-		sol_clean = clean_variables(sol, :v, :a, nz)
-		
-		nts = map(enumerate(eachrow(sol_clean))) do (i, row)
-			dv = (dvf = row.va_up, dvb = row.va_down)
-			out = consumption_and_drift_upwind((; state..., z=zgrid[i]), dv..., m)
-			endo = u(out.c, m) + out.dv * out.ȧ
-			(; i, out..., endo)
-		end
-
-		(; v) = sol_clean
-		(; endo, ȧ, c) = DataFrame(nts)
-
-		vt = ρ * v - (endo + Λ * v)
-
-		(; (Symbol(:v, i, :t) => vt[i] for i ∈ 1:nz)...),
-		(; 
-			(Symbol(:c, i) => c[i] for i ∈ 1:nz)...,
-			(Symbol(:s, i) => ȧ[i] for i ∈ 1:nz)...,
-		)
-	end	
-end
-
-# ╔═╡ d7fbe6a6-076e-4a96-9431-7470cf73e576
-out3, agrid3 = let
-	m = HuggettMC()
-		
-	agrid = range(m.aₘᵢₙ, m.aₘₐₓ, m.an)
-	stategrid = OrderedDict(:a => agrid)
-	
-	solend = OrderedDict(
-		(Symbol(:v, i) => [u(m.r * a + m.zgrid[i], m) / m.ρ for a ∈ agrid]) for i ∈ 1:length(m.zgrid)
-	)
-	
-	out = pdesolve(m, stategrid, solend; maxdist = √eps())
-	(; out, agrid)
-end
-
-# ╔═╡ 3e4b82aa-a6ec-4097-afb5-927b7e16262a
-function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
-	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
-end
-
 # ╔═╡ 1971dce8-ca39-4ced-88af-c65105977ac4
 v₀((; z, a), (; r, σ, ρ)) = u(z + r*a, (; σ))/ρ
+
+# ╔═╡ 6b6e49cb-d4b0-49c7-bc82-62bd3cbfabc2
+function _solve_HJB_econpdes(M, r; crit = √eps(), v₀=v₀)
+	#agrid = M.aₘᵢₙ .+ range(0, (M.aₘₐₓ - M.aₘᵢₙ)^0.8, length = M.an).^(1/0.8)
+	agrid = range(M.aₘᵢₙ, M.aₘₐₓ, M.an)
+	stategrid = OrderedDict(:a => agrid)
+
+	solend = OrderedDict(
+		(Symbol(:v, i) => [v₀((; z, a), M) for a ∈ agrid]) for (i, z) ∈ enumerate(M.zgrid)
+	)
+
+	(; residual_norm, optional) = pdesolve(M, stategrid, solend; maxdist = crit)
+
+	(; residual_norm, optional, agrid, M.zgrid)
+end
+
+# ╔═╡ 66c76cdb-499d-4141-a32e-879468d91291
+function solve_HJB_econpdes(m, r; crit = √eps(), v₀=v₀)
+	M = HuggettMC(m, r)
+	
+	(; residual_norm, optional, agrid, zgrid) = _solve_HJB_econpdes(M, r; crit, v₀)
+
+	df = optional_to_df(optional, agrid, zgrid)
+
+	(; df.v, df.c, df.ȧ, df, dist=residual_norm)
+end
+
+# ╔═╡ aeefc434-3375-400e-a360-4dc263b96252
+test = let
+	r = 0.03
+ 	M = HuggettMC(m, r)
+	
+	@elapsed (; residual_norm, optional, agrid, zgrid) = _solve_HJB_econpdes(M, r)
+end
 
 # ╔═╡ b7024377-6ffe-4f8a-a58a-0fa809683fd2
 abstract type Scheme end
@@ -699,6 +723,11 @@ begin
 		Δ = .9 * Δa / (maximum(z) + r * aₘₐₓ)
 		Explicit(Δ, maxit)
 	end
+end
+
+# ╔═╡ 3e4b82aa-a6ec-4097-afb5-927b7e16262a
+function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
+	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
 end
 
 # ╔═╡ 90d6eba4-fa47-4717-b742-8b38f0b330ac
@@ -843,13 +872,14 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), 
 
 	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
 	da = Δa
-
+	N_z = length(z)
+	
 	# construct asset grid
-	a = construct_a(m)
+	a = range(aₘᵢₙ, aₘₐₓ, N_a)
 
 	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 2)
-	dvb = zeros(N_a, 2)
+	dvf = zeros(N_a, N_z)
+	dvb = zeros(N_a, N_z)
 
 	# precompute A_switch matrix
 	id = sparse(I, N_a, N_a)
@@ -858,7 +888,7 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), 
 	A_switch   = vcat(A_switch_1, A_switch_2)
 
 	# initial guess for value function
-	v₀ = zeros(N_a, 2)
+	v₀ = zeros(N_a, N_z)
 	for (i, zᵢ) in enumerate(z)
 		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
 	end
@@ -912,7 +942,7 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), 
 		B = (ρ + 1/Δ) * I - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, 2)
+		v_new = reshape(v_new_stacked, N_a, N_z)
 
 		# STEP 4
 
@@ -922,11 +952,12 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), 
 		v = v_new
 
 		if dist[it] < crit
-
+			
 			ȧ = z .+ r.*a - c
 
-			return v, c, ȧ, A, it, dist
-
+			ss = tuple.(a, z)
+			return (; v, c, ȧ, a=first.(ss), z=last.(ss), A, it_last=it, dist)
+			
 		end
 
 	end
@@ -934,6 +965,48 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), 
 	@error("Algorithm did not converge")
 
 end
+
+# ╔═╡ e1376e99-a636-4d28-b711-2dd4be66374f
+function solve_df(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+	(; v, c, ȧ, A, it_last, dist) = solve_HJB_implicit(m, r; crit, Δ)
+	# scheme = Implicit(; maxit, Δ)
+	#(; v, c, ȧ, A, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
+	g = solve_KF(m, A)
+	df = results_to_df(m; v, c, ȧ, g)
+	
+	return df, it_last, dist
+	
+end
+
+# ╔═╡ 4de350bb-d2be-46b1-8558-a49f54a29dd1
+(df, it_last, dist) = solve_df(m, 0.03; maxit = 100);
+
+# ╔═╡ 1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
+let 
+	
+	df.g_max = min.(df.g,df.g[2]);
+	
+	@chain df begin
+		stack(Not([:a, :z, :g]))
+		data(_) * mapping(:a, :value, layout = :variable, color = :z => nonnumeric) * visual(Lines)
+		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+	end
+
+end
+
+# ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
+function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+	(; Δa) = m
+	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
+	A = dot(df.a, df.g) * Δa
+
+end
+
+# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
+# ╠═╡ disabled = true
+#=╠═╡
+r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
+  ╠═╡ =#
 
 # ╔═╡ 3a92eac0-643f-47ec-b6dc-6d541873ac9a
 solve_HJB_implicit(m, 0.03)
@@ -996,6 +1069,67 @@ function solve_HJB_julian(m::HuggettPoisson, r, scheme::Scheme; v₀=v₀, crit 
 
 end
 
+# ╔═╡ 7a98402f-8b61-4228-bc11-33da201e6d82
+# ╠═╡ disabled = true
+#=╠═╡
+compare = let
+	r = 0.03
+	crit = 1e-10
+	maxit = 100_000
+	scheme = Implicit()
+	
+	t1 = @elapsed HJB_moll     = solve_HJB_implicit(m, r; crit)
+	@info t1
+	#t2 = @elapsed HJB_explicit = solve_HJB_explicit(m, r; crit)
+	#@info t2
+	t3 = @elapsed HJB_julian   = solve_HJB_julian(m, r, scheme; crit)
+	@info t3
+	t4 = @elapsed HJB_econpdes = solve_HJB_econpdes(m, r; crit)
+	@info t4
+
+	@test vec(HJB_moll.v) ≈ vec(HJB_julian.v) ≈ HJB_econpdes.v
+	@test vec(HJB_moll.ȧ) ≈ vec(HJB_julian.ȧ) ≈ HJB_econpdes.ȧ
+	@test vec(HJB_moll.c) ≈ vec(HJB_julian.c) ≈ HJB_econpdes.c
+	
+	@info HJB_moll.it_last, HJB_julian.it_last
+
+	(; HJB_moll, #=HJB_explicit,=# HJB_julian, HJB_econpdes)
+end
+  ╠═╡ =#
+
+# ╔═╡ 708ba777-847b-460f-85e0-0615866c18eb
+#=╠═╡
+let
+	(; HJB_moll, HJB_julian, HJB_econpdes) = compare
+
+	i_z = CartesianIndices(HJB_moll.ȧ) .|> Tuple .|> last |> vec
+	#i_a = CartesianIndices(HJB_moll.ȧ) .|> Tuple .|> first |> vec
+	#a = 
+	df_moll = DataFrame(; 
+		ȧ=vec(HJB_moll.ȧ), 
+		c=vec(HJB_moll.c), 
+		v=vec(HJB_moll.v),
+		a=vec(HJB_moll.a),
+		z=vec(HJB_moll.z),
+	)
+	
+	df_gomez= HJB_econpdes.df
+
+	df = vcat(df_moll, df_gomez, source = :method => ["Moll", "Gomez"])
+
+	@chain df begin
+		stack(Not([:a, :z, :method]))
+		data(_) * mapping(
+			:a, :value,
+			layout = :variable, color=:z => nonnumeric,
+			linestyle = :method => nonnumeric
+		) * visual(Lines)
+		draw(_, facet = (linkyaxes=false, ))
+		as_svg
+	end
+end
+  ╠═╡ =#
+
 # ╔═╡ 9e1600df-9b6a-4b84-a152-1fa636f25fe5
 let
 	r = 0.03
@@ -1032,61 +1166,6 @@ let
 #	fig
 end
 
-# ╔═╡ e1376e99-a636-4d28-b711-2dd4be66374f
-function solve_df(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	scheme = Implicit(; maxit, Δ)
-	(; v, c, ȧ, A, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
-	g = solve_KF(m, A)
-	df = results_to_df(m; v, c, ȧ, g)
-	
-	return df, it_last, dist
-	
-end
-
-# ╔═╡ 4de350bb-d2be-46b1-8558-a49f54a29dd1
-(df, it_last, dist) = solve_df(m, 0.03; maxit = 100);
-
-# ╔═╡ c57052d4-7a03-4a02-88d9-531df3421cb7
-begin
-	fig = Figure()
-	ax1 = Axis(fig[1,1])
-	lines!(ax1, out3.zero[:v1], label = "Moll")
-	lines!(ax1, df.v[begin:500], label = "EconPDEs")
-
-	ax2 = Axis(fig[1,2])
-	lines!(ax2, out3.zero[:v2])
-	lines!(ax2, df.v[501:end], label = "EconPDEs")
-	
-	fig
-end
-
-# ╔═╡ 1503b0d4-6d0e-4b5d-896f-e13c093ad3d4
-let 
-	
-	df.g_max = min.(df.g,df.g[2]);
-	
-	@chain df begin
-		stack(Not([:a, :z, :g]))
-		data(_) * mapping(:a, :value, layout = :variable, color = :z => nonnumeric) * visual(Lines)
-		draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
-	end
-
-end
-
-# ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
-function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
-	(; Δa) = m
-	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
-	A = dot(df.a, df.g) * Δa
-
-end
-
-# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
-# ╠═╡ disabled = true
-#=╠═╡
-r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
-  ╠═╡ =#
-
 # ╔═╡ 98a7d8e0-1741-4447-b612-e40491fa8673
 t_impl = @elapsed solve_HJB_julian(m, 0.03, Implicit())
 
@@ -1101,6 +1180,7 @@ let
 	@chain df_dist begin
 		data(_) * mapping(:time, :log10_dist) * visual(Lines)
 		draw(; figure)
+		as_svg
 	end
 end
 
@@ -1117,9 +1197,6 @@ end
 # ╔═╡ 4894a323-c8c8-4f34-b311-20c64176b89d
 (df2, it_last2, dist2) = solve_explicit_df(m, 0.03; crit=√eps());
 
-# ╔═╡ ebd88b43-e277-4c79-b443-1661a3c438b8
-(df2[:,[:c, :ȧ, :v]] .- df[:,[:c, :ȧ, :v]]) ./ df[:,[:c, :ȧ, :v]]
-
 # ╔═╡ 264fc65e-d09a-4c67-94de-f845d42d18a3
 let 
 	df_dist = DataFrame(
@@ -1130,7 +1207,8 @@ let
 	figure = (; resolution = (500, 250))
 	@chain df_dist begin
 		data(_) * mapping(:time, :log10_dist) * visual(Lines)
-		draw(; figure)
+		draw(; figure) 
+		as_svg
 	end
 end
 
@@ -1173,6 +1251,105 @@ md"""
 # ╔═╡ 5c1387ed-973c-4109-9ace-c473a4efe9ee
 TableOfContents()
 
+# ╔═╡ e507dfb0-08a4-45a8-b342-09ca989e05f5
+md"""
+## Test from EconPDEs
+"""
+
+# ╔═╡ 91262a60-4263-49aa-b986-269fbb32a429
+let
+	
+mutable struct AchdouHanLasryLionsMoll_TwoStatesModel
+    # income process parameters
+    yl::Float64
+    yh::Float64
+    λlh::Float64 
+    λhl::Float64
+
+    r::Float64
+
+    # utility parameters
+    ρ::Float64  
+    σ::Float64
+
+    amin::Float64
+    amax::Float64 
+	an::Int
+end
+
+function AchdouHanLasryLionsMoll_TwoStatesModel(;yl = 0.5, yh = 1.5, λlh = 0.2, λhl = 0.2, r = 0.03, ρ = 0.04, γ = 2.0, amin = - 0.1, amax = 1.0, an=500)
+    AchdouHanLasryLionsMoll_TwoStatesModel(yl, yh, λlh, λhl, r, ρ, γ, amin, amax, an)
+end
+
+function (m::AchdouHanLasryLionsMoll_TwoStatesModel)(state::NamedTuple, value::NamedTuple)
+    (; yl, yh, λlh, λhl, r, ρ, σ, amin, amax) = m 
+	γ=σ
+    (; a) = state
+    (; vl, vla_up, vla_down, vh, vha_up, vha_down) = value
+    vla = vla_up
+    iter = 0
+    va = vla_up
+    @label start1
+    va = max(va, 1e-8)    
+    c = u_prime_inv(va, m)
+    μa = yl + r * a - c
+    if (iter == 0) & (μa <= 0)
+        iter += 1
+        va = vla_down
+        @goto start1
+    end
+    if (a ≈ amin) && (μa <= 0.0)
+        c = yl + r * amin
+        μa = 0.0
+        va = u_prime(c, m)
+    end
+    vah = va
+    μal = μa
+    vlt = - (u(c, m) + μa * va + λlh * (vh - vl) - ρ * vl)
+   
+
+    iter = 0
+    va = vha_up
+    @label start2
+    va = max(va, 1e-8)    
+    c = u_prime_inv(va, m) #^(-1 / γ)
+    μa = yh + r * a - c
+    if (iter == 0) & (μa <= 0)
+        iter += 1
+        va = vha_down
+        @goto start2
+    end
+    if (a ≈ amin) && (μa <= 0.0)
+        c = yh + r * amin
+        μa = 0.0
+        va = u_prime(c, m)
+    end
+    val = va
+    μah = μa
+    vht = - (u(c, m) + μa * va + λhl * (vl - vh) - ρ * vh)
+    return (; vlt, vht), (; vlt, vht, vah, val, μah, μal)
+end
+end
+
+# ╔═╡ 03a5eeac-ebb0-426b-a17d-3ef3e69627f6
+let
+	m = AchdouHanLasryLionsMoll_TwoStatesModel()
+	m.amin += 0.001
+	#agrid = m.amin .+ range(0, (m.amax - m.amin)^0.8, length = m.an).^(1/0.8)
+	agrid = range(m.amin, m.amax, length=m.an)
+	stategrid = OrderedDict(:a => agrid)
+	yend = OrderedDict(
+		:vl => 
+		(m.ρ ./ m.σ .+ (1 .- 1 / m.σ) .* m.r)^(-m.σ) .* u.(
+			stategrid[:a] .+ m.yl ./ m.r
+		, Ref(m)), #).^(1-m.γ) ./ (1 - m.γ), 
+		:vh => (m.ρ ./ m.σ .+ (1 .- m.σ) .* m.r)^(-m.σ)  .* u.(
+			stategrid[:a] .+ m.yh ./ m.r, Ref(m))
+	)
+	result = pdesolve(m, stategrid, yend)
+	@assert result.residual_norm <= 1e-5
+end
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -1186,6 +1363,7 @@ EconPDEs = "a3315474-fad9-5060-8696-cee5f38a87b7"
 InfinitesimalGenerators = "2fce0c6f-5f0b-5c85-85c9-2ffe1d5ee30d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
@@ -1202,6 +1380,7 @@ DataFrames = "~1.5.0"
 EconPDEs = "~1.0.3"
 InfinitesimalGenerators = "~0.5.0"
 Parameters = "~0.12.3"
+PlutoTest = "~0.2.2"
 PlutoUI = "~0.7.50"
 QuantEcon = "~0.16.4"
 Roots = "~2.0.10"
@@ -1214,7 +1393,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.0-rc2"
 manifest_format = "2.0"
-project_hash = "4756c7e250d4b4384489024c8d17dd4014590247"
+project_hash = "c68d833cb8b6445f7a7c5abe37308e850aae3876"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "e6103228c92462a331003248fa31f00dcf41c577"
@@ -2379,6 +2558,12 @@ git-tree-sha1 = "c95373e73290cf50a8a22c3375e4625ded5c5280"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.3.4"
 
+[[deps.PlutoTest]]
+deps = ["HypertextLiteral", "InteractiveUtils", "Markdown", "Test"]
+git-tree-sha1 = "17aa9b81106e661cffa1c4c36c17ee1c50a86eda"
+uuid = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
+version = "0.2.2"
+
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "FixedPointNumbers", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "MIMEs", "Markdown", "Random", "Reexport", "URIs", "UUIDs"]
 git-tree-sha1 = "5bb5129fdd62a2bbbe17c2756932259acf467386"
@@ -2998,21 +3183,27 @@ version = "3.5.0+0"
 # ╠═4d7ee33f-ff78-4ea9-838b-a8320df4651f
 # ╟─fb88f286-0bce-4cb0-9d52-83b373f6fbcf
 # ╠═5cbd313e-b357-4b00-bb7d-4c87f8522cdd
+# ╠═12cbc2a7-ddf3-42c5-b592-a438ecdc5165
 # ╠═56234834-6de9-4e44-95af-c5e3fb828a9d
 # ╠═a10ef170-045c-439e-a23b-122e812853aa
 # ╠═68aeb6cf-cff8-49e9-8c39-d94aadd5a444
 # ╠═e197b24a-7e51-45e4-8186-11f88bf48de6
-# ╠═12cbc2a7-ddf3-42c5-b592-a438ecdc5165
-# ╠═d7fbe6a6-076e-4a96-9431-7470cf73e576
-# ╠═c57052d4-7a03-4a02-88d9-531df3421cb7
+# ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
+# ╠═e57a2dfa-0937-49cf-9161-fa1e39fb5e80
+# ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
+# ╠═66c76cdb-499d-4141-a32e-879468d91291
+# ╠═ad4b46b0-b6fb-4711-9501-0912eda3d6c3
+# ╠═6b6e49cb-d4b0-49c7-bc82-62bd3cbfabc2
+# ╠═aeefc434-3375-400e-a360-4dc263b96252
+# ╟─16b48db6-ef8d-4d7b-9e9f-b281143d0a90
+# ╠═7a98402f-8b61-4228-bc11-33da201e6d82
+# ╠═708ba777-847b-460f-85e0-0615866c18eb
+# ╠═02c84fbb-f2cb-4051-8bda-62f5e2a4c6d1
 # ╠═d704e278-6ae8-4166-bade-599e71e54336
-# ╠═e14b58b5-4b5c-4a2a-8063-d2212f722d06
-# ╠═ffa87f90-65ad-469c-aef3-55dc9f6fe861
-# ╠═b4d6a137-6e4a-4b16-a1d0-d6b9c7c88c50
 # ╟─1fbf9f02-7ad2-4ddd-ac2c-92af79c9ed02
 # ╟─2e09462e-6030-4e33-bc7a-9d2faed4ca74
 # ╠═4ebeb5e8-505d-4ed2-8d37-4a64ceb7d796
-# ╠═6c895dce-9c0a-499c-9e95-45c29ee5a459
+# ╟─6c895dce-9c0a-499c-9e95-45c29ee5a459
 # ╠═a8279bcc-4cdf-4a89-bb75-e7e1f617643d
 # ╠═dd89d622-6066-4d52-a4ca-366822c63661
 # ╠═33a6780e-7f5a-4677-a51c-c002b7b86dc3
@@ -3042,7 +3233,7 @@ version = "3.5.0+0"
 # ╠═f8fbff0d-15d4-43ca-9f9c-29788ff793ec
 # ╠═4894a323-c8c8-4f34-b311-20c64176b89d
 # ╠═4bfa5d92-b177-4442-b045-e05cc48b6cc4
-# ╠═ebd88b43-e277-4c79-b443-1661a3c438b8
+# ╠═bae3209a-1ad6-4e1f-833d-f1074e8239dc
 # ╟─fd0fb774-a805-4739-b570-0d2e191a3294
 # ╟─8987f1ce-e290-4930-909a-3e09a9113a7a
 # ╟─eb7bbd16-04d3-4d7d-b4af-e77f89e4180e
@@ -3054,11 +3245,7 @@ version = "3.5.0+0"
 # ╟─f3e0b42f-370d-4887-b6a1-d9ecd83c6275
 # ╠═70930f84-fe69-4fa3-a37c-eec9a377526c
 # ╠═b9efca1a-b978-4794-b421-ee9df889a6a8
-# ╠═7734c75e-5f2b-4807-8b9a-82e7e010edac
 # ╠═01234bcc-a428-4922-969f-9a1ba49c8d62
-# ╠═e57a2dfa-0937-49cf-9161-fa1e39fb5e80
-# ╠═91c8dce8-07b8-46d2-8c61-e6bccced64e4
-# ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
 # ╠═1971dce8-ca39-4ced-88af-c65105977ac4
 # ╠═b7024377-6ffe-4f8a-a58a-0fa809683fd2
 # ╠═2517dcff-c838-4b33-9f0e-e6d4bd8a259e
@@ -3067,6 +3254,7 @@ version = "3.5.0+0"
 # ╠═005988d8-a327-410e-9e53-09ba99dcee9a
 # ╠═bf01f8b6-b618-4ce8-9ff0-3bdf37901ce1
 # ╠═90d6eba4-fa47-4717-b742-8b38f0b330ac
+# ╠═3e4b82aa-a6ec-4097-afb5-927b7e16262a
 # ╠═b57ea0a2-bee4-450f-99fa-cc79054fc963
 # ╠═8777505c-6db4-4e75-a57b-59f4620b0051
 # ╠═434ecb8d-eae2-4913-97f8-3bdbefbf78ff
@@ -3083,5 +3271,8 @@ version = "3.5.0+0"
 # ╠═aecea3fe-f0ee-4953-857b-29d6a5640530
 # ╠═9353566b-a70e-4dbe-8f02-b16d2c0570d2
 # ╠═0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
+# ╟─e507dfb0-08a4-45a8-b342-09ca989e05f5
+# ╠═91262a60-4263-49aa-b986-269fbb32a429
+# ╠═03a5eeac-ebb0-426b-a17d-3ef3e69627f6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
