@@ -914,9 +914,9 @@ StatsBase = "~0.33.21"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.9.0-rc1"
+julia_version = "1.9.0-rc2"
 manifest_format = "2.0"
-project_hash = "c458acdd3092bfaa7e708a21f0bd0710a996160d"
+project_hash = "544f248f4e84a7b06268d049667b265e78ea8e34"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
