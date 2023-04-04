@@ -7,12 +7,6 @@ using InteractiveUtils
 # ╔═╡ 5cbd313e-b357-4b00-bb7d-4c87f8522cdd
 using EconPDEs
 
-# ╔═╡ db79831c-fa97-4945-8bbc-84390fccd6a6
-# ╠═╡ disabled = true
-#=╠═╡
-using NamedTupleTools: merge
-  ╠═╡ =#
-
 # ╔═╡ 02c84fbb-f2cb-4051-8bda-62f5e2a4c6d1
 using PlutoTest
 
@@ -36,9 +30,6 @@ using PlutoUI
 
 # ╔═╡ 563c267e-0c6a-4b90-81a7-fc8ff4c73c75
 using AlgebraOfGraphics, CairoMakie
-
-# ╔═╡ 6d5523f2-a517-48df-9f31-bbd516e1208e
-using Parameters
 
 # ╔═╡ 9fa33ac0-bb2f-4055-b124-8c7c19621226
 using LinearAlgebra
@@ -74,20 +65,20 @@ md"""
 """
 
 # ╔═╡ 64d44910-988c-4e24-baf6-6408da65bd21
-@with_kw struct HuggettPoisson
+@kwdef struct Moll
 	
 	σ::Float64 = 2.   # risk aversion coefficient u'(c) = c^(-σ)
 	ρ::Float64 = 0.05 # rate of time preference
 
-	z::Matrix{Float64} = reshape([0.1, 0.2], 1, :)   # income state (row vector)
-	λ::Matrix{Float64} = reshape([0.02, 0.03], 1, :) # intensities (row vector)
+	z::Matrix{Float64} = [0.1 0.2]  # income state (row vector)
+	λ::Matrix{Float64} = [0.02 0.03] # intensities (row vector)
 
 	# asset grid parameters
 	N_a::Int64 = 500
 	aₘᵢₙ::Float64 = - 0.1
-	aₘₐₓ::Float64 = 1.
+	aₘₐₓ::Float64 = 1.0
+
 	Δa::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
-	
 end
 
 # ╔═╡ 95764a2a-0a92-447c-98a8-df22167abda6
@@ -122,7 +113,7 @@ function construct_a(m)
 end
 
 # ╔═╡ 23a991be-7c8b-45e2-bd75-af5e146fc6b0
-m = HuggettPoisson();
+m = Moll();
 
 # ╔═╡ 2289c7a7-3493-4bfb-8ffe-31b074d17b14
 md"""
@@ -219,20 +210,14 @@ md"""
 # ╔═╡ 69583d36-6190-4483-87fb-291d9cf82c77
 states(a, z) = (; a, z)
 
-# ╔═╡ 7dd422ad-4cef-449f-8572-be1e34cd3edf
-dvs(dvf, dvb) = (; dvf, dvb)
-
 # ╔═╡ db13a6b9-2de2-47ce-8af0-99d868183354
 function dvs_v((; v1, v1a_up, v1a_down, v2, v2a_up, v2a_down))
 	dvf = [v1a_up, v2a_up]
 	dvb = [v1a_down, v2a_down]
 	v = [v1, v2]
 
-	(; dvfb=(; dvf, dvb), v)
+	(; dvf, dvb, v)
 end
-
-# ╔═╡ bdb5dba0-1551-484d-ae2b-d7061b5583d0
-
 
 # ╔═╡ 56234834-6de9-4e44-95af-c5e3fb828a9d
 u_prime_inv(x, (; σ)) = x^(-1/σ)
@@ -244,6 +229,8 @@ u_prime(c, (; σ)) = c^(-σ)
 u(c, (; σ)) = c > 0 ? σ == 1 ? log(c) : c^(1-σ)/(1-σ) : 10.0 * c - 100.0
 
 # ╔═╡ e197b24a-7e51-45e4-8186-11f88bf48de6
+# ╠═╡ disabled = true
+#=╠═╡
 function clean_variables(nt, solname, statename, n)
 	map(1:n) do i
 		sol_key = Symbol(solname, i)
@@ -253,6 +240,7 @@ function clean_variables(nt, solname, statename, n)
 		(; solname => nt[sol_key], up_key[2] => nt[up_key[1]], down_key[2] => nt[down_key[1]])
 	end |> DataFrame
 end
+  ╠═╡ =#
 
 # ╔═╡ e57a2dfa-0937-49cf-9161-fa1e39fb5e80
 function consumption_and_drift((; a, z), dv, (; r, σ))
@@ -363,7 +351,7 @@ function solve_KF_moll(A)
 end
 
 # ╔═╡ eb565042-1823-4d5a-b4d1-ee314dccd4e0
-function solve_KF(m::HuggettPoisson, A)
+function solve_KF(m::Moll, A)
 
 	(; N_a, Δa) = m
 	
@@ -460,12 +448,6 @@ $$0 = \int_{\bar{a}}^\infty ag_1(a)da + \int_{\bar{a}}^\infty ag_2(a)da = S(r)$$
 # ╔═╡ a8f1dc13-b73c-44b0-8e63-82431f904313
 initial_bracket = (0.01, 0.03)
 
-# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
-# ╠═╡ disabled = true
-#=╠═╡
-r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
-  ╠═╡ =#
-
 # ╔═╡ e4035abe-11a1-4c2c-8312-4d1c71e2f9ab
 md"""
 # Appendix 
@@ -490,7 +472,7 @@ The disadvantage of the explicit method is that it converges only if $\Delta$ is
 """
 
 # ╔═╡ b099dbbf-9648-44c5-984c-fdd80ee81469
-function solve_HJB_explicit(m::HuggettPoisson, r; maxit = 100000, crit = 1e-6)
+function solve_HJB_explicit(m::Moll, r; maxit = 100000, crit = 1e-6)
 
 	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
 	da = Δa
@@ -660,7 +642,7 @@ v₀((; z, a), (; r, σ, ρ)) = u(z + r*a, (; σ))/ρ
 # ╔═╡ e12a5f08-7e5b-418c-a08f-8d179e912774
 begin
 	
-Base.@kwdef struct Original
+Base.@kwdef struct EconPDEsFast
     # income process parameters
 	zgrid::Vector{Float64}=[0.5, 1.5]
 	Λ::Matrix{Float64}= [-0.2 0.2; 0.2 -0.2]
@@ -674,44 +656,45 @@ Base.@kwdef struct Original
     aₘᵢₙ::Float64=-0.1
     aₘₐₓ::Float64=1.0
 	an::Int=500
-	nz::Int = length(zgrid)
-	
-	TV=NamedTuple{Tuple(Symbol.(:v, 1:nz, :t))}
-	TO=NamedTuple{Tuple([Symbol.(:c, 1:nz); Symbol.(:s, 1:nz)])}
 end
 
-function (m::Original)(state::NamedTuple, value::NamedTuple)
-   (; zgrid, Λ, r, ρ, σ, aₘᵢₙ, aₘₐₓ) = m    
-   (; a) = state
-   (; v1, v1a_up, v1a_down, v2, v2a_up, v2a_down) = value
+function EconPDEsFast(m::Moll, r; σ=m.σ, ρ=m.ρ, aₘᵢₙ=m.aₘᵢₙ, aₘₐₓ=m.aₘₐₓ, an = m.N_a)
+	Λ = generator(m)
+	EconPDEsFast(; σ, ρ, r, w=1, aₘᵢₙ, aₘₐₓ, an, zgrid=vec(m.z), Λ)
+end
+	
+function (m::EconPDEsFast)(state::NamedTuple, value::NamedTuple)
+    (; zgrid, Λ, ρ) = m
+#	zs=zgrid
+	nz = length(zgrid)
+    (; a) = state
+    (; v1, v1a_up, v1a_down, v2, v2a_up, v2a_down) = value
 
-	## first z state
-	state = (; a, z=zgrid[1])
-	dvf = v1a_up
-	dvb = v1a_down
-	(; c, ȧ, dv) = consumption_and_drift_upwind(state, dvf, dvb, m)
-	endo = u(c, m) + ȧ * dv
+	T = eltype(value)
+	
+	vs = [v1, v2]
+	dvf = [v1a_up, v2a_up]
+	dvb = [v1a_down, v2a_down]
+	states = [(; a, z=zgrid[1]), (; a, z=zgrid[2])]
 
-	v1t = ρ * v1 - (endo + Λ[1,2] * (v2 - v1))
-	μal = ȧ
-	val = dv
+	cs = Vector{T}(undef, nz)
+	ȧs = Vector{T}(undef, nz)
+	dvs = Vector{T}(undef, nz)
 
-	## second z state
-	state = (; a, z=zgrid[2])
-	dvf = v2a_up
-	dvb = v2a_down
-	(; c, ȧ, dv) = consumption_and_drift_upwind(state, dvf, dvb, m)
-	endo = u(c, m) + ȧ * dv
+	for i ∈ 1:2
+		(; c, ȧ, dv) = consumption_and_drift_upwind(states[i], dvf[i], dvb[i], m)
+		cs[i] = c
+		ȧs[i] = ȧ
+		dvs[i] = dv
+	end
+		
+	vts  = ρ .* vs .- (u.(cs, Ref(m)) .+ ȧs .* dvs .+ Λ * vs)
 
-	v2t = ρ * v2 - (endo + Λ[2,1] * (v1 - v2))
-	μah = ȧ
-	vah = dv
-
-    return (; v1t, v2t), (; v1t, v2t, vah, val, μah, μal)
+    return (; v1t=vts[1], v2t=vts[2]), (; s1=ȧs[1], s2=ȧs[2], c1=cs[1], c2=cs[2])
 end
 
 	pkgtest0 = let
-		m = Original()
+		m = EconPDEsFast()
 
 		#agrid = m.amin .+ range(0, (m.amax - m.amin)^0.8, length = m.an).^(1/0.8)
 		agrid = range(m.aₘᵢₙ, m.aₘₐₓ, length=m.an)
@@ -749,6 +732,28 @@ function _solve_HJB_econpdes(M, r; crit = √eps(), v₀=v₀)
 	(; residual_norm, optional, agrid, M.zgrid)
 end
 
+# ╔═╡ 66c76cdb-499d-4141-a32e-879468d91291
+function solve_HJB_econpdes(m, r; crit = √eps(), v₀=v₀)
+	M = EconPDEsFast(m, r)
+	
+	(; residual_norm, optional, agrid, zgrid) = _solve_HJB_econpdes(M, r; crit, v₀)
+
+	df = optional_to_df(optional, agrid, zgrid)
+
+	(; df.v, df.c, df.ȧ, df, dist=residual_norm)
+end
+
+# ╔═╡ aeefc434-3375-400e-a360-4dc263b96252
+# ╠═╡ disabled = true
+#=╠═╡
+test = let
+	r = 0.03
+ 	M = EconPDEsFast(m, r)
+	
+	@elapsed (; residual_norm, optional, agrid, zgrid) = _solve_HJB_econpdes(M, r)
+end
+  ╠═╡ =#
+
 # ╔═╡ b7024377-6ffe-4f8a-a58a-0fa809683fd2
 abstract type Scheme end
 
@@ -776,51 +781,45 @@ function consumption_and_drift_upwind_vec(ss, dvf, dvb, par)
 	consumption_and_drift_upwind.(ss, dvf, dvb, Ref(par)) |> StructArray
 end
 
-# ╔═╡ 91262a60-4263-49aa-b986-269fbb32a429
+# ╔═╡ 12cbc2a7-ddf3-42c5-b592-a438ecdc5165
 begin
+	Base.@kwdef struct EconPDEsSlow
+		σ::Float64 = 2.0
+		ρ::Float64 = 0.05
+		r::Float64 = 0.03
+		w::Float64 = 1.0
+		aₘᵢₙ::Float64 = -0.1
+		aₘₐₓ::Float64 = 1.0
+		an::Int = 500
+		zgrid::Vector{Float64} =  [0.1, 0.2]
+		Λ::Matrix{Float64} = [-0.02 0.02;
+			0.03 -0.03]
+	end
+
+	function EconPDEsSlow(m::Moll, r; σ=m.σ, ρ=m.ρ, aₘᵢₙ=m.aₘᵢₙ, aₘₐₓ=m.aₘₐₓ, an = m.N_a)
+		Λ = generator(m)
+		EconPDEsSlow(; σ, ρ, r, w=1, aₘᵢₙ, aₘₐₓ, an, zgrid=vec(m.z), Λ)
+	end
 	
-Base.@kwdef struct Adapted
-    # income process parameters
-	zgrid::Vector{Float64}=[0.5, 1.5]
-	Λ::Matrix{Float64}= [-0.2 0.2; 0.2 -0.2]
-	
-    # utility parameters
-    σ::Float64=2.0
-	ρ::Float64=0.04
-	r::Float64=0.03
-	w::Float64=1.0
-	
-    aₘᵢₙ::Float64=-0.1
-    aₘₐₓ::Float64=1.0
-	an::Int=500
-	nz::Int = length(zgrid)
-	
-	TV=NamedTuple{Tuple(Symbol.(:v, 1:nz, :t))}
-	TO=NamedTuple{Tuple([Symbol.(:c, 1:nz); Symbol.(:s, 1:nz)])}
-end
+	function (M::EconPDEsSlow)(state::NamedTuple, sol::NamedTuple)
+	 	(; zgrid, r, ρ, σ, Λ) = M
+		(; dvf, dvb, v) = dvs_v(sol)
 
-function (m::Adapted)(state::NamedTuple, value::NamedTuple)
-    (; zgrid, r, ρ, σ, Λ, TO, TV) = m 
-	#(; dvfb, v) = dvs_v(value)
+		(; a) = state
 
-	(; v1, v1a_up, v1a_down, v2, v2a_up, v2a_down) = value
+		(; dv, c, ȧ) = consumption_and_drift_upwind_vec(states.(a, zgrid), dvf, dvb, M)
 
-	v = [v1, v2]
-	dvf=[v1a_up, v2a_up]
-	dvb=[v1a_down, v2a_down]
-	(; a) = state
+		endo = u.(c, Ref(M)) .+ dv .* ȧ	
 
-	(; dv, c, ȧ) = consumption_and_drift_upwind_vec(states.(a, zgrid), dvf, dvb, m)
+		vt = ρ * v - (endo + Λ * v)
 
-	endo = u.(c, Ref(m)) .+ dv .* ȧ	
-
-	vt = ρ * v - (endo + Λ * v)
-
-	return TV(vt), TO([c; ȧ])
-end
+		nz = length(zgrid)
+		return NamedTuple{Tuple(Symbol.(:v, 1:nz, :t))}(vt),
+			NamedTuple{Tuple([Symbol.(:c, 1:nz); Symbol.(:s, 1:nz)])}([c; ȧ])
+	end	
 
 	pkgtest = let
-		m = Adapted()
+		m = EconPDEsSlow()
 
 		#agrid = m.amin .+ range(0, (m.amax - m.amin)^0.8, length = m.an).^(1/0.8)
 		agrid = range(m.aₘᵢₙ, m.aₘₐₓ, length=m.an)
@@ -843,67 +842,6 @@ let
 	@assert result.residual_norm <= 1e-5
 end
 
-# ╔═╡ 12cbc2a7-ddf3-42c5-b592-a438ecdc5165
-begin
-	Base.@kwdef struct HuggettMC
-		σ::Float64 = 2.0
-		ρ::Float64 = 0.05
-		r::Float64 = 0.03
-		w::Float64 = 1.0
-		aₘᵢₙ::Float64 = -0.1
-		aₘₐₓ::Float64 = 1.0
-		an::Int = 500
-		zgrid::Vector{Float64} =  [0.1, 0.2]
-		Λ::Matrix{Float64} = [-0.02 0.02;
-			0.03 -0.03]
-
-		#nz::Int = length(zgrid)
-		#TV=NamedTuple{Tuple(Symbol.(:v, 1:nz, :t))}
-		#TO=NamedTuple{Tuple([Symbol.(:c, 1:nz); Symbol.(:s, 1:nz)])}
-	end
-
-	function HuggettMC(m::HuggettPoisson, r; σ=m.σ, ρ=m.ρ, aₘᵢₙ=m.aₘᵢₙ, aₘₐₓ=m.aₘₐₓ, an = m.N_a)
-		Λ = generator(m)
-		HuggettMC(; σ, ρ, r, w=1, aₘᵢₙ, aₘₐₓ, an, zgrid=vec(m.z), Λ)
-	end
-	
-	function (M::HuggettMC)(state::NamedTuple, sol::NamedTuple)
-	 	(; zgrid, r, ρ, σ, Λ) = M
-		(; dvfb, v) = dvs_v(sol)
-
-		(; a) = state
-
-		(; dv, c, ȧ) = consumption_and_drift_upwind_vec(states.(a, zgrid), dvfb, M)
-
-		endo = u.(c, Ref(M)) .+ dv .* ȧ	
-
-		vt = ρ * v - (endo + Λ * v)
-
-		nz = length(zgrid)
-		return NamedTuple{Tuple(Symbol.(:v, 1:nz, :t))}(vt),
-			NamedTuple{Tuple([Symbol.(:c, 1:nz); Symbol.(:s, 1:nz)])}([c; ȧ])
-	end	
-end
-
-# ╔═╡ 66c76cdb-499d-4141-a32e-879468d91291
-function solve_HJB_econpdes(m, r; crit = √eps(), v₀=v₀)
-	M = HuggettMC(m, r)
-	
-	(; residual_norm, optional, agrid, zgrid) = _solve_HJB_econpdes(M, r; crit, v₀)
-
-	df = optional_to_df(optional, agrid, zgrid)
-
-	(; df.v, df.c, df.ȧ, df, dist=residual_norm)
-end
-
-# ╔═╡ aeefc434-3375-400e-a360-4dc263b96252
-test = let
-	r = 0.03
- 	M = HuggettMC(m, r)
-	
-	@elapsed (; residual_norm, optional, agrid, zgrid) = _solve_HJB_econpdes(M, r)
-end
-
 # ╔═╡ 90d6eba4-fa47-4717-b742-8b38f0b330ac
 function inner_function(ss, v, (; aₘₐₓ, aₘᵢₙ, r, σ, N_a, Δa, z))
 	# initialize arrays for forward and backward difference
@@ -920,7 +858,7 @@ function inner_function(ss, v, (; aₘₐₓ, aₘᵢₙ, r, σ, N_a, Δa, z))
 	
 	#I_concave = dvb .> dvf # problems if value function not concave
 
-	out = consumption_and_drift_upwind_vec(ss, (; dvf, dvb), (; σ, r, aₘᵢₙ, aₘₐₓ))	
+	out = consumption_and_drift_upwind_vec(ss, dvf, dvb, (; σ, r, aₘᵢₙ, aₘₐₓ))	
 	u = out.c .^ (1-σ)/(1-σ)
 
 	(; u, out.c, out.dv, out.ȧ, out.ȧf, out.ȧb)
@@ -1042,7 +980,7 @@ function construct_A_moll(ȧf, ȧb, da, N_a)
 end
 
 # ╔═╡ 4d7ee33f-ff78-4ea9-838b-a8320df4651f
-function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), Δ = 1000)
+function solve_HJB_implicit(m::Moll, r; maxit = 100, crit = √eps(), Δ = 1000)
 
 	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, Δa) = m
 	da = Δa
@@ -1141,7 +1079,7 @@ function solve_HJB_implicit(m::HuggettPoisson, r; maxit = 100, crit = √eps(), 
 end
 
 # ╔═╡ e1376e99-a636-4d28-b711-2dd4be66374f
-function solve_df(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+function solve_df(m::Moll, r; maxit = 100, crit = 1e-6, Δ = 1000)
 	(; v, c, ȧ, A, it_last, dist) = solve_HJB_implicit(m, r; crit, Δ)
 	# scheme = Implicit(; maxit, Δ)
 	#(; v, c, ȧ, A, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
@@ -1169,12 +1107,15 @@ let
 end
 
 # ╔═╡ 19e28c66-a389-4903-82a5-c963cf0b90b9
-function excess_demand(m::HuggettPoisson, r; maxit = 100, crit = 1e-6, Δ = 1000)
+function excess_demand(m::Moll, r; maxit = 100, crit = 1e-6, Δ = 1000)
 	(; Δa) = m
 	(df, it_last, dist) = solve_df(m, r; maxit, crit, Δ)
 	A = dot(df.a, df.g) * Δa
 
 end
+
+# ╔═╡ bd353706-be2d-480d-8ebb-cf20cab0dbec
+r_eq = find_zero(r -> excess_demand(m, r), initial_bracket, Brent())
 
 # ╔═╡ 3a92eac0-643f-47ec-b6dc-6d541873ac9a
 solve_HJB_implicit(m, 0.03)
@@ -1198,7 +1139,7 @@ function update_v(ss, v, par, A_switch, _, (; Δ)::Implicit)
 end
 
 # ╔═╡ e204ae15-fefd-4f01-8d5e-3772aefe9b0f
-function solve_HJB_julian(m::HuggettPoisson, r, scheme::Scheme; v₀=v₀, crit = 1e-6)
+function solve_HJB_julian(m::Moll, r, scheme::Scheme; v₀=v₀, crit = 1e-6)
 
 	(; maxit, Δ) = scheme
 	
@@ -1239,8 +1180,8 @@ end
 
 # ╔═╡ 7a98402f-8b61-4228-bc11-33da201e6d82
 compare = let
-	r = 0.03
-	crit = 1e-12
+	r = 0.02
+	crit = 1e-11
 	maxit = 100_000
 	scheme = Implicit()
 	
@@ -1257,7 +1198,7 @@ compare = let
 	@test vec(HJB_moll.ȧ) ≈ vec(HJB_julian.ȧ) ≈ HJB_econpdes.ȧ
 	@test vec(HJB_moll.c) ≈ vec(HJB_julian.c) ≈ HJB_econpdes.c
 	
-	@info HJB_moll.it_last, HJB_julian.it_last
+	#@info HJB_moll.it_last, HJB_julian.it_last
 
 	(; HJB_moll, #=HJB_explicit,=# HJB_julian, HJB_econpdes)
 end
@@ -1348,7 +1289,7 @@ let
 end
 
 # ╔═╡ f8fbff0d-15d4-43ca-9f9c-29788ff793ec
-function solve_explicit_df(m::HuggettPoisson, r; maxit = 100000, crit = √eps())
+function solve_explicit_df(m::Moll, r; maxit = 100000, crit = √eps())
 	scheme = Explicit(m; maxit)
 	(; v, c, ȧ, it_last, dist) = solve_HJB_julian(m, r, scheme; crit)
 	df = results_to_df(m; v, c, ȧ)
@@ -1414,10 +1355,6 @@ md"""
 # ╔═╡ 5c1387ed-973c-4109-9ace-c473a4efe9ee
 TableOfContents()
 
-# ╔═╡ 7f45d8ed-496c-4271-bd95-88f3eee13efa
-
-
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -1430,8 +1367,6 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 EconPDEs = "a3315474-fad9-5060-8696-cee5f38a87b7"
 InfinitesimalGenerators = "2fce0c6f-5f0b-5c85-85c9-2ffe1d5ee30d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
-Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
@@ -1448,8 +1383,6 @@ DataFrameMacros = "~0.4.1"
 DataFrames = "~1.5.0"
 EconPDEs = "~1.0.3"
 InfinitesimalGenerators = "~0.5.0"
-NamedTupleTools = "~0.14.3"
-Parameters = "~0.12.3"
 PlutoTest = "~0.2.2"
 PlutoUI = "~0.7.50"
 QuantEcon = "~0.16.4"
@@ -1463,7 +1396,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.0-rc2"
 manifest_format = "2.0"
-project_hash = "d664946dfbcd28ffd8c04ba772d38e1a856cd372"
+project_hash = "310aedcd5140faf6cc7dfe5448043ed8e22e1d3b"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "e6103228c92462a331003248fa31f00dcf41c577"
@@ -2480,11 +2413,6 @@ git-tree-sha1 = "0877504529a3e5c3343c6f8b4c0381e57e4387e4"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "1.0.2"
 
-[[deps.NamedTupleTools]]
-git-tree-sha1 = "90914795fc59df44120fe3fff6742bb0d7adb1d0"
-uuid = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
-version = "0.14.3"
-
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore", "ImageMetadata"]
 git-tree-sha1 = "5ae7ca23e13855b3aba94550f26146c01d259267"
@@ -3259,16 +3187,12 @@ version = "3.5.0+0"
 # ╟─fb88f286-0bce-4cb0-9d52-83b373f6fbcf
 # ╠═5cbd313e-b357-4b00-bb7d-4c87f8522cdd
 # ╟─e507dfb0-08a4-45a8-b342-09ca989e05f5
-# ╠═69583d36-6190-4483-87fb-291d9cf82c77
-# ╠═7dd422ad-4cef-449f-8572-be1e34cd3edf
-# ╠═db13a6b9-2de2-47ce-8af0-99d868183354
-# ╠═db79831c-fa97-4945-8bbc-84390fccd6a6
-# ╠═91262a60-4263-49aa-b986-269fbb32a429
-# ╠═03a5eeac-ebb0-426b-a17d-3ef3e69627f6
 # ╠═6213dcf6-cd7a-47cd-95d9-316ba538f4c6
 # ╠═e12a5f08-7e5b-418c-a08f-8d179e912774
 # ╠═12cbc2a7-ddf3-42c5-b592-a438ecdc5165
-# ╠═bdb5dba0-1551-484d-ae2b-d7061b5583d0
+# ╠═69583d36-6190-4483-87fb-291d9cf82c77
+# ╠═db13a6b9-2de2-47ce-8af0-99d868183354
+# ╠═03a5eeac-ebb0-426b-a17d-3ef3e69627f6
 # ╠═56234834-6de9-4e44-95af-c5e3fb828a9d
 # ╠═a10ef170-045c-439e-a23b-122e812853aa
 # ╠═68aeb6cf-cff8-49e9-8c39-d94aadd5a444
@@ -3350,12 +3274,10 @@ version = "3.5.0+0"
 # ╠═5c1387ed-973c-4109-9ace-c473a4efe9ee
 # ╠═6f92c837-1760-423e-9777-9db9ad758475
 # ╠═563c267e-0c6a-4b90-81a7-fc8ff4c73c75
-# ╠═6d5523f2-a517-48df-9f31-bbd516e1208e
 # ╠═9fa33ac0-bb2f-4055-b124-8c7c19621226
 # ╠═276e171b-271d-4610-b9bb-01b212193123
 # ╠═aecea3fe-f0ee-4953-857b-29d6a5640530
 # ╠═9353566b-a70e-4dbe-8f02-b16d2c0570d2
 # ╠═0b9c3978-0eb9-4f80-b51d-540d4ed88c3e
-# ╠═7f45d8ed-496c-4271-bd95-88f3eee13efa
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
