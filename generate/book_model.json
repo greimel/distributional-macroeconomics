@@ -155,5 +155,22 @@
 
             }
         ]
+    },
+    {
+        "title": "Tutorials",
+        "contents": [
+            {
+                "name": "Assignment 1",
+                "notebook_path": "notebooks/mpcs-aiyagari.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Tutorial 1",
+                "notebook_path": "notebooks/mobility-aiyagari.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            }
+        ]
     }
 ]
