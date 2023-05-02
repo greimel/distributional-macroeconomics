@@ -4,311 +4,696 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
+# ╔═╡ 1b5abb2b-5dc7-433c-9c83-6cfd06c8eadf
 md"""
-`mpcs-aiyagari.jl` | **Version 1.1** | *last updated: May 2 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`welfare-huggett.jl` | **Version 1.1** | *last updated: May 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
-# ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
+# ╔═╡ a0825503-c132-4c12-93e2-60537d0f6085
 md"""
-# MPCs in the Aiyagari model
+# Welfare analysis
+"""
 
-## Households' problem
+# ╔═╡ cc3fe476-950f-4351-8d12-4f5a8f359317
+md"""
+This notebook provides a brief introduction to welfare analysis in models with household heterogeneity. There are two approaches:
 
-In this exercise, we have a closer look at the marginal propensity to consume in a Aiyagari/ Huggett economy. The households' problem is:
+1. How much are newborn agents in the stationary equilibrium with the reform better off compared to the stationary equilibrium without the reform?
+2. How much are agents (of any age) who are alive at the time of the reform better off compared to the stationary equilibrium without the reform?
 
+The second approach is more difficult because we need to take transitional dynamics after the reform into account. Therefore, this notebook covers only the first approach. We consider the introduction of an income tax in a perpetual youth - version of the Huggett model.
+"""
+
+# ╔═╡ 77cfd0d8-5af0-417b-8161-f1c264ce20b4
+md"""
+## Partial equilibrium
+"""
+
+# ╔═╡ b8840490-5a17-44e2-8703-f9b845597111
+md"""
 ```math
 \begin{align}
-&\max_{c_t, k_t} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t) \Bigr) \\
+&\max_{\{c_t\}} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c_t) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
-		&u(c) = \log(c) \\
-		&k_t \ge 0 \\
-		&c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w\\
+		&c_t + k_t = k_{t-1}(1 + r) + y_t - T(y_t) \\
 		&y_t \sim \text{some Markov Chain} \\
 		&y_0, k_{-1} \text{ given}
 \end{aligned}
 \end{align}
 ```
-To be more precise, we are considering the MPC out of an unexpected transitory shock $dx_t$ that enters the budget constraint like this:
 
-$c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w + dx_t$
+There are two changes compared to the households' problem in the ```aiyagari.jl``` notebook:
+- the income tax $T(y_t)$ which depends on current income
+- the death probability $m$
+
+Since the death probability in our model does not depend on age, the optimization problem of a 100-year-old household looks the same as the one of a newborn household. This is why a model with such a demographic structure is also referred to as "perpetual youth model".
 """
 
-# ╔═╡ ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
+# ╔═╡ 19978cfa-2798-475e-b057-083690b83b42
 md"""
-## Exercise 1: Motivation (1 point)
-
-👉 Why do economists and policy makers care about the average MPC in the population and about MPC heterogeneity? Give at least 2 reasons. (max 150 words)
+### Parameterization
 """
 
-# ╔═╡ f983a093-d397-43fe-8951-4ad1e795df3c
-answer_1 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ b4129537-81f6-441c-b1e4-99306afc227e
-show_words_limit(answer_1, 150)
-
-# ╔═╡ bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
-md"""
-## Model parameters
-"""
-
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-hh = Household(β = 0.96, u = log)
-
-# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.03
-
-# ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
-prices = (q = 1/(1+r), w = 1.0)
-
-# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
-z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
-
-# ╔═╡ 62184229-03f6-40d8-981e-4d39a74c75d7
-k_vals = range(0., 5., length = 500)
-
-# ╔═╡ 50029ced-5ab0-4458-ad5a-31b8277b428a
-ss = statespace(; k_vals, z_chain);
-
-# ╔═╡ 146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
-md"""
-## Exercise 2: No income risk (2 points)
-
-As a first step, let's consider a more simple model without income risk and without the ad-hoc borrowing constraint $k_t\ge 0$. 
-
-👉 Derive an analytical formula for the MPC and plug in the model parameters given above. 
-
-👉 What can you say about the average MPC and MPC heterogeneity in this model?
-"""
-
-# ╔═╡ 50118426-20c9-43b9-9d13-4e524853f0c9
-md"""
-Your answer goes here
-"""
-
-# ╔═╡ 843f658c-0e26-4eed-88dc-3946e97e5f6f
-md"""
-## Solution to the households' problem
-
-The case with income risk and the ad-hoc borrowing constraint does not have an analytical solution. Therefore, we solve the households' problem using functions from the ```aiygari.jl``` notebook:
-"""
-
-# ╔═╡ 0a12f73a-5286-4146-8a20-00ed4aaaec72
-ddp = setup_DDP(hh, ss, prices);
-
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-results = solve_details(ddp, ss.states, ss.policies; solver = PFI);
-
-# ╔═╡ 0e944330-4a7b-4d75-a55e-57d7acce58b2
-md"""
-The consumption policy that we obtain from the ```QuantEcon``` solver has small jumps. This is not an actual property of the policy function but happens because we have only solved a discretized version of the households' problem. (You can check for yourself that the size of the jumps decreases as you increase the number of grid points.)
-"""
-
-# ╔═╡ c769b390-028e-490b-b50d-07c49a550a0a
-let
-	resolution = (800, 400)
-	fig = Figure(; resolution)
-	
-	ax1 = Axis(fig[1, 1], title="Consumption policy function")
-	ax2 = Axis(fig[1, 2], title="Stationary distribution")
-	
-	plt1 = data(results) * mapping(:k, :consumption, color = :z => nonnumeric) * visual(Lines)
-	plt2 = data(results) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
-	
-	ag = draw!(ax1, plt1)
-	draw!(ax2, plt2)
-	
-	legend!(fig[2, 1], ag, orientation=:horizontal, tellheight=true)
-
-	fig
+# ╔═╡ 28f1dbcd-1cbc-4c6c-9efe-9df2c0f5f881
+function Household(; σ = 1.0, β = 0.96,	m = 1/50,
+                      u = σ == 1 ? log : x -> x^(1 - σ) / (1 - σ))
+	(; β, m, u)
 end
 
-# ╔═╡ 675d57e2-9c6f-4619-aa25-664614bc4bbc
-md"""
-Since we will use the slope of the policy function to analyze the MPC, the jumps are very inconvenient. Therefore, you will work with the smoothed version of the consumption policy which is saved in the ```c_sm``` column of the ```results2``` data frame.
-"""
-
-# ╔═╡ ab76ee26-297d-4ee4-b353-7b6c3a135277
-using NonparametricRegression
-
-# ╔═╡ 788b8a0a-d206-41db-b012-f04205b67445
+# ╔═╡ 39b3e67f-ea18-4068-b63f-564f77ff237b
 begin
-	n_k = length(k_vals)
-	results.c_sm = zeros(length(ss.states))
-	results_z = groupby(results, :z)
-	rz1 = results_z[1]
-	rz1.c_sm = npregress(
-		rz1.k, 
-		rz1.consumption, 
-		rz1.k, 
-		0.08;
-		method=:lc, 
-		kernelfun=NormalKernel
-	)
-	rz2 = results_z[2]
-	rz2.c_sm[1:n_k÷5] = npregress(
-		rz2.k, 
-		rz2.consumption, 
-		rz2.k[1:n_k÷5], 
-		0.04;
-		method=:lc, 
-		kernelfun=NormalKernel
-		# use smaller bandwidth where curvature of consumption function is high
-	)
-	rz2.c_sm[n_k÷5+1:end] = npregress(
-		rz2.k, 
-		rz2.consumption, 
-		rz2.k[n_k÷5+1:end], 
-		0.08;
-		method=:lc, 
-		kernelfun=NormalKernel
-	)
-	results2 = DataFrame(results_z)
+	
+	# death probability
+	m = 1/50
+
+	# preference parameters
+	σ = 2.
+	β = 0.94
+
+	hh = Household(; β, σ, m)
+
+	# interest rate
+	r = 0.03
+	prices = (q = 1/(1+r), w = 1.0, Δr = 0.)
+
+	# income process
+	n_y = 2
+	y_1 = 0.75
+	y_2 = 1.25
+	ρ = 0.75
+	y_trans = [ρ 1-ρ; 1-ρ ρ]
+	y_chain = MarkovChain(y_trans, [y_1, y_2])
+
+	# asset grid
+	n_k = 100
+	k_min = -0.5
+	k_max = 4.5
+	k_vals = range(k_min, k_max, length = n_k)
+
+	# distribution of newborn households over the state space
+	π₀ = uniform_distribution(n_k, n_y)
+	
 end;
 
-# ╔═╡ 1734bd7b-8af1-46f3-a4af-1616c0190775
+# ╔═╡ 3965321e-baaa-484d-a722-854201085e58
+function uniform_distribution(n_k, n_z; i_max = n_k)
+	π₀ = zeros(n_k * n_z)
+	π₀[1:i_max]         .= 0.5/i_max
+	π₀[n_k+1:n_k+i_max] .= 0.5/i_max
+	@assert sum(π₀) ≈ 1.
+	π₀'
+end
+
+# ╔═╡ 520250f5-0877-4c36-a6f5-0b74a2916f37
 md"""
-The figure below shows both the raw consumption function and its smoothed version:
+- We start with a partial equilibrium version of the model. The interest rate $r=$ $(r) is exogenous.
+- The death probability is $(m) which implies an expected lifetime (as an adult) of $(1/m) years.
+- The income process has only two states $y^1 < y^2$ and the transition matrix is symmetric. In this case, the probability $\rho$ to stay in the current income state completely determines the transition matrix.
+- We assume that there is no income tax in the initial stationary equilibrium, i.e. $T(y) = 0$.
+- With a probability of 50% a newborn household is born into the high-income state. The distribution of assets of newborn households is uniform over the asset grid.
 """
 
-# ╔═╡ 1b3d36ab-adae-40be-a14c-7ea6d9381a31
-	@chain results2 begin
-		data(_) * 
-			mapping(:k, [:consumption, :c_sm], color = :z => nonnumeric) * 
-			visual(Lines)
-		draw
+# ╔═╡ a7e67216-2bca-45d7-859b-b9e0328c4875
+md"""
+### Solving the households' problem
+"""
+
+# ╔═╡ a56f8765-cae6-40f4-aebf-900673ed9710
+md"""
+To solve the households' problem, we treat the perpetual youth agents as infinitely-lived agents with a modified discount factor $\tilde{\beta} = \beta(1-m)$.
+"""
+
+# ╔═╡ 23e83dbd-ad68-4b86-80a3-34c65ca420d1
+function setup_DDP(household, statespace, prices)
+	(; β, u, m) = household
+	(; states, policies, states_indices, policies_indices) = statespace
+    
+	R = setup_R(states, policies, prices, u)
+	Q = setup_Q(states_indices, policies_indices, statespace.z_chain)
+
+	DiscreteDP(R, Q, β*(1-m))
+end
+
+# ╔═╡ c8192e26-5215-4bbb-b1a7-da9df02b7e62
+function solve_PE(hh, ss, prices, π₀)
+	
+	ddp       = setup_DDP(hh, ss, prices)
+	results   = QuantEcon.solve(ddp, PFI)
+	df        = results_to_df(results, ss.states, ss.policies, prices)
+	df.π₀     = π₀'
+	_, Q_star = RQ_sigma(ddp, results.sigma)
+	df.π      = stationary_distribution(Q_star, hh.m, π₀)
+	df.income = ifelse.(df.z .== ss.z_chain.state_values[1], "low", "high")
+	
+	df
+end
+
+# ╔═╡ b16d6fab-6bd1-4a39-a654-0fcb4ad868ee
+begin
+	ss = statespace(; k_vals, z_chain=y_chain)
+	df = solve_PE(hh, ss, prices, π₀)
+end;
+
+# ╔═╡ b40c8fdb-6d4b-4880-8e7c-523bdb95a847
+md"""
+### Stationary distribution
+"""
+
+# ╔═╡ 9c1e3401-5646-4b6e-a703-0b0d877bcd6b
+md"""
+The ```QuantEcon``` framework gives us a matrix $Q^*$ with transition probabilities from $(y, k)$ to $(y', k')$ for households that do not die in between periods. To compute the correct stationary distribution, we also need to take the death probability into account (see lecture 1):
+
+$$\pi_\infty = (1-m) \cdot Q^* \cdot \pi_\infty + m \cdot \pi_0$$
+
+$$\implies \pi_\infty = (I - (1-m) \cdot Q^*)^{-1} (m \cdot \pi_0)$$
+
+where $\pi_0$ is the distribution of newborn agents over the state space.
+"""
+
+# ╔═╡ 4eff64c0-16f1-48b0-87ec-d9f49599d0b0
+function stationary_distribution(Q::AbstractMatrix, m, π₀)
+	π = m * (π₀ / (I - (1-m) * Q))
+	π'
+end
+
+# ╔═╡ 4bdd9050-87f7-4551-88d5-5c2cca569bb8
+let
+	figure = (; resolution = (600, 300))
+
+	@chain df begin
+		data(_) * mapping(:k, :π, color = :income) * visual(Lines)
+		draw(; figure)
 	end
+end
 
-# ╔═╡ e7f75845-242f-45c6-9b33-11fd2bacb478
+# ╔═╡ fc6e8503-08bd-4df3-987e-2d926504ba34
 md"""
-## Exercise 3: MPCs in the Aiyagari model
+### Tax reform
 """
 
-# ╔═╡ 2402fba6-80e1-4fe4-8873-7a62ce6f9427
+# ╔═╡ ef3ab9ee-ae95-4482-b17f-48c50c0fdcb9
 md"""
-### 3a: Compute MPCs (1.5 points)
+Now, let us consider the introduction of a income tax $\tau(y)$ that redistributes an amount $\tau$ from households in the high-income state to households in the low-income state:
 
-👉 Use the smoothed consumption policy to compute the MPC at each point of the state space. Save the MPC values in an additional column of the results data frame.
-
-Hint: It is most convenient to consider a transitory income shock of the size $dx = (1+r) \Delta k$ where $\Delta k$ is the distance between two adjacent grid points.
+$$T(y^1) = - \tau$$
+$$T(y^2) = \tau$$
 """
 
-# ╔═╡ 19376876-cb3c-4f33-bb08-3c3aa2939d48
-# Your
+# ╔═╡ 03439979-79cd-492d-a04e-bee96d67a9cb
+τ = 0.05
 
-# ╔═╡ 0bf278e7-25f8-4830-8162-67e6d1113b3b
-# code
-
-# ╔═╡ 25ea5835-79f7-4e48-9d31-cee7f96983bf
-# goes
-
-# ╔═╡ f5478ce2-6d3f-4b3f-9eb3-2b6656561bdc
-# here ...
-
-# ╔═╡ af81921e-d454-4341-979d-752f5e4540b7
+# ╔═╡ 31a30781-59c9-4a56-be71-dd12626ae9ec
 md"""
-### 3b: Average MPC (1 point)
+Since there are as many households in the high-income state as in the low-income state, such a income tax would generate no revenues for the government.
 
-👉 What is the average MPC in the Aiyagari model for the given parameters?
+From the perspective of the households, the introduction of such an income tax is equivalent to modifying the income process:
+
+$$y^1_\tau = y^1 - T(y^1) = y^1 + \tau$$
+$$y^2_\tau = y^2 - T(y^2) = y^2 - \tau$$
 """
 
-# ╔═╡ 54296efa-334f-4d2a-9190-e18156bf0200
-# Your
+# ╔═╡ d7b1e1a4-3153-4fb7-9908-55ce65d7fa2f
+y_chain_τ   = MarkovChain(y_trans, [y_1+τ, y_2-τ])
 
-# ╔═╡ 290dfc4b-1307-43ad-b7bb-5680abc0579a
-# code
+# ╔═╡ a2030a1e-6da9-4f5f-a367-03cd98530d7c
+md"""
+Below, we compute the solution to the households' problem in the stationary equilibrium with the reform. (Since we consider the partial equilibrium case here, we keep the interest rate fixed.)
+"""
 
-# ╔═╡ 650d729b-d7ab-46f4-b3fb-0643d291dd22
-# goes
+# ╔═╡ 548005d3-e608-4e9f-af60-909394c8e67c
+begin
+	ss_τ = statespace(; k_vals, z_chain=y_chain_τ)
+	df_τ = solve_PE(hh, ss_τ, prices, π₀)
+end;
 
-# ╔═╡ 94c859ff-28c2-4fef-bcc5-9e733e1a8697
-# here ...
+# ╔═╡ c5cb959f-8c66-4084-9a53-4cf422cdf762
+md"""
+### Conditional welfare changes $\Delta(k, y)$
+"""
 
-# ╔═╡ 36a86f5b-0574-43a6-9da4-9f774d55bf06
+# ╔═╡ b8ab52fc-07f2-4512-b477-df1e294d91a7
+	md"""
+We can see whether an agent who is born into state $(k, y)$ is better off or not by comparing 
+- the value function in the original stationary equilibrium $V(k, y)$ with 
+
+- the value function in the stationary equilibrium with the redistributive income tax $V_\tau(k, y)$.
+"""
+
+# ╔═╡ 7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
+let
+	figure = (; resolution = (600, 300))
+	
+	df_big = vcat(df, df_τ, source = "tax reform" => ["no", "yes"])
+	
+	@chain df_big begin
+		data(_) * mapping(
+			:k, :value,
+			linestyle="tax reform",
+			color=:income
+		) * visual(Lines)
+		draw(; figure)
+	end
+end
+
+# ╔═╡ 9c1efccf-1235-472d-b395-10dc5494d114
+md"""
+-----------------
+"""
+
+# ╔═╡ 69004cfb-29ea-4757-8eb6-3e905da0b2cb
+md"""
+### Exercise 1: Economic intuition
+
+The plot of the value functions above shows that agents who are born into the low income state are better off, as expected. However, the plot also shows that agents who are born into the high income state are better off.
+
+👉 How is this possible?
+"""
+
+# ╔═╡ 0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
 md"""
 Your answer goes here ...
 """
 
-# ╔═╡ 300018cf-fdb0-4508-9bb1-347f77076f0c
+# ╔═╡ 02d23829-b7f8-415d-aca1-b71992b72bdb
 md"""
-### 3c: MPC heterogeneity (3 points)
-
-👉 Explore MPC heterogeneity in the Aiyagari model graphically.
-
-👉 How much do MPCs vary in the population? Which households have particularly high MPCs? (max. 100 words)
+-----------------
 """
 
-# ╔═╡ ad3066c1-8895-43f2-9459-ae2972a1bc27
-# Your
+# ╔═╡ 59f22787-ab1e-4096-9e43-39f33ba42713
+md"""
+In order to quantify the welfare changes due to the income tax, we need to transform the differences in the value functions into units of the consumption good. First, we need to make a few definitions:
 
-# ╔═╡ 6bf33bd0-14a8-48db-8331-6c6f0b1812b3
-# code
+The value function in the stationary equilibrium without the reform is:
 
-# ╔═╡ ef09eb29-095a-4549-9c0a-f008594ad655
-# goes
+```math
+\begin{align}
+V(k_{-1}, y_0)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c(k_{t-1}, y_t)) \Bigr) \\
+&\begin{aligned}
+	\text{subject to } 
+		&k_t  = k_{t-1}(1 + r) + y_t - c(k_{t-1}, y_t) \\
+\end{aligned}
+\end{align}
+```
 
-# ╔═╡ be25e1c5-a254-4e5f-8306-57e1075f6035
-# here ...
+The value function in the stationary equilibrium with the reform is:
 
-# ╔═╡ 01fd1ea1-ac40-4db4-a159-72abe83e265f
-answer_3c = md"""
+```math
+\begin{align}
+V_\tau(k_{-1}, y_0)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c_\tau(k_{t-1}, y_t)) \Bigr) \\
+&\begin{aligned}
+	\text{subject to } 
+		&k_t  = k_{t-1}(1 + r) + y_t - T(y_t) - c_\tau(k_{t-1}, y_t) \\
+\end{aligned}
+\end{align}
+```
+
+where $c(k,y)$ is optimal consumption in the stationary equilibrium without the reform and $c_\tau(k, y)$ is the optimal consumption in the stationary equilibrium with the reform.
+
+If consumption in the stationary equilibrium without the reform is increased by a fraction $\Delta$ in each state of the world, the sum of expected utilities becomes:
+
+```math
+\begin{align}
+W(k_{-1}, y_0; \Delta)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u((1+\Delta)c(k_{t-1}, y_t)) \Bigr) \\
+&\begin{aligned}
+	\text{subject to } 
+		&k_t  = k_{t-1}(1 + r) + y_t - c(k_{t-1}, y_t) \\
+\end{aligned}
+\end{align}
+```
+
+Note that we do not allow the agent to reoptimize with respect to the relative consumption increase $\Delta$ in the definition of $W(k, y; \Delta)$.
+
+We can finally define the conditional welfare change for an agent born into state $(k,y)$ as the relative increase in consumption $\Delta(k,y)$ in the stationary equilibrium without the reform that makes the agent as well off as in the stationary equilibrium with the reform:
+
+$$V_\tau(k,y) = W(k,y; \Delta(k,y))$$
+
+"""
+
+# ╔═╡ 66e4ff89-288c-4963-bb7d-8cfde20e42a0
+md"""
+----------
+"""
+
+# ╔═╡ 8c185d30-7de4-4273-a739-d2af1d46a3a8
+md"""
+### Exercise 2: Formula for CRRA utility
+
+Usually the equation above needs to be solved numerically for $\Delta(k,y)$. However, with the utility function chosen in this notebook
+
+$$u(c) = \frac{c^{1-\sigma}}{1-\sigma}$$
+
+a simpler approach is possible.
+
+👉 Derive a simple analytical formula for $\Delta(k,y)$ in terms of $V(k,y)$ and $V_\tau(k,y)$.
+
+Hint: Try to express $W(k,y; \Delta)$ in terms of $V(k,y)$.
+"""
+
+# ╔═╡ a453a9dc-0345-4630-8a75-e26a0de10e66
+md"""
 Your answer goes here ...
 """
 
-# ╔═╡ 6320138e-017e-47b8-83ec-6645db05d41c
-show_words_limit(answer_3c, 100)
-
-# ╔═╡ 42969849-1c6f-4192-8cf9-76a8e2c33bcd
+# ╔═╡ 3e5158e4-146e-4b68-a20a-9b315de51de3
 md"""
-## Exercise 4: Outlook (1.5 points)
-
-The empirical literature on MPCs typically finds average annual MPCs in the range 30 - 50% ([Jappelli and Pistaferri, 2014](https://www.aeaweb.org/articles?id=10.1257/mac.6.4.107); [Fagereng et al., 2021](https://www.aeaweb.org/articles?id=10.1257/mac.20190211); [Commault, 2022](https://www.aeaweb.org/articles?id=10.1257/mac.20190296)). Most empirical papers also find that households with little liquid wealth tend to have higher MPCs than households with a lot of liquid wealth.
-
-Models with income risk and a borrowing constraint like the one in Exercise 3 usually generate average annual MPCs lower than 30% if they are calibrated properly.
-
-👉 Why are average MPCs in the data higher than in Aiyagari-type models? Mention and explain at least 3 potential mechanisms that are not present in the model. (max. 200 words)
+👉 Write a Julia function ```Δ_CRRA``` that computes $\Delta$ for given values ```v_τ``` and ```v``` and a given risk aversion coefficient $\sigma$.
 """
 
-# ╔═╡ 9cc038ec-e359-408f-a42e-68f5d8b7c314
-answer_4 = md"""
+# ╔═╡ f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
+function Δ_CRRA(v_τ, v, σ)
+	NaN # Your code goes here
+end
+
+# ╔═╡ 849308de-b2e9-4f97-a948-60341863e7f8
+md"""
+----------
+"""
+
+# ╔═╡ c7ca1ce9-8621-4ae1-ab4a-c924d90745d6
+md"""
+After finishing the exercise above, activate the cells below, and Julia will generate a plot of $\Delta(k,y)$.
+"""
+
+# ╔═╡ 04f6babd-4db0-45e9-8cc8-a09ce281e1bd
+begin
+	dfΔ = copy(df)
+	dfΔ.Δ = Δ_CRRA.(df_τ.value, df.value, σ)
+end;
+
+# ╔═╡ 3520454b-ab40-4521-aeb5-463345d4422c
+let
+	figure = (; resolution = (600, 300))
+
+	@chain dfΔ begin
+		data(_) * mapping(:k, :Δ, color=:income) * visual(Lines)
+		draw(; figure)
+	end
+end
+
+# ╔═╡ 4f1fd4c1-1369-4e33-8e49-7ec51d33051c
+md"""
+### Unconditional welfare change $\Delta$
+"""
+
+# ╔═╡ f91d1b23-5670-4de4-81f4-cd72c0deb085
+md"""
+Since all agents benefit from the reform considered above, we can be sure that the aggregate welfare change is also possible (regardless of how the individual utilities are aggregated).
+
+But if some agents lose and others gain, simply computing conditional welfare changes is not sufficient to understand whether a certain tax policy is desirable.
+
+For this purpose, we need to define a welfare function to aggregate the maximized utility among the newborn agents. We choose a utilitarian welfare function here:
+
+$$V = \sum_{y\in\{y^1, y^2\}}\int_{k_\min}^\infty V(k,y) \pi_0(k,y) dk$$
+
+Since we only consider newborn agents, we integrate with respect to the distribution $\pi_0$ and not with respect to the stationary distribution $\pi$.
+
+The unconditional welfare change is then defined as the relative change in consumption $\Delta$ such that
+
+$$\underbrace{\sum_{y\in\{y^1, y^2\}}\int_{k_\min}^\infty V_\tau(k,y) \pi_0(k,y) dk}_{=V_\tau} = \sum_{y\in\{y^1, y^2\}}\int_{k_\min}^\infty W(k,y; \Delta) \pi_0(k,y) dk$$
+"""
+
+# ╔═╡ db24325c-49d8-45f7-805c-65b58a85889a
+md"""
+In the special case of a CRRA utility function, the right-hand side simplifies to $(1+\Delta)^{1-\sigma}V$ and the unconditional welfare change is simply
+
+$$\Delta = \Bigl(\frac{V_\tau}{V}\Bigr)^{1/(1-\sigma)} - 1$$
+"""
+
+# ╔═╡ 30682ba5-d144-4c4d-bd7f-da16d6bf68fd
+md"""
+The unconditional welfare benefit corresponds to a relative change in consumption of approximately 1%.
+"""
+
+# ╔═╡ 385b7e3e-83c1-4257-a35f-5d7b2b77ee73
+let
+	value   = mean(df.value,   weights(df.π₀))
+	value_τ = mean(df_τ.value, weights(df_τ.π₀))
+	Δ_CRRA(value_τ, value, σ)
+end
+
+# ╔═╡ 7af904d0-fc43-4986-a17a-2bc12d7913f6
+md"""
+It is even possible to compute welfare changes conditional on the income state $y$ but to integrate over the asset space:
+"""
+
+# ╔═╡ a6245b74-2ceb-468c-b8a0-623d4b8abe36
+let 
+	Δ_z = zeros(n_y)
+	df_groups   = groupby(df, :z)
+	df_τ_groups = groupby(df_τ, :z)
+	for i_y in 1:n_y
+		df_z   = df_groups[i_y]
+		df_τ_z = df_τ_groups[i_y]
+		value   = mean(df_z.value,   weights(df_z.π₀))
+		value_τ = mean(df_τ_z.value, weights(df_τ_z.π₀))
+		Δ_z[i_y] = Δ_CRRA(value_τ, value, σ)
+	end
+	Δ_z
+end
+
+# ╔═╡ fcafcc6c-cc23-4ae1-8ff3-5bebd4e1ec13
+md"""
+---
+"""
+
+# ╔═╡ 1f192db7-0c79-42e9-b433-8d6f78bafee4
+md"""
+### Exercise 3: Comparative statics
+"""
+
+# ╔═╡ 8382365c-99a0-4c29-9917-3a1f5f0b5af4
+md"""
+Explore the conditional and the unconditional welfare changes using the sliders below. 
+
+ $\Delta_0(k,y)$ refers to the welfare change under the baseline parameterization, and $\Delta(k,y)$ to the welfare change with the current position of the sliders.
+
+👉 Can you find a parameterization such that agents in the high income state have a welfare loss? 
+"""
+
+# ╔═╡ bb48a69b-72bd-4b50-848a-1b438555164c
+md"""
 Your answer goes here ...
 """
 
-# ╔═╡ b7a6d0dc-9fd7-4319-ac91-4d8994d66a96
-show_words_limit(answer_4, 200)
-
-# ╔═╡ 25dc125f-10ad-44b1-8eea-5a7fe2e03cce
+# ╔═╡ 143aa896-fc61-450c-843d-88546e129abd
 md"""
-## Before you submit ...
-
-👉 Make sure you **do not** mention your name in the assignment. The assignments are graded anonymously.
-
-👉 Make sure that that **all group members proofread** your submission.
-
-👉 Make sure all the code is **well-documented**.
-
-👉 Make sure that you are **within the word limit**. Short and concise answers are appreciated. Answers longer than the word limit will lead to deductions.
-
-👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
+👉 Try to understand how changes in the parameters $\rho$ and $\sigma$ affect the welfare of the agents.
 """
 
-# ╔═╡ 2c93d5a7-40bd-4535-9985-420533c12666
+# ╔═╡ 24e51342-df5d-448a-a76f-18375af543aa
+md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ 8252bc6d-7303-4c67-9daa-f536b173cfde
+md"""
+Persistence parameter $\rho$
+
+$(@bind ρ_sl Slider(0.5:0.025:0.975, show_value = true, default = ρ))
+"""
+
+# ╔═╡ 28762c0a-76a3-44e8-8a48-dbc57dec4282
+md"""
+Risk aversion $\sigma$
+
+$(@bind σ_sl Slider(1.25:0.25:3., show_value = true, default = σ))
+"""
+
+# ╔═╡ f54c97f9-bd22-4e81-966e-b68ef9e71efe
+let
+
+	# solve model in both stationary equilibria
+	hh_sl = Household(; β=β, σ=σ_sl, m=m)
+
+	y_trans_sl = [ρ_sl 1-ρ_sl; 1-ρ_sl ρ_sl]
+	
+	y_chain_sl   = MarkovChain(y_trans_sl, [y_1,     y_2])
+	y_chain_τ_sl = MarkovChain(y_trans_sl, [y_1 + τ, y_2 - τ])
+
+	ss_sl   = statespace(; k_vals, z_chain=y_chain_sl)
+	ss_τ_sl = statespace(; k_vals, z_chain=y_chain_τ_sl)
+
+	df_sl   = solve_PE(hh_sl, ss_sl,   prices, π₀)
+	df_τ_sl = solve_PE(hh_sl, ss_τ_sl, prices, π₀)
+
+	# compute conditional and unconditional welfare changes
+	df_sl.Δ = Δ_CRRA.(df_τ_sl.value, df_sl.value, σ_sl)
+
+	value   = mean(df.value,   weights(df.π₀))
+	value_τ = mean(df_τ.value, weights(df_τ.π₀))
+	Δ = Δ_CRRA.(value_τ, value, σ)
+
+	value_sl   = mean(df_sl.value,   weights(df_sl.π₀))
+	value_τ_sl = mean(df_τ_sl.value, weights(df_τ_sl.π₀))
+	Δ_sl = Δ_CRRA.(value_τ_sl, value_sl, σ_sl)
+	
+	print("Δ₀ = ", round(Δ*100, digits=2), "%\n")
+	print("Δ  = ",  round(Δ_sl*100, digits=2), "%")
+
+	# plot conditional welfare changes
+	figure = (; resolution = (600, 300))
+
+	df_big = vcat(dfΔ, df_sl, source=:parameters => ["default", "sliders"])
+	@chain df_big begin
+		data(_) * mapping(
+			:k, :Δ,
+			linestyle=:parameters => "parameters",
+			color=:income => nonnumeric => "income"
+		) * visual(Lines)
+		draw(; figure)
+	end
+end
+
+# ╔═╡ 6e641df2-8b5b-49d8-88fc-36fa4b44b6e5
+md"""
+---
+"""
+
+# ╔═╡ d83a55d6-2901-4539-9ebb-3b16ecb02a3d
+md"""
+## General equilibrium
+"""
+
+# ╔═╡ d748feac-e583-4028-b3aa-6d1ac692255b
+md"""
+Net asset supply is zero. The market clearing condition is:
+
+$$\sum_{y\in\{y^1, y^2\}} \int_{k_\min}^\infty k \pi(k,y) dk = 0$$
+"""
+
+# ╔═╡ 5be45b08-726c-453b-b025-cf7f69f941ff
+md"""
+### Finding the equilibrium interest rate
+"""
+
+# ╔═╡ d24ef390-0824-4c03-b1a9-236b8a982a92
+using Roots: find_zero, Brent
+
+# ╔═╡ c1f51283-f9e4-4169-a150-96423057618a
+function net_asset_demand(hh, ss, r, π₀)
+	prices  = (q = 1/(1+r), w = 1.0, Δr = 0.)
+	df = solve_PE(hh, ss, prices, π₀)
+	mean(df.k, weights(df.π))
+end
+
+# ╔═╡ afe1dfa0-7b61-4a7b-a98c-e3ffce756591
+initial_bracket = (0.0, 0.1)
+
+# ╔═╡ 2baf5805-ad8d-49e0-a18e-4f5f69a05c1c
+r_eq   = find_zero(
+	r -> net_asset_demand(hh, ss,   r, π₀), 
+	initial_bracket, Brent(),
+	atol=1e-6, rtol=1e-6, xatol=1e-6, xrtol=1e-6
+)
+
+# ╔═╡ 7443becb-1a5b-46eb-a2df-bbd289c5bfe6
+r_eq_τ = find_zero(
+	r -> net_asset_demand(hh, ss_τ, r, π₀), 
+	initial_bracket, Brent(),
+	atol=1e-6, rtol=1e-6, xatol=1e-6, xrtol=1e-6
+)
+
+# ╔═╡ 24961de2-8e9a-4fd5-b6bf-8c0ccbd9d9a1
+md"""
+--------
+"""
+
+# ╔═╡ 28599228-417f-404f-bf3d-15ae388aff3b
+md"""
+### Exercise 4: Economic intuition
+
+👉 Why does the introduction of the redistributive income tax cause the interest rate in the stationary equilibrium to increase?
+"""
+
+# ╔═╡ 54887913-20f4-48c8-ae1a-8ae623ee44ee
+md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ 281fca35-1d20-417a-8928-ddd81c32b305
+md"""
+--------
+"""
+
+# ╔═╡ b8bf3582-d6a0-4a23-b080-a9b777893205
+begin
+	
+	prices_eq    = (q = 1/(1+r_eq), w = 1.0, Δr = 0.)
+	prices_τ_eq  = (q = 1/(1+r),    w = 1.0, Δr = 0.)
+	
+	
+	df_eq   = solve_PE(hh, ss,   prices_eq, π₀)
+	df_τ_eq = solve_PE(hh, ss_τ, prices_τ_eq, π₀)
+
+	df_eq.Δ = Δ_CRRA.(df_τ_eq.value, df_eq.value, σ)
+
+end;
+
+# ╔═╡ d379a396-0735-4fc9-aa6c-190d69a00fb0
+md"""
+### Welfare analysis in GE
+"""
+
+# ╔═╡ dadd5f1a-3746-4fa9-87e4-00ed7e029a23
+let
+	value   = mean(df_eq.value,   weights(df_eq.π₀))
+	value_τ = mean(df_τ_eq.value, weights(df_τ_eq.π₀))
+	Δ_CRRA(value_τ, value, σ)
+end
+
+# ╔═╡ dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
+let
+	figure = (; resolution = (600, 300))
+
+	df_big = vcat(dfΔ, df_eq, source = :equilibrium => ["PE", "GE"])
+	@chain df_big begin
+		data(_) * mapping(
+			:k, :Δ,
+			linestyle=:equilibrium,
+			color=:income
+		) * visual(Lines)
+		draw(; figure)
+	end
+end
+
+# ╔═╡ 23695e8e-9e3a-4519-bcef-82094833dcd9
+md"""
+---
+"""
+
+# ╔═╡ 8cde58db-b774-4348-9ae1-25791a20a997
+md"""
+### Exercise 5: Economic intuition
+
+👉 Explain why the conditional welfare changes are different in general equilibrium (GE) compared to the partial equilibrium (PE) case.
+"""
+
+# ╔═╡ 18b470fa-d747-4ac2-a5aa-01f7671499a8
+md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ cbcf8f08-0330-4458-ba7d-eb35f0d6b120
+md"""
+---
+"""
+
+# ╔═╡ a7130a4b-fb28-420e-b3a2-b0fd57532ce8
 md"""
 # Appendix
-
 ## Functions from ```aiyagari.jl```
-
-The only difference to ```aiyagari.jl``` is that I made some changes to the ```consumption``` function.
 """
-
-# ╔═╡ 681c557a-3435-485d-a426-f56ed70f1f42
-function Household(; σ = 1.0, β = 0.96,	
-                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
-	(; β, u)
-end
 
 # ╔═╡ 9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
 function statespace(;
@@ -349,9 +734,12 @@ function setup_Q!(Q, states_indices, policies_indices, z_chain)
 end
 
 # ╔═╡ d60367db-cf92-4c0a-aea4-eddb6552e2c8
-function consumption((; z, k), (; k_next), (; q, w))
-	r = (1/q - 1)
-	c = w * z + (1 + r) * k - k_next
+function consumption((; z, k), (; k_next), (; q, w, Δr))
+	if k_next < 0 && Δr > 0
+		r = (1/q - 1) + (k_next < 0) * Δr
+		q = 1/(1+r)
+	end
+	c = w * z + k - q * k_next
 end
 
 # ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
@@ -370,7 +758,7 @@ function setup_R(states, policies, prices, u)
 	setup_R!(R, states, policies, prices, u)
 end
 
-# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
+# ╔═╡ 13fbec57-6ebe-456e-bfc9-ee98ce85d09e
 function setup_R!(R, states, policies, prices, u)
     for (k_i, policy) ∈ enumerate(policies)
         for (s_i, state) ∈ enumerate(states)
@@ -380,78 +768,27 @@ function setup_R!(R, states, policies, prices, u)
     return R
 end
 
-# ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
-function setup_DDP(household, statespace, prices)
-	(; β, u) = household
-	(; states, policies, states_indices, policies_indices) = statespace
-    
-	R = setup_R(states, policies, prices, u)
-	Q = setup_Q(states_indices, policies_indices, statespace.z_chain)
+# ╔═╡ 5954bfdf-d8c3-48b9-9871-5e2ed6d77e1d
+md"""
+The function below is similar to the ```solve_details``` functions from the ```aiygari.jl``` notebook:
+"""
 
-	DiscreteDP(R, Q, β)
-end
+# ╔═╡ c1ec949c-c6ba-43e5-a6b3-3e40f499a6ca
+function results_to_df(results, states, policies, prices)
 
-# ╔═╡ 4fa93659-4a83-4874-8595-ca59c16faa0e
-function solve_details(ddp, states, policies; solver = PFI)
-	df = solve_details0(ddp, states, policies; solver)
+	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	df.state = states
+	df.value = results.v
+	df.policy = policies[results.sigma]
 
 	@chain df begin
 		@transform(:consumption = consumption(:state, :policy, prices))
 		@transform(:saving = :k_next - :k)
 		select!(Not([:state, :policy]))
 	end
-end	
-
-# ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-function solve_details0(ddp, states, policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
-
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-	df.state = states
-	df.policy = policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
 
 	df
-end
-
-# ╔═╡ 63119b9a-874a-4be4-8c1e-0207787f72e7
-md"""
-## Word limit functions
-"""
-
-# ╔═╡ 9ac6a8fb-c082-4f6e-a51e-d820a0cd5bb9
-function wordcount(text)
-	stripped_text = strip(replace(string(text), r"\s" => " "))
-   	words = split(stripped_text, (' ', '-', '.', ',', ':', '_', '"', ';', '!', '\''))
-   	length(filter(!=(""), words))
-end
-
-# ╔═╡ a60dacf4-c279-482d-ab22-b1fc11480a3d
-show_words(answer) = md"_approximately $(wordcount(answer)) words_"
-
-# ╔═╡ d2764563-ab91-4dc1-8cd6-840ae44c4a1f
-function show_words_limit(answer, limit)
-	count = wordcount(answer)
-	if count < 1.02 * limit
-		return show_words(answer)
-	else
-		return almost(md"You are at $count words. Please shorten your text a bit, to get **below $limit words**.")
-	end
-end
-
-# ╔═╡ 0b63da71-f34f-4152-ab9e-d3b4f9ad777e
-begin
-	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
-	hint(text, title="Hint")       = admonition("hint",    title, text)
-	warning(text, title="Warning") = admonition("warning", title, text)
-	danger(text, title="Danger")   = admonition("danger",  title, text)
-	correct(text, title="Correct") = admonition("correct", title, text)
-
-	almost(text) = warning(text, "Almost there!")
-	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
-	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
-	got_it(text=rand(yays)) = correct(text, "Got it!")
-end
+end	
 
 # ╔═╡ e099f86b-3b8e-4783-9c80-84733cf174df
 md"""
@@ -462,7 +799,7 @@ md"""
 TableOfContents()
 
 # ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
-using PlutoUI: TableOfContents
+using PlutoUI: TableOfContents, Slider
 
 # ╔═╡ 9df5eb89-7ff6-4749-b3c1-4199e22d1d07
 using AlgebraOfGraphics, CairoMakie
@@ -479,6 +816,15 @@ using Chain: @chain
 # ╔═╡ d730d979-21ae-4c00-820f-b481b8b5cd4a
 using DataFrames
 
+# ╔═╡ 41f783a0-5cfa-4c83-a66c-37243170d01b
+using LinearAlgebra
+
+# ╔═╡ a11be816-ceef-4986-b313-6d429c8231be
+using Statistics: mean
+
+# ╔═╡ 7575ffb0-ee67-48e8-8682-55385d40b50e
+using StatsBase: weights
+
 # ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
 using QuantEcon
 
@@ -490,9 +836,12 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-NonparametricRegression = "db432338-e110-4b7a-9c53-0ace38eb8f7f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 AlgebraOfGraphics = "~0.6.14"
@@ -500,9 +849,10 @@ CairoMakie = "~0.10.4"
 Chain = "~0.5.0"
 DataFrameMacros = "~0.4.1"
 DataFrames = "~1.5.0"
-NonparametricRegression = "~0.2.1"
 PlutoUI = "~0.7.50"
 QuantEcon = "~0.16.4"
+Roots = "~2.0.13"
+StatsBase = "~0.33.21"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -511,7 +861,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.0-rc2"
 manifest_format = "2.0"
-project_hash = "de258d8f9e615a279dd4e82ad5bd269013b1bda0"
+project_hash = "739f4ed5a2f12fa6a7e192e287ffcc0405f4507b"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -708,6 +1058,11 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "fc08e5930ee9a4e03f84bfb5211cb54e7769758a"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.10"
+
+[[deps.CommonSolve]]
+git-tree-sha1 = "9441451ee712d1aec22edad62db1a9af3dc8d852"
+uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
+version = "0.2.3"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -1451,12 +1806,6 @@ version = "1.1.0"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
-[[deps.NonparametricRegression]]
-deps = ["DocStringExtensions", "LinearAlgebra", "StaticArrays", "Statistics"]
-git-tree-sha1 = "57348694d390daf4125f367e6157f9c8ad8b39b6"
-uuid = "db432338-e110-4b7a-9c53-0ace38eb8f7f"
-version = "0.2.1"
-
 [[deps.Observables]]
 git-tree-sha1 = "6862738f9796b3edc1c09d0890afce4eca9e7e93"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
@@ -1755,6 +2104,20 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "6ed52fdd3382cf21947b15e8870ac0ddbff736da"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
 version = "0.4.0+0"
+
+[[deps.Roots]]
+deps = ["ChainRulesCore", "CommonSolve", "Printf", "Setfield"]
+git-tree-sha1 = "2505d1dcab54520ed5e0a12583f2877f68bec704"
+uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+version = "2.0.13"
+
+    [deps.Roots.extensions]
+    RootsForwardDiffExt = "ForwardDiff"
+    RootsIntervalRootFindingExt = "IntervalRootFinding"
+
+    [deps.Roots.weakdeps]
+    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+    IntervalRootFinding = "d2bf35a9-74e0-55ec-b149-d360ff49b807"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -2160,70 +2523,96 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─f5450eab-0f9f-4b7f-9b80-992d3c553ba9
-# ╟─93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
-# ╟─4aa065ca-d54c-419a-a31a-7063fbb98a33
-# ╠═ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
-# ╠═f983a093-d397-43fe-8951-4ad1e795df3c
-# ╟─b4129537-81f6-441c-b1e4-99306afc227e
-# ╟─bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
-# ╠═9be81a15-7117-4911-8254-4848df50c059
-# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
-# ╠═59d7c6f7-4704-4866-9280-22d37b328499
-# ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
-# ╠═62184229-03f6-40d8-981e-4d39a74c75d7
-# ╠═50029ced-5ab0-4458-ad5a-31b8277b428a
-# ╟─146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
-# ╠═50118426-20c9-43b9-9d13-4e524853f0c9
-# ╟─843f658c-0e26-4eed-88dc-3946e97e5f6f
-# ╠═0a12f73a-5286-4146-8a20-00ed4aaaec72
-# ╠═0d593683-3b35-4740-a510-517a4dd3e83b
-# ╟─0e944330-4a7b-4d75-a55e-57d7acce58b2
-# ╠═c769b390-028e-490b-b50d-07c49a550a0a
-# ╟─675d57e2-9c6f-4619-aa25-664614bc4bbc
-# ╠═ab76ee26-297d-4ee4-b353-7b6c3a135277
-# ╠═788b8a0a-d206-41db-b012-f04205b67445
-# ╟─1734bd7b-8af1-46f3-a4af-1616c0190775
-# ╠═1b3d36ab-adae-40be-a14c-7ea6d9381a31
-# ╟─e7f75845-242f-45c6-9b33-11fd2bacb478
-# ╟─2402fba6-80e1-4fe4-8873-7a62ce6f9427
-# ╠═19376876-cb3c-4f33-bb08-3c3aa2939d48
-# ╠═0bf278e7-25f8-4830-8162-67e6d1113b3b
-# ╠═25ea5835-79f7-4e48-9d31-cee7f96983bf
-# ╠═f5478ce2-6d3f-4b3f-9eb3-2b6656561bdc
-# ╟─af81921e-d454-4341-979d-752f5e4540b7
-# ╠═54296efa-334f-4d2a-9190-e18156bf0200
-# ╠═290dfc4b-1307-43ad-b7bb-5680abc0579a
-# ╠═650d729b-d7ab-46f4-b3fb-0643d291dd22
-# ╠═94c859ff-28c2-4fef-bcc5-9e733e1a8697
-# ╠═36a86f5b-0574-43a6-9da4-9f774d55bf06
-# ╟─300018cf-fdb0-4508-9bb1-347f77076f0c
-# ╠═ad3066c1-8895-43f2-9459-ae2972a1bc27
-# ╠═6bf33bd0-14a8-48db-8331-6c6f0b1812b3
-# ╠═ef09eb29-095a-4549-9c0a-f008594ad655
-# ╠═be25e1c5-a254-4e5f-8306-57e1075f6035
-# ╠═01fd1ea1-ac40-4db4-a159-72abe83e265f
-# ╠═6320138e-017e-47b8-83ec-6645db05d41c
-# ╟─42969849-1c6f-4192-8cf9-76a8e2c33bcd
-# ╠═9cc038ec-e359-408f-a42e-68f5d8b7c314
-# ╟─b7a6d0dc-9fd7-4319-ac91-4d8994d66a96
-# ╟─25dc125f-10ad-44b1-8eea-5a7fe2e03cce
-# ╟─2c93d5a7-40bd-4535-9985-420533c12666
-# ╠═681c557a-3435-485d-a426-f56ed70f1f42
+# ╟─1b5abb2b-5dc7-433c-9c83-6cfd06c8eadf
+# ╟─a0825503-c132-4c12-93e2-60537d0f6085
+# ╟─cc3fe476-950f-4351-8d12-4f5a8f359317
+# ╟─77cfd0d8-5af0-417b-8161-f1c264ce20b4
+# ╟─b8840490-5a17-44e2-8703-f9b845597111
+# ╟─19978cfa-2798-475e-b057-083690b83b42
+# ╠═28f1dbcd-1cbc-4c6c-9efe-9df2c0f5f881
+# ╠═39b3e67f-ea18-4068-b63f-564f77ff237b
+# ╠═3965321e-baaa-484d-a722-854201085e58
+# ╟─520250f5-0877-4c36-a6f5-0b74a2916f37
+# ╟─a7e67216-2bca-45d7-859b-b9e0328c4875
+# ╟─a56f8765-cae6-40f4-aebf-900673ed9710
+# ╠═23e83dbd-ad68-4b86-80a3-34c65ca420d1
+# ╠═c8192e26-5215-4bbb-b1a7-da9df02b7e62
+# ╠═b16d6fab-6bd1-4a39-a654-0fcb4ad868ee
+# ╟─b40c8fdb-6d4b-4880-8e7c-523bdb95a847
+# ╟─9c1e3401-5646-4b6e-a703-0b0d877bcd6b
+# ╠═4eff64c0-16f1-48b0-87ec-d9f49599d0b0
+# ╠═4bdd9050-87f7-4551-88d5-5c2cca569bb8
+# ╟─fc6e8503-08bd-4df3-987e-2d926504ba34
+# ╟─ef3ab9ee-ae95-4482-b17f-48c50c0fdcb9
+# ╠═03439979-79cd-492d-a04e-bee96d67a9cb
+# ╟─31a30781-59c9-4a56-be71-dd12626ae9ec
+# ╠═d7b1e1a4-3153-4fb7-9908-55ce65d7fa2f
+# ╟─a2030a1e-6da9-4f5f-a367-03cd98530d7c
+# ╠═548005d3-e608-4e9f-af60-909394c8e67c
+# ╟─c5cb959f-8c66-4084-9a53-4cf422cdf762
+# ╟─b8ab52fc-07f2-4512-b477-df1e294d91a7
+# ╠═7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
+# ╟─9c1efccf-1235-472d-b395-10dc5494d114
+# ╟─69004cfb-29ea-4757-8eb6-3e905da0b2cb
+# ╠═0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
+# ╟─02d23829-b7f8-415d-aca1-b71992b72bdb
+# ╟─59f22787-ab1e-4096-9e43-39f33ba42713
+# ╟─66e4ff89-288c-4963-bb7d-8cfde20e42a0
+# ╟─8c185d30-7de4-4273-a739-d2af1d46a3a8
+# ╠═a453a9dc-0345-4630-8a75-e26a0de10e66
+# ╟─3e5158e4-146e-4b68-a20a-9b315de51de3
+# ╠═f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
+# ╟─849308de-b2e9-4f97-a948-60341863e7f8
+# ╟─c7ca1ce9-8621-4ae1-ab4a-c924d90745d6
+# ╠═04f6babd-4db0-45e9-8cc8-a09ce281e1bd
+# ╟─3520454b-ab40-4521-aeb5-463345d4422c
+# ╟─4f1fd4c1-1369-4e33-8e49-7ec51d33051c
+# ╟─f91d1b23-5670-4de4-81f4-cd72c0deb085
+# ╟─db24325c-49d8-45f7-805c-65b58a85889a
+# ╟─30682ba5-d144-4c4d-bd7f-da16d6bf68fd
+# ╠═385b7e3e-83c1-4257-a35f-5d7b2b77ee73
+# ╟─7af904d0-fc43-4986-a17a-2bc12d7913f6
+# ╠═a6245b74-2ceb-468c-b8a0-623d4b8abe36
+# ╟─fcafcc6c-cc23-4ae1-8ff3-5bebd4e1ec13
+# ╟─1f192db7-0c79-42e9-b433-8d6f78bafee4
+# ╟─8382365c-99a0-4c29-9917-3a1f5f0b5af4
+# ╠═bb48a69b-72bd-4b50-848a-1b438555164c
+# ╟─143aa896-fc61-450c-843d-88546e129abd
+# ╠═24e51342-df5d-448a-a76f-18375af543aa
+# ╟─8252bc6d-7303-4c67-9daa-f536b173cfde
+# ╟─28762c0a-76a3-44e8-8a48-dbc57dec4282
+# ╠═f54c97f9-bd22-4e81-966e-b68ef9e71efe
+# ╟─6e641df2-8b5b-49d8-88fc-36fa4b44b6e5
+# ╟─d83a55d6-2901-4539-9ebb-3b16ecb02a3d
+# ╟─d748feac-e583-4028-b3aa-6d1ac692255b
+# ╟─5be45b08-726c-453b-b025-cf7f69f941ff
+# ╠═d24ef390-0824-4c03-b1a9-236b8a982a92
+# ╠═c1f51283-f9e4-4169-a150-96423057618a
+# ╠═afe1dfa0-7b61-4a7b-a98c-e3ffce756591
+# ╠═2baf5805-ad8d-49e0-a18e-4f5f69a05c1c
+# ╠═7443becb-1a5b-46eb-a2df-bbd289c5bfe6
+# ╟─24961de2-8e9a-4fd5-b6bf-8c0ccbd9d9a1
+# ╟─28599228-417f-404f-bf3d-15ae388aff3b
+# ╠═54887913-20f4-48c8-ae1a-8ae623ee44ee
+# ╟─281fca35-1d20-417a-8928-ddd81c32b305
+# ╠═b8bf3582-d6a0-4a23-b080-a9b777893205
+# ╟─d379a396-0735-4fc9-aa6c-190d69a00fb0
+# ╠═dadd5f1a-3746-4fa9-87e4-00ed7e029a23
+# ╠═dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
+# ╟─23695e8e-9e3a-4519-bcef-82094833dcd9
+# ╟─8cde58db-b774-4348-9ae1-25791a20a997
+# ╠═18b470fa-d747-4ac2-a5aa-01f7671499a8
+# ╟─cbcf8f08-0330-4458-ba7d-eb35f0d6b120
+# ╟─a7130a4b-fb28-420e-b3a2-b0fd57532ce8
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
 # ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
 # ╠═ce25751c-949a-4ad3-a572-679f403ccb98
 # ╠═d60367db-cf92-4c0a-aea4-eddb6552e2c8
 # ╠═e3930baf-0560-4994-a637-7cb1923ce33c
 # ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
-# ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
-# ╠═df975df6-90db-408b-a908-52fb4b0637f6
-# ╠═4fa93659-4a83-4874-8595-ca59c16faa0e
-# ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-# ╟─63119b9a-874a-4be4-8c1e-0207787f72e7
-# ╠═9ac6a8fb-c082-4f6e-a51e-d820a0cd5bb9
-# ╠═a60dacf4-c279-482d-ab22-b1fc11480a3d
-# ╠═d2764563-ab91-4dc1-8cd6-840ae44c4a1f
-# ╠═0b63da71-f34f-4152-ab9e-d3b4f9ad777e
+# ╠═13fbec57-6ebe-456e-bfc9-ee98ce85d09e
+# ╟─5954bfdf-d8c3-48b9-9871-5e2ed6d77e1d
+# ╠═c1ec949c-c6ba-43e5-a6b3-3e40f499a6ca
 # ╟─e099f86b-3b8e-4783-9c80-84733cf174df
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
@@ -2232,6 +2621,9 @@ version = "3.5.0+0"
 # ╠═dfa54f23-8141-4270-8344-08975d90322d
 # ╠═719dce77-eb0f-4ebb-b6c5-eb8911e842a4
 # ╠═d730d979-21ae-4c00-820f-b481b8b5cd4a
+# ╠═41f783a0-5cfa-4c83-a66c-37243170d01b
+# ╠═a11be816-ceef-4986-b313-6d429c8231be
+# ╠═7575ffb0-ee67-48e8-8682-55385d40b50e
 # ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

@@ -4,483 +4,628 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
+# ╔═╡ c3bf5880-f169-11ec-20e3-bf9092156abf
 md"""
-`mpcs-aiyagari.jl` | **Version 1.1** | *last updated: May 2 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`stopping-time-problem-solution.jl` | **Version 1.1** | *last updated: May 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
-# ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
+# ╔═╡ 23df23ca-df80-4789-ac79-fc777d258beb
 md"""
-# MPCs in the Aiyagari model
+# Optimal stopping problems
+# Durable good
+"""
 
-## Households' problem
+# ╔═╡ 826ee178-6423-470f-abb8-74f808baa26f
+md"""
+Example taken from Ben Moll's website: [Model description](https://benjaminmoll.com/wp-content/uploads/2020/06/car.pdf), [Matlab code](https://benjaminmoll.com/wp-content/uploads/2020/06/car.m)
 
-In this exercise, we have a closer look at the marginal propensity to consume in a Aiyagari/ Huggett economy. The households' problem is:
+Also useful: [Exercising an option](https://benjaminmoll.com/wp-content/uploads/2020/06/option_simple.pdf)
+"""
+
+# ╔═╡ 698dc1ed-87d3-4383-aff3-f50b0d2101db
+md"""
+## Model
+"""
+
+# ╔═╡ a4d2a937-efe4-47a5-bd67-8c63e24eabeb
+@with_kw struct DurableModel
+	
+	σ::Float64 = 2.    # risk aversion coefficient u'(c) = c^(-σ)
+	ρ::Float64 = 0.05  # rate of time preference
+	r::Float64 = 0.045 # interest rate
+	y::Float64 = 0.1   # income
+
+	κ::Float64 = 0.25  # utility from durable good
+	p₀::Float64 = 0.2  # buying price
+	p₁::Float64 = 0.1  # selling price
+
+	# asset grid parameters
+	N_a::Int64 = 500
+	aₘᵢₙ::Float64 = - 0.02
+	aₘₐₓ::Float64 = 3
+	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
+	
+end
+
+# ╔═╡ 16dabb4f-5de2-491f-8cd2-a4cc52afeecf
+function construct_a(m)
+	(; N_a, aₘᵢₙ, aₘₐₓ) = m
+	[aᵢ for aᵢ in range(aₘᵢₙ, aₘₐₓ, N_a)] |> hcat # asset grid (column vector)
+end
+
+# ╔═╡ 95c68a25-05a8-4485-ac66-6af85a0af0f9
+md"""
+The value function for agents that do not own a car is $v_0(a)$.
+
+The value function for agents that own a car is $v_1(a)$.
+
+The value of buying a car is $v_0^*(a) = v_1(a - p_0)$ if $a-p_0 \ge \underline{a}$, else $v_0^*(a) = -\infty$.
+
+The value of selling the car is $v_1^*(a) = v_0(\max\{a + p_1, a_\max\})$. 
+
+HJB variational inequalities:
 
 ```math
 \begin{align}
-&\max_{c_t, k_t} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t) \Bigr) \\
-&\begin{aligned}
-	\text{subject to } 
-		&u(c) = \log(c) \\
-		&k_t \ge 0 \\
-		&c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w\\
-		&y_t \sim \text{some Markov Chain} \\
-		&y_0, k_{-1} \text{ given}
-\end{aligned}
+0 &= \min\{\rho v_0(a) - \max_c\{u(c) + v'_0(a)(y + ra - c)\}, v_0(a) - v_0^*(a))\} \\
+0 &= \min\{\rho v_1(a) - \max_c\{u(c) + \kappa + v'_1(a)(y + ra - c)\}, v_1(a) - v_1^*(a))\} \\
 \end{align}
 ```
-To be more precise, we are considering the MPC out of an unexpected transitory shock $dx_t$ that enters the budget constraint like this:
-
-$c_t + k_t = k_{t-1}(1 + r) + y_t \cdot w + dx_t$
 """
 
-# ╔═╡ ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
+# ╔═╡ eee0de53-9e36-42f4-88d9-7a8ee25ea13a
 md"""
-## Exercise 1: Motivation (1 point)
-
-👉 Why do economists and policy makers care about the average MPC in the population and about MPC heterogeneity? Give at least 2 reasons. (max 150 words)
+## Exercise 1: Solution algorithm
 """
 
-# ╔═╡ f983a093-d397-43fe-8951-4ad1e795df3c
-answer_1 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ b4129537-81f6-441c-b1e4-99306afc227e
-show_words_limit(answer_1, 150)
-
-# ╔═╡ bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
+# ╔═╡ 0834be20-1a8d-4498-9019-ebfcc4769711
 md"""
-## Model parameters
+
+Finite difference method $\implies$ 
+
+```math
+\begin{align}
+0 &= \min\{\frac{v_0^{n+1} + v_0^n}{\Delta} + \rho v_0^{n+1} - u(v_0^n) - A(v_0^n) v_0^{n+1}, v_0^{n+1} - (v_0^*)^n\} \\
+0 &= \min\{\frac{v_1^{n+1} + v_1^n}{\Delta} + \rho v_1^{n+1} - u(v_1^n) - A(v_1^n) v_1^{n+1}, v_1^{n+1} - (v_1^*)^n\} \\
+\end{align}
+```
+
+where $v_0$, $v_1$, etc. denote column vectors now (the value functions evaluated on the discrete grid).
+
+Stacking both equations $\implies$
+
+```math
+\begin{align}
+0 &= \min\{\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1}, v^{n+1} - (v^*)^n\}
+\end{align}
+```
+
+where $v = \begin{pmatrix} v_0 \\ v_1 \end{pmatrix}$, $A = \begin{pmatrix} A(v_0) & 0 \\ 0 & A(v_1) \end{pmatrix}$, etc.
 """
 
-# ╔═╡ 9be81a15-7117-4911-8254-4848df50c059
-hh = Household(β = 0.96, u = log)
-
-# ╔═╡ 8f308735-9694-4b24-bc35-fdf01cb6f942
-r = 0.03
-
-# ╔═╡ 59d7c6f7-4704-4866-9280-22d37b328499
-prices = (q = 1/(1+r), w = 1.0)
-
-# ╔═╡ 1b0e732d-38a4-4af3-822e-3cb1b04e0629
-z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
-
-# ╔═╡ 62184229-03f6-40d8-981e-4d39a74c75d7
-k_vals = range(0., 5., length = 500)
-
-# ╔═╡ 50029ced-5ab0-4458-ad5a-31b8277b428a
-ss = statespace(; k_vals, z_chain);
-
-# ╔═╡ 146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
+# ╔═╡ 7b2a66b2-cec7-40c2-b90e-e8064d2e6be8
 md"""
-## Exercise 2: No income risk (2 points)
+We will solve the equation for the updated value function $v^{n+1}$ by writing the equation above as a Linear Complementarity Problem (LCP):
 
-As a first step, let's consider a more simple model without income risk and without the ad-hoc borrowing constraint $k_t\ge 0$. 
+```math
+\begin{align}
+z'(Bz + q) &= 0 \\
+z &\ge 0 \\
+Bz + q &\ge 0 
+\end{align}
+```
 
-👉 Derive an analytical formula for the MPC and plug in the model parameters given above. 
+Then we can use the LCP solver from the ```LCPsolve.jl``` package to solve for $z$.
 
-👉 What can you say about the average MPC and MPC heterogeneity in this model?
+👉 Rewrite the equation $0 = \min\{\dots\}$ above as a LCP. Express $z$, $B$ and $q$ in terms of $v^{n+1}$, $v^n$, $(v^*)^n$, $u$, $A$, $\rho$ and $\Delta$.
 """
 
-# ╔═╡ 50118426-20c9-43b9-9d13-4e524853f0c9
+# ╔═╡ e461b94e-703b-43bf-9e30-56c2b0e2ee3e
 md"""
-Your answer goes here
+
+Writing as Linear Complementarity Problem $\implies$
+
+```math
+\begin{align}
+(v^{n+1} - (v^*)^n)'(\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1}) &= 0 \\
+v^{n+1} - (v^*)^n &\ge 0 \\
+\frac{v^{n+1} - v^n}{\Delta} + \rho v^{n+1} - u - A v^{n+1} &\ge 0
+\end{align}
+```
+
+Convert into ```LCPsolve.jl``` parameterization $\implies$ 
+
+$z = v^{n+1} - (v_0^*)^n$
+
+$B = ((1/\Delta + \rho) I - A)$
+
+$q = -u - v^n/\Delta + B (v^*)^n$
+
+This means that after finding the correct $z$ from the LCP solver, we can obtain the updated value function as follows: $v^{n+1} = z + (v^*)^n$
 """
 
-# ╔═╡ 843f658c-0e26-4eed-88dc-3946e97e5f6f
+# ╔═╡ 953f1f64-f8a7-4ca4-bf23-39ccf74db272
 md"""
-## Solution to the households' problem
-
-The case with income risk and the ad-hoc borrowing constraint does not have an analytical solution. Therefore, we solve the households' problem using functions from the ```aiygari.jl``` notebook:
+👉 Use your result to complete the code below.
 """
 
-# ╔═╡ 0a12f73a-5286-4146-8a20-00ed4aaaec72
-ddp = setup_DDP(hh, ss, prices);
+# ╔═╡ 588e0247-65ef-4d98-88f7-b80a76b695ce
+function solve_HJBVI(m::DurableModel; maxit = 100, crit = 1e-6, Δ = 1000)
 
-# ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-results = solve_details(ddp, ss.states, ss.policies; solver = PFI);
+	(; σ, ρ, r, y, κ, p₀, p₁, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
-# ╔═╡ 0e944330-4a7b-4d75-a55e-57d7acce58b2
-md"""
-The consumption policy that we obtain from the ```QuantEcon``` solver has small jumps. This is not an actual property of the policy function but happens because we have only solved a discretized version of the households' problem. (You can check for yourself that the size of the jumps decreases as you increase the number of grid points.)
-"""
+	# construct asset grid
+	a = construct_a(m)
 
-# ╔═╡ c769b390-028e-490b-b50d-07c49a550a0a
-let
-	resolution = (800, 400)
-	fig = Figure(; resolution)
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
+	v_star = zeros(N_a, 2)
+
+	# initial guess for value function
+	v₀ = zeros(N_a, 2)
+	v₀[:,:] .= (y .+ r * a).^(1-σ) / (1-σ) / ρ
+	v = v₀
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	i_buy  = ceil(Int, p₀/da) #p₀ equals i_buy grid points
+	i_sell = ceil(Int, p₁/da) #p₁ equals i_sell grid points
+
+	for it in range(1, maxit)
+
+		# forward difference
+		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] .= (y .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] .= (y .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
 	
-	ax1 = Axis(fig[1, 1], title="Consumption policy function")
-	ax2 = Axis(fig[1, 2], title="Stationary distribution")
-	
-	plt1 = data(results) * mapping(:k, :consumption, color = :z => nonnumeric) * visual(Lines)
-	plt2 = data(results) * mapping(:k, :π, color = :z => nonnumeric) * visual(Lines)
-	
-	ag = draw!(ax1, plt1)
-	draw!(ax2, plt2)
-	
-	legend!(fig[2, 1], ag, orientation=:horizontal, tellheight=true)
+		I_concave = dvb .> dvf # problems if value function not concave
 
-	fig
-end
+		# consumption and savings with forward difference
+		cf = dvf .^ (-1/σ)
+		ȧf = y .+ r .* a .- cf
 
-# ╔═╡ 675d57e2-9c6f-4619-aa25-664614bc4bbc
-md"""
-Since we will use the slope of the policy function to analyze the MPC, the jumps are very inconvenient. Therefore, you will work with the smoothed version of the consumption policy which is saved in the ```c_sm``` column of the ```results2``` data frame.
-"""
+		# consumption and savings with backward difference
+		cb = dvb .^ (-1/σ)
+		ȧb = y .+ r .* a .- cb
 
-# ╔═╡ ab76ee26-297d-4ee4-b353-7b6c3a135277
-using NonparametricRegression
+		# consumption and derivate of value function at steady state
+		c0 = y .+ r .* a .+ zeros(N_a, 2)
+		dv0 = c0 .^ (-σ)
 
-# ╔═╡ 788b8a0a-d206-41db-b012-f04205b67445
-begin
-	n_k = length(k_vals)
-	results.c_sm = zeros(length(ss.states))
-	results_z = groupby(results, :z)
-	rz1 = results_z[1]
-	rz1.c_sm = npregress(
-		rz1.k, 
-		rz1.consumption, 
-		rz1.k, 
-		0.08;
-		method=:lc, 
-		kernelfun=NormalKernel
-	)
-	rz2 = results_z[2]
-	rz2.c_sm[1:n_k÷5] = npregress(
-		rz2.k, 
-		rz2.consumption, 
-		rz2.k[1:n_k÷5], 
-		0.04;
-		method=:lc, 
-		kernelfun=NormalKernel
-		# use smaller bandwidth where curvature of consumption function is high
-	)
-	rz2.c_sm[n_k÷5+1:end] = npregress(
-		rz2.k, 
-		rz2.consumption, 
-		rz2.k[n_k÷5+1:end], 
-		0.08;
-		method=:lc, 
-		kernelfun=NormalKernel
-	)
-	results2 = DataFrame(results_z)
-end;
+		If = ȧf .> 0 # positive drift => forward difference
+		Ib = ȧb .< 0 # negative drift => backward difference
+		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
+		If[N_a,:] .= 0.
+		I0 = (1 .- If .- Ib) # steady state
 
-# ╔═╡ 1734bd7b-8af1-46f3-a4af-1616c0190775
-md"""
-The figure below shows both the raw consumption function and its smoothed version:
-"""
+		c = cf .* If + cb .* Ib + c0 .* I0
+		
+		u = zeros(N_a, 2)
+		u[:,1] = c[:,1] .^ (1-σ) / (1-σ)
+		u[:,2] = c[:,2] .^ (1-σ) / (1-σ) .+ κ
 
-# ╔═╡ 1b3d36ab-adae-40be-a14c-7ea6d9381a31
-	@chain results2 begin
-		data(_) * 
-			mapping(:k, [:consumption, :c_sm], color = :z => nonnumeric) * 
-			visual(Lines)
-		draw
+		X = - min.(ȧb,0)/da
+		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+		Z =   max.(ȧf,0)/da
+
+		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+		A = blockdiag(A11, A22)
+
+    	# value of buying car if currently, don't own car
+	    v_star[i_buy+1:N_a,1] = v[1:N_a-i_buy,2]
+	    # instead of setting Vstar[1:i_buy,1]=-Inf, do something smoother
+	    slope = (v_star[i_buy+2,1] - v_star[i_buy+1,1]) / da
+	    v_star[1:i_buy,1] = v_star[i_buy+1,1] .+ slope * (a[1:i_buy] .- a[i_buy+1])
+
+	    # value of selling car if currently own car
+	    v_star[1:N_a-i_sell,2] = v[i_sell+1:N_a,1]
+	    v_star[N_a-i_sell+1:N_a,2] .= v[N_a,1] # assume p = min(p,amax - a)
+
+		### YOUR CODE ###
+		
+		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
+		q = - (vec(u) + vec(v)/Δ) + B * vec(v_star)
+		z₀ = vec(v) - vec(v_star)
+
+		#################
+		
+		res = solve!(LCP(B, q), z₀)
+		z = res.sol
+
+		LCP_error = maximum(abs.(z.*(B*z + q)))
+	    if LCP_error > 1e-5
+			error("LCP not solved")
+		end
+
+	    v_new = reshape(z + vec(v_star), N_a, 2)
+	    
+	    v_change = v_new - v
+		dist[it] = maximum(abs.(v_change))
+		
+	    v = v_new
+
+		if dist[it] < crit
+
+			ȧ = y .+ r .* a .- c
+
+			return v, v_star, c, ȧ, it, dist
+
+		end
+
 	end
 
-# ╔═╡ e7f75845-242f-45c6-9b33-11fd2bacb478
-md"""
-## Exercise 3: MPCs in the Aiyagari model
-"""
-
-# ╔═╡ 2402fba6-80e1-4fe4-8873-7a62ce6f9427
-md"""
-### 3a: Compute MPCs (1.5 points)
-
-👉 Use the smoothed consumption policy to compute the MPC at each point of the state space. Save the MPC values in an additional column of the results data frame.
-
-Hint: It is most convenient to consider a transitory income shock of the size $dx = (1+r) \Delta k$ where $\Delta k$ is the distance between two adjacent grid points.
-"""
-
-# ╔═╡ 19376876-cb3c-4f33-bb08-3c3aa2939d48
-# Your
-
-# ╔═╡ 0bf278e7-25f8-4830-8162-67e6d1113b3b
-# code
-
-# ╔═╡ 25ea5835-79f7-4e48-9d31-cee7f96983bf
-# goes
-
-# ╔═╡ f5478ce2-6d3f-4b3f-9eb3-2b6656561bdc
-# here ...
-
-# ╔═╡ af81921e-d454-4341-979d-752f5e4540b7
-md"""
-### 3b: Average MPC (1 point)
-
-👉 What is the average MPC in the Aiyagari model for the given parameters?
-"""
-
-# ╔═╡ 54296efa-334f-4d2a-9190-e18156bf0200
-# Your
-
-# ╔═╡ 290dfc4b-1307-43ad-b7bb-5680abc0579a
-# code
-
-# ╔═╡ 650d729b-d7ab-46f4-b3fb-0643d291dd22
-# goes
-
-# ╔═╡ 94c859ff-28c2-4fef-bcc5-9e733e1a8697
-# here ...
-
-# ╔═╡ 36a86f5b-0574-43a6-9da4-9f774d55bf06
-md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ 300018cf-fdb0-4508-9bb1-347f77076f0c
-md"""
-### 3c: MPC heterogeneity (3 points)
-
-👉 Explore MPC heterogeneity in the Aiyagari model graphically.
-
-👉 How much do MPCs vary in the population? Which households have particularly high MPCs? (max. 100 words)
-"""
-
-# ╔═╡ ad3066c1-8895-43f2-9459-ae2972a1bc27
-# Your
-
-# ╔═╡ 6bf33bd0-14a8-48db-8331-6c6f0b1812b3
-# code
-
-# ╔═╡ ef09eb29-095a-4549-9c0a-f008594ad655
-# goes
-
-# ╔═╡ be25e1c5-a254-4e5f-8306-57e1075f6035
-# here ...
-
-# ╔═╡ 01fd1ea1-ac40-4db4-a159-72abe83e265f
-answer_3c = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ 6320138e-017e-47b8-83ec-6645db05d41c
-show_words_limit(answer_3c, 100)
-
-# ╔═╡ 42969849-1c6f-4192-8cf9-76a8e2c33bcd
-md"""
-## Exercise 4: Outlook (1.5 points)
-
-The empirical literature on MPCs typically finds average annual MPCs in the range 30 - 50% ([Jappelli and Pistaferri, 2014](https://www.aeaweb.org/articles?id=10.1257/mac.6.4.107); [Fagereng et al., 2021](https://www.aeaweb.org/articles?id=10.1257/mac.20190211); [Commault, 2022](https://www.aeaweb.org/articles?id=10.1257/mac.20190296)). Most empirical papers also find that households with little liquid wealth tend to have higher MPCs than households with a lot of liquid wealth.
-
-Models with income risk and a borrowing constraint like the one in Exercise 3 usually generate average annual MPCs lower than 30% if they are calibrated properly.
-
-👉 Why are average MPCs in the data higher than in Aiyagari-type models? Mention and explain at least 3 potential mechanisms that are not present in the model. (max. 200 words)
-"""
-
-# ╔═╡ 9cc038ec-e359-408f-a42e-68f5d8b7c314
-answer_4 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ b7a6d0dc-9fd7-4319-ac91-4d8994d66a96
-show_words_limit(answer_4, 200)
-
-# ╔═╡ 25dc125f-10ad-44b1-8eea-5a7fe2e03cce
-md"""
-## Before you submit ...
-
-👉 Make sure you **do not** mention your name in the assignment. The assignments are graded anonymously.
-
-👉 Make sure that that **all group members proofread** your submission.
-
-👉 Make sure all the code is **well-documented**.
-
-👉 Make sure that you are **within the word limit**. Short and concise answers are appreciated. Answers longer than the word limit will lead to deductions.
-
-👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
-"""
-
-# ╔═╡ 2c93d5a7-40bd-4535-9985-420533c12666
-md"""
-# Appendix
-
-## Functions from ```aiyagari.jl```
-
-The only difference to ```aiyagari.jl``` is that I made some changes to the ```consumption``` function.
-"""
-
-# ╔═╡ 681c557a-3435-485d-a426-f56ed70f1f42
-function Household(; σ = 1.0, β = 0.96,	
-                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
-	(; β, u)
+	error("Algorithm did not converge")
+	
 end
 
-# ╔═╡ 9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
-function statespace(;
-			k_vals = range(1e-10, 20.0, length = 200),
-			z_chain
-		)
-	states = 
-		[(; k, z) for k ∈ k_vals, z ∈ z_chain.state_values] |> vec
-	states_indices = 
-		[(; k_i, z_i) for k_i ∈ 1:length(k_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
-    policies = 
-	    [(; k_next) for k_next ∈ k_vals] |> vec
-	policies_indices = 
-	    [(; k_next_i) for k_next_i ∈ 1:length(k_vals)] |> vec
+# ╔═╡ 0923cba9-0286-459f-aa6a-f0df0b3196c7
+function results_to_df(m::DurableModel; v, v_star, c, ȧ)
+	
+	(; N_a) = m
 
-	(; states, states_indices, policies, policies_indices, z_chain)
-end
+	d = [0 1]
 
-# ╔═╡ 96b42aa6-8700-42d1-a4a1-949595549e4b
-function setup_Q(states_indices, policies_indices, z_chain)
-	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
-	setup_Q!(Q, states_indices, policies_indices, z_chain)
-	Q
-end
+	a = construct_a(m)
 
-# ╔═╡ ce25751c-949a-4ad3-a572-679f403ccb98
-function setup_Q!(Q, states_indices, policies_indices, z_chain)
-    for (i_next_state, next) ∈ enumerate(states_indices)
-        for (i_policy, (; k_next_i)) ∈ enumerate(policies_indices)
-            for (i_state, (; z_i)) ∈ enumerate(states_indices)
-                if next.k_i == k_next_i
-                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
-                end
-            end
-        end
-    end
-    return Q
-end
+	df = DataFrame()
+	df.a = a * ones(1, 2) |> vec
+	df.d = ones(Int, N_a, 1) * d |> vec
+	df.c = c |> vec
+	df.ȧ = ȧ |> vec
+	df.v = v |> vec
+	df.v_star = v_star |> vec
+	df.action = (v_star .≈ v ) |> vec
 
-# ╔═╡ d60367db-cf92-4c0a-aea4-eddb6552e2c8
-function consumption((; z, k), (; k_next), (; q, w))
-	r = (1/q - 1)
-	c = w * z + (1 + r) * k - k_next
-end
-
-# ╔═╡ e3930baf-0560-4994-a637-7cb1923ce33c
-function reward(state, policy, prices, u)
-	c = consumption(state, policy, prices)
-    if c > 0
-		u(c)
-	else
-		-100_000 + 100 * c
-	end
-end
-
-# ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
-function setup_R(states, policies, prices, u)
-	R = zeros(length(states), length(policies))
-	setup_R!(R, states, policies, prices, u)
-end
-
-# ╔═╡ 880636b2-62ec-4729-88cb-0a2004bc18c4
-function setup_R!(R, states, policies, prices, u)
-    for (k_i, policy) ∈ enumerate(policies)
-        for (s_i, state) ∈ enumerate(states)
-            R[s_i, k_i] = reward(state, policy, prices, u)
-        end
-    end
-    return R
-end
-
-# ╔═╡ df975df6-90db-408b-a908-52fb4b0637f6
-function setup_DDP(household, statespace, prices)
-	(; β, u) = household
-	(; states, policies, states_indices, policies_indices) = statespace
-    
-	R = setup_R(states, policies, prices, u)
-	Q = setup_Q(states_indices, policies_indices, statespace.z_chain)
-
-	DiscreteDP(R, Q, β)
-end
-
-# ╔═╡ 4fa93659-4a83-4874-8595-ca59c16faa0e
-function solve_details(ddp, states, policies; solver = PFI)
-	df = solve_details0(ddp, states, policies; solver)
-
-	@chain df begin
-		@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :k_next - :k)
-		select!(Not([:state, :policy]))
-	end
-end	
-
-# ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-function solve_details0(ddp, states, policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
-
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-	df.state = states
-	df.policy = policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
+	df.c[df.action] .= NaN
+	df.ȧ[df.action] .= NaN
 
 	df
+	
 end
 
-# ╔═╡ 63119b9a-874a-4be4-8c1e-0207787f72e7
+# ╔═╡ e701b4c7-2e55-443e-a37e-34b10c831095
+function solve_df(m; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	v, v_star, c, ȧ, it, dist = solve_HJBVI(m; maxit, crit, Δ)
+
+	df = results_to_df(m; v, v_star, c, ȧ)
+
+	return df
+	
+end
+
+# ╔═╡ dc7da594-5213-42da-9962-2b7f899cb192
 md"""
-## Word limit functions
+## Exercise 2: Results
 """
 
-# ╔═╡ 9ac6a8fb-c082-4f6e-a51e-d820a0cd5bb9
-function wordcount(text)
-	stripped_text = strip(replace(string(text), r"\s" => " "))
-   	words = split(stripped_text, (' ', '-', '.', ',', ':', '_', '"', ';', '!', '\''))
-   	length(filter(!=(""), words))
-end
+# ╔═╡ 3f509c06-dfb6-4373-ae94-1aef74578ffa
+m = DurableModel();
 
-# ╔═╡ a60dacf4-c279-482d-ab22-b1fc11480a3d
-show_words(answer) = md"_approximately $(wordcount(answer)) words_"
+# ╔═╡ abd5e562-03ff-43a4-b4d0-146f2cf69717
+df = solve_df(m);
 
-# ╔═╡ d2764563-ab91-4dc1-8cd6-840ae44c4a1f
-function show_words_limit(answer, limit)
-	count = wordcount(answer)
-	if count < 1.02 * limit
-		return show_words(answer)
-	else
-		return almost(md"You are at $count words. Please shorten your text a bit, to get **below $limit words**.")
+# ╔═╡ edf44a54-baeb-4139-9545-eb9fbb89d561
+md"""
+👉 Interpret the diagram below.
+"""
+
+# ╔═╡ 054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
+md"""
+Left panel: agent does not own car $d=0$
+- low wealth: $v_0 > v_0^*$ $\implies$ agents does not buy car
+- sufficiently high wealth: $v_0 = v_0^*$ $\implies$ agent buys car
+
+Right panel: agent owns car $d=1$
+- high wealth: $v_1 > v_1^*$ $\implies$ agents does not sell car
+- sufficiently low wealth: $v_1 = v_1^*$ $\implies$ agent sells car
+
+Note that "value matching" and "smooth pasting" hold even though we did not impose them.
+"""
+
+# ╔═╡ cbfc715f-83ff-4700-b49f-ce623b43b7db
+let
+
+	figure = (; resolution = (800, 400))
+	
+	@chain df begin
+		stack([:v_star, :v])
+		data(_) * mapping(:a, :value, layout = :d => nonnumeric, color = :variable => nonnumeric) * visual(Lines)
+		draw(; figure, facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 	end
+
 end
 
-# ╔═╡ 0b63da71-f34f-4152-ab9e-d3b4f9ad777e
-begin
-	admonition(kind, title, text) = Markdown.MD(Markdown.Admonition(kind, title, [text]))
-	hint(text, title="Hint")       = admonition("hint",    title, text)
-	warning(text, title="Warning") = admonition("warning", title, text)
-	danger(text, title="Danger")   = admonition("danger",  title, text)
-	correct(text, title="Correct") = admonition("correct", title, text)
+# ╔═╡ 231ce8ae-1219-48a5-b829-a07093322221
+md"""
+👉 Interpret the diagram below.
+"""
 
-	almost(text) = warning(text, "Almost there!")
-	keep_working(text=md"The answer is not quite right.") = danger(text, "Keep working on it!")
-	yays = [md"Great!", md"Yay ❤", md"Great! 🎉", md"Well done!", md"Keep it up!", md"Good job!", md"Awesome!", md"You got the right answer!", md"Let's move on to the next section."]
-	got_it(text=rand(yays)) = correct(text, "Got it!")
+# ╔═╡ 99d92b37-1bfe-44a6-ab12-5f511c97d6a3
+md"""
+There is a large range of wealth values for which owners do not sell but non-owners do not buy. This is because of the difference between the selling and the buying price.
+"""
+
+# ╔═╡ ea368b73-478a-4029-844a-e1beb759fcff
+@chain df begin
+	stack([:c, :ȧ, :action])
+	data(_) * mapping(:a, :value, layout = :variable, color = :d => nonnumeric) * visual(Lines)
+	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
 end
 
-# ╔═╡ e099f86b-3b8e-4783-9c80-84733cf174df
+# ╔═╡ 48eac71a-62bb-40cf-bb6b-de36f3656045
+md"""
+# Retirement
+
+see [Fahri and Panageas (2007)](https://www.sciencedirect.com/science/article/pii/S0304405X06001127) and [Grochulski and Zhang (2020)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3473117)
+"""
+
+# ╔═╡ f10488d3-6bb4-4b34-9e7d-04d961fa31b4
+md"""
+## Model
+"""
+
+# ╔═╡ 67bb6a7a-df20-49ec-98cf-ed87e2381b87
+@with_kw struct RetirementModel
+	
+	σ::Float64 = 2.    # risk aversion coefficient u'(c) = c^(-σ)
+	ρ::Float64 = 0.05  # rate of time preference
+	r::Float64 = 0.05  # interest rate
+	y::Float64 = 0.1   # income
+
+	κ::Float64 = 0.25  # utility from leisure in retirement
+
+	# asset grid parameters
+	N_a::Int64 = 500
+	aₘᵢₙ::Float64 = 5.
+	aₘₐₓ::Float64 = 20.
+	da::Float64 = (aₘₐₓ - aₘᵢₙ)/(N_a - 1)
+	
+end
+
+# ╔═╡ 048b0bb9-09b6-49d4-9723-4572e3f24de5
+md"""
+The value function for working agents is 
+
+$v(a) = \max_{c(t)}\int_0^\tau e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} \Big) dt + e^{-\rho \tau} v^*(a)$
+
+subject to $\dot{a} = y + ra - c$.
+
+Working agents have the option to retire. $\tau$ is the stopping time.
+
+The value function for retired agents is
+
+$v^*(a) = \max_{c(t)}\int_0^\infty e^{-\rho t} \Big(\frac{(c(t))^{1-\sigma}}{1-\sigma} + \kappa \Big) dt$ 
+
+subject to $\dot{a} = ra - c$.
+
+Retired agents do not have the option to start working again.
+
+Trade-off: Retired agents receive utility from leisure $\kappa$, but do no longer receive any income $y$.
+
+If $r = \rho$, $c(t) = ra$ and hence
+
+$v^*(a) = \frac{1}{\rho}\Big(\frac{(ra)^{1-\sigma}}{1-\sigma} + \kappa \Big)$
+
+HJB variational inequality:
+
+```math
+\begin{align}
+0 &= \min\{\rho v(a) - \max_c\{u(c) + v'(a)(y + ra - c)\}, v(a) - v^*(a))\}
+\end{align}
+```
+"""
+
+# ╔═╡ 20433385-479c-4d92-b8d2-fc1d768e7d30
+md"""
+## Exercise 3: Solution algorithm
+"""
+
+# ╔═╡ f2c23a3f-0544-40ab-9b72-6331a0c5ee16
+md"""
+👉 Adapt the solution algorithm for the durable goods model to solve the retirement model.
+"""
+
+# ╔═╡ 33734e2e-a197-4c02-96e6-720996cb8108
+function solve_HJBVI(m::RetirementModel; maxit = 100, crit = 1e-6, Δ = 1000)
+
+	(; σ, ρ, r, y, κ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+
+	# construct asset grid
+	a = construct_a(m)
+
+	v_star = 1/ρ * ((r*a).^(1-σ)/(1-σ) .+ κ)
+
+	# initialize arrays for forward and backward difference
+	dvf = zeros(N_a, 1)
+	dvb = zeros(N_a, 1)
+	
+	# initial guess for value function
+	v₀ = 1/ρ * (y .+ r*a) .^ (1-σ) / (1-σ)
+	v = v₀
+
+	# initialize vector that keeps track of convergence
+	dist = - ones(maxit)
+
+	for it in range(1, maxit)
+
+		# forward difference
+		dvf[1:N_a-1,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvf[N_a,:] .= (y .+ r * aₘₐₓ) .^ (-σ) # boundary condition a  <= a_max
+
+		# backward difference
+		dvb[2:N_a,:] = (v[2:N_a,:] - v[1:N_a-1,:]) / da
+		dvb[1,:] .= (y .+ r * aₘᵢₙ) .^ (-σ) # boundary condition a >= a_min
+	
+		I_concave = dvb .> dvf # problems if value function not concave
+
+		# consumption and savings with forward difference
+		cf = dvf .^ (-1/σ)
+		ȧf = y .+ r .* a .- cf
+
+		# consumption and savings with backward difference
+		cb = dvb .^ (-1/σ)
+		ȧb = y .+ r .* a .- cb
+
+		# consumption and derivate of value function at steady state
+		c0 = y .+ r .* a
+		dv0 = c0 .^ (-σ)
+
+		If = ȧf .> 0 # positive drift => forward difference
+		Ib = ȧb .< 0 # negative drift => backward difference
+		Ib[N_a,:] .= 1. # make sure backward difference is used at last grid point
+		If[N_a,:] .= 0.
+		I0 = (1 .- If .- Ib) # steady state
+
+		c = cf .* If + cb .* Ib + c0 .* I0
+		
+		u = c .^ (1-σ) / (1-σ)
+
+		X = - min.(ȧb,0)/da
+		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
+		Z =   max.(ȧf,0)/da
+
+		A = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+
+		B = (ρ + 1/Δ) * sparse(I, N_a, N_a) - A
+		q = - (vec(u) + vec(v)/Δ) + B * vec(v_star)
+		z₀ = vec(v) - vec(v_star)
+		res = solve!(LCP(B, q), z₀)
+		z = res.sol
+
+		LCP_error = maximum(abs.(z.*(B*z + q)))
+	    if LCP_error > 1e-5
+			error("LCP not solved")
+		end
+
+	    v_new = z + v_star
+	    
+	    v_change = v_new - v
+		dist[it] = maximum(abs.(v_change))
+		
+	    v = v_new
+
+		if dist[it] < crit
+
+			ȧ = y .+ r .* a .- c
+
+			return v, v_star, c, ȧ, it, dist
+
+		end
+
+	end
+
+	error("Algorithm did not converge")
+	
+end
+
+# ╔═╡ 21be9783-5006-4ba9-be5d-4d7c3cbde54b
+function results_to_df(m::RetirementModel; v, v_star, c, ȧ)
+	
+	(; N_a) = m
+
+	a = construct_a(m)
+
+	df = DataFrame()
+	df.a = a |> vec
+	df.c = c |> vec
+	df.ȧ = ȧ |> vec
+	df.v = v |> vec
+	df.v_star = v_star |> vec
+	df.action = (v_star .≈ v) |> vec
+
+	df.c[df.action] .= NaN
+	df.ȧ[df.action] .= NaN
+
+	df
+	
+end
+
+# ╔═╡ 2ae35394-380f-475a-ba5d-c2b8b3dcb81c
+md"""
+## Exercise 4: Results
+"""
+
+# ╔═╡ e522913b-7bf4-4239-addf-7562c3335f4c
+m2 = RetirementModel();
+
+# ╔═╡ 7f188890-8104-4168-ab5b-4f10ffebe5d6
+df2 = solve_df(m2);
+
+# ╔═╡ 0e6bb6da-c574-4a38-8c7a-530617672480
+md"""
+👉 Interpret the diagrams below.
+"""
+
+# ╔═╡ 41546b84-a1d3-4df2-a74f-17bd84db51d1
+md"""
+- high wealth: household chooses to retire
+- intermediate wealth: household saves in order to reach retirement wealth threshold in the future
+- low wealth: household never reaches retirement threshold because $\dot{a} 0$
+"""
+
+# ╔═╡ 2160548c-6ce7-4585-b834-925b7f31ebc7
+let
+
+	figure = (; resolution = (600, 300))
+	
+	@chain df2 begin
+		stack([:v_star, :v])
+		data(_) * mapping(:a, :value, color = :variable => nonnumeric) * visual(Lines)
+		draw(; figure)
+	end
+
+end
+
+# ╔═╡ 2e6992df-db62-425e-b4b4-4f8e30ced0ae
+@chain df2 begin
+	stack([:c, :ȧ, :action])
+	data(_) * mapping(:a, :value, layout = :variable) * visual(Lines)
+	draw(; facet = (linkyaxes = false, ), legend = (position = :top, titleposition = :left))
+end
+
+# ╔═╡ b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
+md"""
+# Appendix
+"""
+
+# ╔═╡ 7513b208-c92a-43f3-9b00-439a1f49ded8
 md"""
 ## Imported packages
 """
 
-# ╔═╡ 1392f788-73b5-4733-b1d3-4fb5cc1c8c78
+# ╔═╡ 3836dcce-1b4e-4e2c-98a4-2a8d41e70625
 TableOfContents()
 
-# ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
-using PlutoUI: TableOfContents
+# ╔═╡ 52885681-b577-49a2-b8a1-7965e68b6b17
+using PlutoUI
 
-# ╔═╡ 9df5eb89-7ff6-4749-b3c1-4199e22d1d07
+# ╔═╡ 89688b7b-aea5-4551-b9f3-f14d9821d0de
 using AlgebraOfGraphics, CairoMakie
 
-# ╔═╡ b9db33eb-bb0c-4510-8c7e-2aad8b30de5e
-using AlgebraOfGraphics: draw
+# ╔═╡ 2b07a251-25b7-4dd8-ae6e-4765a9306e2e
+using Parameters
 
-# ╔═╡ dfa54f23-8141-4270-8344-08975d90322d
-using DataFrameMacros
+# ╔═╡ 40a8b311-b518-4bd9-b89d-4c74b0279e68
+using LinearAlgebra
 
-# ╔═╡ 719dce77-eb0f-4ebb-b6c5-eb8911e842a4
-using Chain: @chain
+# ╔═╡ 1d6b41db-2298-42a6-a226-1bbf8f364cf1
+using SparseArrays
 
-# ╔═╡ d730d979-21ae-4c00-820f-b481b8b5cd4a
+# ╔═╡ 4c7d813f-79e9-4719-b68e-987494ac2c74
+using LCPsolve
+
+# ╔═╡ 018818eb-8e27-42f9-bdce-89ffb0c3a35c
 using DataFrames
 
-# ╔═╡ 6b8b0739-af1a-4ee9-89f1-291afdc47980
-using QuantEcon
+# ╔═╡ 8b738d67-96b8-4d12-99c9-46825cdaef1a
+using Chain: @chain
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -488,21 +633,21 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
-DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-NonparametricRegression = "db432338-e110-4b7a-9c53-0ace38eb8f7f"
+LCPsolve = "2a7bdd54-bc59-11e8-11d9-476dcad269f6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 AlgebraOfGraphics = "~0.6.14"
 CairoMakie = "~0.10.4"
 Chain = "~0.5.0"
-DataFrameMacros = "~0.4.1"
 DataFrames = "~1.5.0"
-NonparametricRegression = "~0.2.1"
+LCPsolve = "~0.1.1"
+Parameters = "~0.12.3"
 PlutoUI = "~0.7.50"
-QuantEcon = "~0.16.4"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -511,7 +656,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.0-rc2"
 manifest_format = "2.0"
-project_hash = "de258d8f9e615a279dd4e82ad5bd269013b1bda0"
+project_hash = "8ede4b5a8f58345e565b2f388e6e615051561505"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -560,34 +705,6 @@ version = "0.4.1"
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.1"
 
-[[deps.ArnoldiMethod]]
-deps = ["LinearAlgebra", "Random", "StaticArrays"]
-git-tree-sha1 = "62e51b39331de8911e4a7ff6f5aaf38a5f4cc0ae"
-uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
-version = "0.2.0"
-
-[[deps.ArrayInterface]]
-deps = ["Adapt", "LinearAlgebra", "Requires", "SnoopPrecompile", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "38911c7737e123b28182d89027f4216cfc8a9da7"
-uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "7.4.3"
-
-    [deps.ArrayInterface.extensions]
-    ArrayInterfaceBandedMatricesExt = "BandedMatrices"
-    ArrayInterfaceBlockBandedMatricesExt = "BlockBandedMatrices"
-    ArrayInterfaceCUDAExt = "CUDA"
-    ArrayInterfaceGPUArraysCoreExt = "GPUArraysCore"
-    ArrayInterfaceStaticArraysCoreExt = "StaticArraysCore"
-    ArrayInterfaceTrackerExt = "Tracker"
-
-    [deps.ArrayInterface.weakdeps]
-    BandedMatrices = "aae01518-5342-5314-be14-df237901396f"
-    BlockBandedMatrices = "ffab5731-97b5-5995-9138-79e8c1846df0"
-    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-    GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
-    StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
-    Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
-
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 
@@ -611,12 +728,6 @@ version = "0.4.6"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
-
-[[deps.BenchmarkTools]]
-deps = ["JSON", "Logging", "Printf", "Profile", "Statistics", "UUIDs"]
-git-tree-sha1 = "d9a9701b899b30332bbcb3e1679c41cce81fb0e8"
-uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-version = "1.3.2"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -667,18 +778,6 @@ git-tree-sha1 = "c6d890a52d2c4d55d326439580c3b8d0875a77d9"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 version = "1.15.7"
 
-[[deps.CodecBzip2]]
-deps = ["Bzip2_jll", "Libdl", "TranscodingStreams"]
-git-tree-sha1 = "2e62a725210ce3c3c2e1a3080190e7ca491f18d7"
-uuid = "523fee87-0ab8-5b00-afb7-3ecf72e48cfd"
-version = "0.7.2"
-
-[[deps.CodecZlib]]
-deps = ["TranscodingStreams", "Zlib_jll"]
-git-tree-sha1 = "9c209fb7536406834aa938fb149964b985de6c83"
-uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
-version = "0.7.1"
-
 [[deps.ColorBrewer]]
 deps = ["Colors", "JSON", "Test"]
 git-tree-sha1 = "61c5334f33d91e570e1d0c3eb5465835242582c4"
@@ -708,12 +807,6 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "fc08e5930ee9a4e03f84bfb5211cb54e7769758a"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.10"
-
-[[deps.CommonSubexpressions]]
-deps = ["MacroTools", "Test"]
-git-tree-sha1 = "7b8a93dba8af7e3b42fecabf646260105ac373f7"
-uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
-version = "0.3.0"
 
 [[deps.Compat]]
 deps = ["UUIDs"]
@@ -751,22 +844,10 @@ git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
 uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 version = "4.1.1"
 
-[[deps.DSP]]
-deps = ["Compat", "FFTW", "IterTools", "LinearAlgebra", "Polynomials", "Random", "Reexport", "SpecialFunctions", "Statistics"]
-git-tree-sha1 = "da8b06f89fce9996443010ef92572b193f8dca1f"
-uuid = "717857b8-e6f2-59f4-9121-6e50c889abd2"
-version = "0.7.8"
-
 [[deps.DataAPI]]
 git-tree-sha1 = "e8119c1a33d267e16108be441a287a6981ba1630"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.14.0"
-
-[[deps.DataFrameMacros]]
-deps = ["DataFrames", "MacroTools"]
-git-tree-sha1 = "5275530d05af21f7778e3ef8f167fb493999eea1"
-uuid = "75880514-38bc-4a95-a458-c2aea5a3a702"
-version = "0.4.1"
 
 [[deps.DataFrames]]
 deps = ["Compat", "DataAPI", "Future", "InlineStrings", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Random", "Reexport", "SentinelArrays", "SnoopPrecompile", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
@@ -794,18 +875,6 @@ deps = ["Indexing", "Random", "Serialization"]
 git-tree-sha1 = "e82c3c97b5b4ec111f3c1b55228cebc7510525a2"
 uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 version = "0.3.25"
-
-[[deps.DiffResults]]
-deps = ["StaticArraysCore"]
-git-tree-sha1 = "782dd5f4561f5d267313f23853baaaa4c52ea621"
-uuid = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
-version = "1.1.0"
-
-[[deps.DiffRules]]
-deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialFunctions"]
-git-tree-sha1 = "a4ad7ef19d2cdc2eff57abbbe68032b1cd0bd8f8"
-uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
-version = "1.13.0"
 
 [[deps.Distances]]
 deps = ["LinearAlgebra", "SparseArrays", "Statistics", "StatsAPI"]
@@ -904,12 +973,6 @@ git-tree-sha1 = "fc86b4fd3eff76c3ce4f5e96e2fdfa6282722885"
 uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
 version = "1.0.0"
 
-[[deps.FiniteDiff]]
-deps = ["ArrayInterface", "LinearAlgebra", "Requires", "Setfield", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "03fcb1c42ec905d15b305359603888ec3e65f886"
-uuid = "6a86dc24-6348-571c-b903-95158fe2bd41"
-version = "2.19.0"
-
 [[deps.FixedPointNumbers]]
 deps = ["Statistics"]
 git-tree-sha1 = "335bfdceacc84c5cdf16aadc768aa5ddfc5383cc"
@@ -927,16 +990,6 @@ deps = ["Printf"]
 git-tree-sha1 = "8339d61043228fdd3eb658d86c926cb282ae72a8"
 uuid = "59287772-0a20-5a39-b81b-1366585eb4c0"
 version = "0.4.2"
-
-[[deps.ForwardDiff]]
-deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "LinearAlgebra", "LogExpFunctions", "NaNMath", "Preferences", "Printf", "Random", "SpecialFunctions"]
-git-tree-sha1 = "00e252f4d706b3d55a8863432e742bf5717b498d"
-uuid = "f6369f11-7733-5829-9624-2563aa707210"
-version = "0.10.35"
-weakdeps = ["StaticArrays"]
-
-    [deps.ForwardDiff.extensions]
-    ForwardDiffStaticArraysExt = "StaticArrays"
 
 [[deps.FreeType]]
 deps = ["CEnum", "FreeType2_jll"]
@@ -1013,12 +1066,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "344bf40dcab1073aca04aa0df4fb092f920e4011"
 uuid = "3b182d85-2403-5c21-9c21-1e1f0cc25472"
 version = "1.3.14+0"
-
-[[deps.Graphs]]
-deps = ["ArnoldiMethod", "Compat", "DataStructures", "Distributed", "Inflate", "LinearAlgebra", "Random", "SharedArrays", "SimpleTraits", "SparseArrays", "Statistics"]
-git-tree-sha1 = "1cf1d7dcb4bc32d7b4a5add4232db3750c27ecb4"
-uuid = "86223c79-3864-5bf0-83f7-82e725a168b6"
-version = "1.8.0"
 
 [[deps.GridLayoutBase]]
 deps = ["GeometryBasics", "InteractiveUtils", "Observables"]
@@ -1118,11 +1165,6 @@ git-tree-sha1 = "9cc2baf75c6d09f9da536ddf58eb2f29dedaf461"
 uuid = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
 version = "1.4.0"
 
-[[deps.IntegerMathUtils]]
-git-tree-sha1 = "f366daebdfb079fd1fe4e3d560f99a0c892e15bc"
-uuid = "18e54dd8-cb9d-406c-a71d-865a43cbb235"
-version = "0.1.0"
-
 [[deps.IntelOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "0cb9352ef2e01574eeebdb102948a58740dcaf83"
@@ -1207,6 +1249,12 @@ git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.1+0"
 
+[[deps.LCPsolve]]
+deps = ["LinearAlgebra", "Printf", "SparseArrays"]
+git-tree-sha1 = "e0908a7b7cc3897dcc54096c0038b06ea09fd895"
+uuid = "2a7bdd54-bc59-11e8-11d9-476dcad269f6"
+version = "0.1.1"
+
 [[deps.LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "e5b909bcf985c5e2605737d2ce278ed791b89be6"
@@ -1285,12 +1333,6 @@ git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
-[[deps.LineSearches]]
-deps = ["LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "Printf"]
-git-tree-sha1 = "7bbea35cec17305fc70a0e5b4641477dc0789d9d"
-uuid = "d3d80556-e9d4-5f37-9878-2ab0fcc64255"
-version = "7.2.0"
-
 [[deps.LinearAlgebra]]
 deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -1363,18 +1405,6 @@ git-tree-sha1 = "1d9bc5c1a6e7ee24effb93f175c9342f9154d97f"
 uuid = "7eb4fadd-790c-5f42-8a69-bfa0b872bfbf"
 version = "1.2.0"
 
-[[deps.MathOptInterface]]
-deps = ["BenchmarkTools", "CodecBzip2", "CodecZlib", "DataStructures", "ForwardDiff", "JSON", "LinearAlgebra", "MutableArithmetics", "NaNMath", "OrderedCollections", "PrecompileTools", "Printf", "SparseArrays", "SpecialFunctions", "Test", "Unicode"]
-git-tree-sha1 = "8e054675d393ce5866dcdd6a071075e25e21a39c"
-uuid = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
-version = "1.15.1"
-
-[[deps.MathProgBase]]
-deps = ["LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "9abbe463a1e9fc507f12a69e7f29346c2cdc472c"
-uuid = "fdba3010-5040-5b88-9595-932c9decdf73"
-version = "0.7.8"
-
 [[deps.MathTeXEngine]]
 deps = ["AbstractTrees", "Automa", "DataStructures", "FreeTypeAbstraction", "GeometryBasics", "LaTeXStrings", "REPL", "RelocatableFolders", "Test", "UnicodeFun"]
 git-tree-sha1 = "8f52dbaa1351ce4cb847d95568cb29e62a307d93"
@@ -1411,30 +1441,6 @@ version = "0.3.4"
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2022.10.11"
 
-[[deps.MutableArithmetics]]
-deps = ["LinearAlgebra", "SparseArrays", "Test"]
-git-tree-sha1 = "3295d296288ab1a0a2528feb424b854418acff57"
-uuid = "d8a4904e-b15c-11e9-3269-09a3773c0cb0"
-version = "1.2.3"
-
-[[deps.NLSolversBase]]
-deps = ["DiffResults", "Distributed", "FiniteDiff", "ForwardDiff"]
-git-tree-sha1 = "a0b464d183da839699f4c79e7606d9d186ec172c"
-uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
-version = "7.8.3"
-
-[[deps.NLopt]]
-deps = ["MathOptInterface", "MathProgBase", "NLopt_jll"]
-git-tree-sha1 = "5a7e32c569200a8a03c3d55d286254b0321cd262"
-uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
-version = "0.6.5"
-
-[[deps.NLopt_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "9b1f15a08f9d00cdb2761dcfa6f453f5d0d6f973"
-uuid = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
-version = "2.7.1+0"
-
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
 git-tree-sha1 = "0877504529a3e5c3343c6f8b4c0381e57e4387e4"
@@ -1450,12 +1456,6 @@ version = "1.1.0"
 [[deps.NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
-
-[[deps.NonparametricRegression]]
-deps = ["DocStringExtensions", "LinearAlgebra", "StaticArrays", "Statistics"]
-git-tree-sha1 = "57348694d390daf4125f367e6157f9c8ad8b39b6"
-uuid = "db432338-e110-4b7a-9c53-0ace38eb8f7f"
-version = "0.2.1"
 
 [[deps.Observables]]
 git-tree-sha1 = "6862738f9796b3edc1c09d0890afce4eca9e7e93"
@@ -1507,12 +1507,6 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pk
 git-tree-sha1 = "13652491f6856acfd2db29360e1bbcd4565d04f1"
 uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
 version = "0.5.5+0"
-
-[[deps.Optim]]
-deps = ["Compat", "FillArrays", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "PositiveFactorizations", "Printf", "SparseArrays", "StatsBase"]
-git-tree-sha1 = "a89b11f0f354f06099e4001c151dffad7ebab015"
-uuid = "429524aa-4258-5aef-a3af-852621145aeb"
-version = "1.7.5"
 
 [[deps.Opus_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1606,29 +1600,11 @@ git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
 uuid = "647866c9-e3ac-4575-94e7-e3d426903924"
 version = "0.1.2"
 
-[[deps.Polynomials]]
-deps = ["LinearAlgebra", "RecipesBase"]
-git-tree-sha1 = "434f66dfbb15606c49a7a21dc670119fdf729fa9"
-uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
-version = "3.2.10"
-weakdeps = ["ChainRulesCore", "MakieCore", "MutableArithmetics"]
-
-    [deps.Polynomials.extensions]
-    PolynomialsChainRulesCoreExt = "ChainRulesCore"
-    PolynomialsMakieCoreExt = "MakieCore"
-    PolynomialsMutableArithmeticsExt = "MutableArithmetics"
-
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]
 git-tree-sha1 = "a6062fe4063cdafe78f4a0a81cfffb89721b30e7"
 uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
 version = "1.4.2"
-
-[[deps.PositiveFactorizations]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "17275485f373e6673f7e7f97051f703ed5b15b20"
-uuid = "85a6dd25-e78a-55b7-8502-1745935b8125"
-version = "0.2.4"
 
 [[deps.PrecompileTools]]
 deps = ["Preferences"]
@@ -1648,19 +1624,9 @@ git-tree-sha1 = "548793c7859e28ef026dba514752275ee871169f"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 version = "2.2.3"
 
-[[deps.Primes]]
-deps = ["IntegerMathUtils"]
-git-tree-sha1 = "311a2aa90a64076ea0fac2ad7492e914e6feeb81"
-uuid = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
-version = "0.5.3"
-
 [[deps.Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-
-[[deps.Profile]]
-deps = ["Printf"]
-uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
 [[deps.ProgressMeter]]
 deps = ["Distributed", "Printf"]
@@ -1692,12 +1658,6 @@ git-tree-sha1 = "6ec7ac8412e83d57e313393220879ede1740f9ee"
 uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 version = "2.8.2"
 
-[[deps.QuantEcon]]
-deps = ["DSP", "DataStructures", "Distributions", "FFTW", "Graphs", "LinearAlgebra", "Markdown", "NLopt", "Optim", "Pkg", "Primes", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "Test"]
-git-tree-sha1 = "0069c628273c7a3b793383c7dc5f9744d31dfe28"
-uuid = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
-version = "0.16.4"
-
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
@@ -1720,12 +1680,6 @@ weakdeps = ["FixedPointNumbers"]
 
     [deps.Ratios.extensions]
     RatiosFixedPointNumbersExt = "FixedPointNumbers"
-
-[[deps.RecipesBase]]
-deps = ["PrecompileTools"]
-git-tree-sha1 = "5c3d09cc4f31f5fc6af001c250bf1278733100ff"
-uuid = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
-version = "1.3.4"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -2160,78 +2114,55 @@ version = "3.5.0+0"
 
 # ╔═╡ Cell order:
 # ╟─f5450eab-0f9f-4b7f-9b80-992d3c553ba9
-# ╟─93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
-# ╟─4aa065ca-d54c-419a-a31a-7063fbb98a33
-# ╠═ca4b4ec9-99b1-49ad-87dc-cf8a983dac06
-# ╠═f983a093-d397-43fe-8951-4ad1e795df3c
-# ╟─b4129537-81f6-441c-b1e4-99306afc227e
-# ╟─bddb7831-b3c1-45c4-a8c2-e9ee38c92f87
-# ╠═9be81a15-7117-4911-8254-4848df50c059
-# ╠═8f308735-9694-4b24-bc35-fdf01cb6f942
-# ╠═59d7c6f7-4704-4866-9280-22d37b328499
-# ╠═1b0e732d-38a4-4af3-822e-3cb1b04e0629
-# ╠═62184229-03f6-40d8-981e-4d39a74c75d7
-# ╠═50029ced-5ab0-4458-ad5a-31b8277b428a
-# ╟─146fd4a6-b743-4c22-a3ed-15c5bdaac7a1
-# ╠═50118426-20c9-43b9-9d13-4e524853f0c9
-# ╟─843f658c-0e26-4eed-88dc-3946e97e5f6f
-# ╠═0a12f73a-5286-4146-8a20-00ed4aaaec72
-# ╠═0d593683-3b35-4740-a510-517a4dd3e83b
-# ╟─0e944330-4a7b-4d75-a55e-57d7acce58b2
-# ╠═c769b390-028e-490b-b50d-07c49a550a0a
-# ╟─675d57e2-9c6f-4619-aa25-664614bc4bbc
-# ╠═ab76ee26-297d-4ee4-b353-7b6c3a135277
-# ╠═788b8a0a-d206-41db-b012-f04205b67445
-# ╟─1734bd7b-8af1-46f3-a4af-1616c0190775
-# ╠═1b3d36ab-adae-40be-a14c-7ea6d9381a31
-# ╟─e7f75845-242f-45c6-9b33-11fd2bacb478
-# ╟─2402fba6-80e1-4fe4-8873-7a62ce6f9427
-# ╠═19376876-cb3c-4f33-bb08-3c3aa2939d48
-# ╠═0bf278e7-25f8-4830-8162-67e6d1113b3b
-# ╠═25ea5835-79f7-4e48-9d31-cee7f96983bf
-# ╠═f5478ce2-6d3f-4b3f-9eb3-2b6656561bdc
-# ╟─af81921e-d454-4341-979d-752f5e4540b7
-# ╠═54296efa-334f-4d2a-9190-e18156bf0200
-# ╠═290dfc4b-1307-43ad-b7bb-5680abc0579a
-# ╠═650d729b-d7ab-46f4-b3fb-0643d291dd22
-# ╠═94c859ff-28c2-4fef-bcc5-9e733e1a8697
-# ╠═36a86f5b-0574-43a6-9da4-9f774d55bf06
-# ╟─300018cf-fdb0-4508-9bb1-347f77076f0c
-# ╠═ad3066c1-8895-43f2-9459-ae2972a1bc27
-# ╠═6bf33bd0-14a8-48db-8331-6c6f0b1812b3
-# ╠═ef09eb29-095a-4549-9c0a-f008594ad655
-# ╠═be25e1c5-a254-4e5f-8306-57e1075f6035
-# ╠═01fd1ea1-ac40-4db4-a159-72abe83e265f
-# ╠═6320138e-017e-47b8-83ec-6645db05d41c
-# ╟─42969849-1c6f-4192-8cf9-76a8e2c33bcd
-# ╠═9cc038ec-e359-408f-a42e-68f5d8b7c314
-# ╟─b7a6d0dc-9fd7-4319-ac91-4d8994d66a96
-# ╟─25dc125f-10ad-44b1-8eea-5a7fe2e03cce
-# ╟─2c93d5a7-40bd-4535-9985-420533c12666
-# ╠═681c557a-3435-485d-a426-f56ed70f1f42
-# ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
-# ╠═96b42aa6-8700-42d1-a4a1-949595549e4b
-# ╠═ce25751c-949a-4ad3-a572-679f403ccb98
-# ╠═d60367db-cf92-4c0a-aea4-eddb6552e2c8
-# ╠═e3930baf-0560-4994-a637-7cb1923ce33c
-# ╠═32f46a06-0832-479e-a00b-346cab1f8f5f
-# ╠═880636b2-62ec-4729-88cb-0a2004bc18c4
-# ╠═df975df6-90db-408b-a908-52fb4b0637f6
-# ╠═4fa93659-4a83-4874-8595-ca59c16faa0e
-# ╠═f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
-# ╟─63119b9a-874a-4be4-8c1e-0207787f72e7
-# ╠═9ac6a8fb-c082-4f6e-a51e-d820a0cd5bb9
-# ╠═a60dacf4-c279-482d-ab22-b1fc11480a3d
-# ╠═d2764563-ab91-4dc1-8cd6-840ae44c4a1f
-# ╠═0b63da71-f34f-4152-ab9e-d3b4f9ad777e
-# ╟─e099f86b-3b8e-4783-9c80-84733cf174df
-# ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
-# ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
-# ╠═9df5eb89-7ff6-4749-b3c1-4199e22d1d07
-# ╠═b9db33eb-bb0c-4510-8c7e-2aad8b30de5e
-# ╠═dfa54f23-8141-4270-8344-08975d90322d
-# ╠═719dce77-eb0f-4ebb-b6c5-eb8911e842a4
-# ╠═d730d979-21ae-4c00-820f-b481b8b5cd4a
-# ╠═6b8b0739-af1a-4ee9-89f1-291afdc47980
+# ╟─c3bf5880-f169-11ec-20e3-bf9092156abf
+# ╟─23df23ca-df80-4789-ac79-fc777d258beb
+# ╟─826ee178-6423-470f-abb8-74f808baa26f
+# ╟─698dc1ed-87d3-4383-aff3-f50b0d2101db
+# ╠═a4d2a937-efe4-47a5-bd67-8c63e24eabeb
+# ╠═16dabb4f-5de2-491f-8cd2-a4cc52afeecf
+# ╟─95c68a25-05a8-4485-ac66-6af85a0af0f9
+# ╟─eee0de53-9e36-42f4-88d9-7a8ee25ea13a
+# ╟─0834be20-1a8d-4498-9019-ebfcc4769711
+# ╟─7b2a66b2-cec7-40c2-b90e-e8064d2e6be8
+# ╟─e461b94e-703b-43bf-9e30-56c2b0e2ee3e
+# ╟─953f1f64-f8a7-4ca4-bf23-39ccf74db272
+# ╠═588e0247-65ef-4d98-88f7-b80a76b695ce
+# ╠═0923cba9-0286-459f-aa6a-f0df0b3196c7
+# ╠═e701b4c7-2e55-443e-a37e-34b10c831095
+# ╟─dc7da594-5213-42da-9962-2b7f899cb192
+# ╠═3f509c06-dfb6-4373-ae94-1aef74578ffa
+# ╠═abd5e562-03ff-43a4-b4d0-146f2cf69717
+# ╟─edf44a54-baeb-4139-9545-eb9fbb89d561
+# ╟─054a8b12-0598-4a6b-b6a5-8fb128bd5dc6
+# ╠═cbfc715f-83ff-4700-b49f-ce623b43b7db
+# ╟─231ce8ae-1219-48a5-b829-a07093322221
+# ╟─99d92b37-1bfe-44a6-ab12-5f511c97d6a3
+# ╠═ea368b73-478a-4029-844a-e1beb759fcff
+# ╟─48eac71a-62bb-40cf-bb6b-de36f3656045
+# ╟─f10488d3-6bb4-4b34-9e7d-04d961fa31b4
+# ╠═67bb6a7a-df20-49ec-98cf-ed87e2381b87
+# ╟─048b0bb9-09b6-49d4-9723-4572e3f24de5
+# ╟─20433385-479c-4d92-b8d2-fc1d768e7d30
+# ╟─f2c23a3f-0544-40ab-9b72-6331a0c5ee16
+# ╠═33734e2e-a197-4c02-96e6-720996cb8108
+# ╠═21be9783-5006-4ba9-be5d-4d7c3cbde54b
+# ╟─2ae35394-380f-475a-ba5d-c2b8b3dcb81c
+# ╠═e522913b-7bf4-4239-addf-7562c3335f4c
+# ╠═7f188890-8104-4168-ab5b-4f10ffebe5d6
+# ╟─0e6bb6da-c574-4a38-8c7a-530617672480
+# ╟─41546b84-a1d3-4df2-a74f-17bd84db51d1
+# ╠═2160548c-6ce7-4585-b834-925b7f31ebc7
+# ╠═2e6992df-db62-425e-b4b4-4f8e30ced0ae
+# ╟─b25c1c0b-c05e-41cd-ae6e-2740cb6aac1d
+# ╟─7513b208-c92a-43f3-9b00-439a1f49ded8
+# ╠═3836dcce-1b4e-4e2c-98a4-2a8d41e70625
+# ╠═52885681-b577-49a2-b8a1-7965e68b6b17
+# ╠═89688b7b-aea5-4551-b9f3-f14d9821d0de
+# ╠═2b07a251-25b7-4dd8-ae6e-4765a9306e2e
+# ╠═40a8b311-b518-4bd9-b89d-4c74b0279e68
+# ╠═1d6b41db-2298-42a6-a226-1bbf8f364cf1
+# ╠═4c7d813f-79e9-4719-b68e-987494ac2c74
+# ╠═018818eb-8e27-42f9-bdce-89ffb0c3a35c
+# ╠═8b738d67-96b8-4d12-99c9-46825cdaef1a
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
