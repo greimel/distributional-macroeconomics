@@ -6,7 +6,7 @@ using InteractiveUtils
 
 # ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 md"""
-`mpcs-aiyagari.jl` | **Version 1.1** | *last updated: May 1 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`mpcs-aiyagari.jl` | **Version 1.1** | *last updated: May 2 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
@@ -128,11 +128,8 @@ md"""
 Since we will use the slope of the policy function to analyze the MPC, the jumps are very inconvenient. Therefore, you will work with the smoothed version of the consumption policy which is saved in the ```c_sm``` column of the ```results2``` data frame.
 """
 
-# ╔═╡ e336fb5d-89ed-4e6c-9480-02d3d5df9216
-#using KernelEstimator: npr, localconstant, locallinear, gaussiankernel
-
 # ╔═╡ ab76ee26-297d-4ee4-b353-7b6c3a135277
-using NonparametricRegression # https://github.com/tbeason/NonparametricRegression.jl
+using NonparametricRegression
 
 # ╔═╡ 788b8a0a-d206-41db-b012-f04205b67445
 begin
@@ -140,31 +137,31 @@ begin
 	results.c_sm = zeros(length(ss.states))
 	results_z = groupby(results, :z)
 	rz1 = results_z[1]
-	rz1.c_sm = npr(
+	rz1.c_sm = npregress(
 		rz1.k, 
 		rz1.consumption, 
-		xeval=rz1.k, 
-		reg=locallinear, 
-		kernel=gaussiankernel, 
-		h=0.08
+		rz1.k, 
+		0.08;
+		method=:lc, 
+		kernelfun=NormalKernel
 	)
 	rz2 = results_z[2]
-	rz2.c_sm[1:n_k÷5] = npr(
+	rz2.c_sm[1:n_k÷5] = npregress(
 		rz2.k, 
 		rz2.consumption, 
-		xeval=rz2.k[1:n_k÷5], 
-		reg=locallinear, 
-		kernel=gaussiankernel, 
-		h=0.04 
+		rz2.k[1:n_k÷5], 
+		0.04;
+		method=:lc, 
+		kernelfun=NormalKernel
 		# use smaller bandwidth where curvature of consumption function is high
 	)
-	rz2.c_sm[n_k÷5+1:end] = npr(
+	rz2.c_sm[n_k÷5+1:end] = npregress(
 		rz2.k, 
 		rz2.consumption, 
-		xeval=rz2.k[n_k÷5+1:end], 
-		reg=locallinear, 
-		kernel=gaussiankernel, 
-		h=0.08
+		rz2.k[n_k÷5+1:end], 
+		0.08;
+		method=:lc, 
+		kernelfun=NormalKernel
 	)
 	results2 = DataFrame(results_z)
 end;
@@ -207,11 +204,6 @@ Hint: It is most convenient to consider a transitory income shock of the size $d
 
 # ╔═╡ f5478ce2-6d3f-4b3f-9eb3-2b6656561bdc
 # here ...
-
-# ╔═╡ 4e7573ec-f161-44d0-9786-4cc74f67457b
-md"""
-Your answer goes here ...
-"""
 
 # ╔═╡ af81921e-d454-4341-979d-752f5e4540b7
 md"""
@@ -764,9 +756,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "13027f188d26206b9e7b863036f87d2f2e7d013a"
+git-tree-sha1 = "180538ef4e3aa02b01413055a7a9e8b6047663e1"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.87"
+version = "0.25.88"
 
     [deps.Distributions.extensions]
     DistributionsChainRulesCoreExt = "ChainRulesCore"
@@ -1856,9 +1848,9 @@ version = "1.3.0"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
-git-tree-sha1 = "51cdf1afd9d78552e7a08536930d7abc3b288a5c"
+git-tree-sha1 = "8cc7a5385ecaa420f0b3426f9b0135d0df0638ed"
 uuid = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
-version = "0.7.1"
+version = "0.7.2"
 
 [[deps.StringManipulation]]
 git-tree-sha1 = "46da2434b41f41ac3594ee9816ce5541c6096123"
@@ -2124,7 +2116,6 @@ version = "3.5.0+0"
 # ╟─0e944330-4a7b-4d75-a55e-57d7acce58b2
 # ╠═c769b390-028e-490b-b50d-07c49a550a0a
 # ╟─675d57e2-9c6f-4619-aa25-664614bc4bbc
-# ╠═e336fb5d-89ed-4e6c-9480-02d3d5df9216
 # ╠═ab76ee26-297d-4ee4-b353-7b6c3a135277
 # ╠═788b8a0a-d206-41db-b012-f04205b67445
 # ╟─1734bd7b-8af1-46f3-a4af-1616c0190775
@@ -2135,7 +2126,6 @@ version = "3.5.0+0"
 # ╠═0bf278e7-25f8-4830-8162-67e6d1113b3b
 # ╠═25ea5835-79f7-4e48-9d31-cee7f96983bf
 # ╠═f5478ce2-6d3f-4b3f-9eb3-2b6656561bdc
-# ╠═4e7573ec-f161-44d0-9786-4cc74f67457b
 # ╟─af81921e-d454-4341-979d-752f5e4540b7
 # ╠═54296efa-334f-4d2a-9190-e18156bf0200
 # ╠═290dfc4b-1307-43ad-b7bb-5680abc0579a

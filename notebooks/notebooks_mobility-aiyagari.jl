@@ -241,8 +241,7 @@ md"""
  """
 
 # ╔═╡ a8f435a6-0f85-4c7f-851c-ff95f5ebc630
-# ╠═╡ disabled = true
-#=╠═╡
+#=
 begin
 	results = QuantEcon.solve(ddp, PFI)
 	
@@ -258,10 +257,10 @@ begin
 	end
 	
 end
-  ╠═╡ =#
+=#
 
 # ╔═╡ 15c68ced-3db8-4042-bde1-7c7e52ecbde2
-#=╠═╡
+#=
 begin
 	resolution = (800, 900)
 	fig = Figure(; resolution)
@@ -292,7 +291,7 @@ begin
 
 	fig
 end
-  ╠═╡ =#
+=#
 
 # ╔═╡ f8f088da-50b2-44ee-b714-cd0ddf0da37d
 md"""
@@ -2024,7 +2023,7 @@ version = "3.5.0+0"
 # ╟─e90cdbed-a880-4087-ba6b-b2190f648159
 # ╟─a871cb3d-02ed-4541-a757-2e2410efdd26
 # ╠═a8f435a6-0f85-4c7f-851c-ff95f5ebc630
-# ╟─15c68ced-3db8-4042-bde1-7c7e52ecbde2
+# ╠═15c68ced-3db8-4042-bde1-7c7e52ecbde2
 # ╟─f8f088da-50b2-44ee-b714-cd0ddf0da37d
 # ╠═16601177-9dc0-4a12-b603-b182c8e41996
 # ╟─e099f86b-3b8e-4783-9c80-84733cf174df
