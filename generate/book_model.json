@@ -170,6 +170,24 @@
                 "notebook_path": "notebooks/mobility-aiyagari.jl",
                 "video_id": "",
                 "preview_image_url": ""
+            },
+            {
+                "name": "Tutorial 2",
+                "notebook_path": "notebooks/welfare-huggett.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Tutorial 3A",
+                "notebook_path": "notebooks/continuous-time-moll-solution.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Tutorial 3B",
+                "notebook_path": "notebooks/stopping-time-problem-solution.jl",
+                "video_id": "",
+                "preview_image_url": ""
             }
         ]
     }
