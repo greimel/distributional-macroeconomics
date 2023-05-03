@@ -21,6 +21,12 @@
                 "preview_image_url": ""
             },
             {
+                "name": "RBC, Imrohoroglu (1989) as Markov Chains",
+                "notebook_path": "notebooks/rbc-to-imrohoroglu.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "Bewley-Huggett-Aiyagari",
                 "notebook_path": "notebooks/aiyagari.jl",
                 "video_id": "",

@@ -14,6 +14,9 @@ macro bind(def, element)
     end
 end
 
+# ╔═╡ 515aaa65-6840-4948-a651-c0bc40eacac8
+using SparseArrays
+
 # ╔═╡ 123ef0b2-e191-4e10-abe3-df3ced4d6f4c
 using QuantEcon
 
@@ -46,7 +49,7 @@ using LaTeXStrings
 
 # ╔═╡ d653e216-e8cd-11ed-0ecc-27e45fce5065
 md"""
-`rbc-to-aiyagari.jl` | **Version 0.1** | *last updated: May 2 2023*
+`rbc-to-imrohoroglu.jl` | **Version 0.1** | *last updated: May 2 2023*
 """
 
 # ╔═╡ 389f3a61-570f-4255-a5ea-49451b467873
@@ -184,15 +187,224 @@ md"""
 ## 2. The RBC Model: A Sample Path of a Markov Chain
 """
 
+# ╔═╡ df31e48a-9c5f-4ed9-9f5d-1185d6e25c0d
+md"""
+### Set up the Dynamic Program
+"""
+
+# ╔═╡ 6c931409-09d9-4d68-8e49-29935d45f6c3
+z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
+
+# ╔═╡ 1f26bba7-d7ea-4b22-bd8e-74895b8d6771
+r = 0.02
+
+# ╔═╡ 3a9fc98e-4917-4fe6-8d0b-1d88a80c3a67
+q(r) = 1/(1+r)
+
+# ╔═╡ 8a14dd50-946a-4c97-bfb5-f3e096ce6e0d
+prices = (q = q(r), w = 1.0, Δr = r/2)
+
+# ╔═╡ 91ff2453-4a5e-4b86-8004-31d7f01cbc69
+md"""
+### Solution is a Markov Chain
+"""
+
 # ╔═╡ b65a274d-2dab-444c-802d-e9bae7a76252
 md"""
 ## 3. Bewley-Huggett-Aiyagari: Tracking the Distribution of a Markov Chain
+
+!!! warning "Note"
+    We are not solving for the equilibrium interest rate ``r`` here. So we are in _Partial Equilibrium_ setting of Imrohoroglu (1989).
 """
+
+# ╔═╡ 1fd4c26f-de7d-441e-a2ec-7e37da2bc2ce
+md"""
+### Specify initial distribution
+"""
+
+# ╔═╡ 94c1eb4e-0dd0-41f8-ab88-f1e5f97cbcbc
+@bind _t_soph_ddp_ Slider(0:100, default=0, show_value=true)
 
 # ╔═╡ 9cd7ee6d-dfcb-42a0-b7dc-a5df01b4058a
 md"""
 # Appendix
 """
+
+# ╔═╡ 2c1aab25-7983-4cda-9961-00aff9bca75c
+function Household(; σ = 1.0, β = 0.96,	
+                      u = σ == 1 ? log : x -> (x^(1 - σ) - 1) / (1 - σ))
+	(; β, u)
+end
+
+# ╔═╡ 341b84aa-ee2b-4d4a-8751-c637eb17c973
+hh = Household(σ = 2.0, β = 0.96)
+
+# ╔═╡ 1710a41a-15ce-4e41-be8c-019450e64d17
+function statespace(;
+			k_vals = range(1e-10, 20.0, length = 200),
+			z_chain
+		)
+	states = 
+		[(; k, z) for k ∈ k_vals, z ∈ z_chain.state_values] |> vec
+	states_indices = 
+		[(; k_i, z_i) for k_i ∈ 1:length(k_vals), z_i ∈ 1:length(z_chain.state_values)] |> vec
+    policies = 
+	    [(; k_next) for k_next ∈ k_vals] |> vec
+	policies_indices = 
+	    [(; k_next_i) for k_next_i ∈ 1:length(k_vals)] |> vec
+
+	(; states, states_indices, policies, policies_indices, z_chain)
+end
+
+# ╔═╡ 6a083d99-8d23-4fba-b5e4-342a9f1158e6
+ss = statespace(; k_vals = range(-1., 5., length = 200), z_chain);
+
+# ╔═╡ 66632035-f8ab-4e91-8eac-78f9bf4a2f23
+states = DataFrame(ss.states)
+
+# ╔═╡ 82966154-6905-417c-9784-bb63e33c83f8
+policies = DataFrame(ss.policies)
+
+# ╔═╡ 3ed2e513-f857-42f5-ae84-feccaa1f56e7
+N_ddp = length(ss.states)
+
+# ╔═╡ 08c4f9e8-6e1b-4824-aa85-30886c248a7e
+π₀_ddp = fill(1/N_ddp, N_ddp)
+
+# ╔═╡ d46f1d2a-db65-474b-b6df-55f57751e09c
+function setup_Q!(Q, states_indices, policies_indices, z_chain)
+    for (i_next_state, next) ∈ enumerate(states_indices)
+        for (i_policy, (; k_next_i)) ∈ enumerate(policies_indices)
+            for (i_state, (; z_i)) ∈ enumerate(states_indices)
+                if next.k_i == k_next_i
+                    Q[i_state, i_policy, i_next_state] = z_chain.p[z_i, next.z_i]
+                end
+            end
+        end
+    end
+    return Q
+end
+
+# ╔═╡ da62de88-32ac-4213-a389-c89e7d912beb
+function setup_Q(states_indices, policies_indices, z_chain)
+	Q = zeros(length(states_indices), length(policies_indices), length(states_indices))
+	setup_Q!(Q, states_indices, policies_indices, z_chain)
+	Q
+end
+
+# ╔═╡ e1a88b95-aeff-476c-b6c0-e5faf0074533
+function consumption((; z, k), (; k_next), (; q, w, Δr))
+	if k_next < 0 && Δr > 0
+		r = (1/q - 1) + (k_next < 0) * Δr
+		q = 1/(1+r)
+	end
+	c = w * z + k - q * k_next
+end
+
+# ╔═╡ 0bed6bbc-49a2-45b6-bb76-3d76a4893cd4
+function reward(state, policy, prices, u)
+	c = consumption(state, policy, prices)
+    if c > 0
+		u(c)
+	else
+		-100_000 + 100 * c
+	end
+end
+
+# ╔═╡ a8d044c0-daca-411d-9ef9-dc23e99a28a5
+function setup_R!(R, states, policies, prices, u)
+    for (k_i, policy) ∈ enumerate(policies)
+        for (s_i, state) ∈ enumerate(states)
+            R[s_i, k_i] = reward(state, policy, prices, u)
+        end
+    end
+    return R
+end
+
+# ╔═╡ 9de2a750-42e1-4d10-9dc9-4ae05d665a71
+function setup_R(states, policies, prices, u)
+	R = zeros(length(states), length(policies))
+	setup_R!(R, states, policies, prices, u)
+end
+
+# ╔═╡ 5e0043d2-a6ba-41b7-a051-c048eada441b
+function setup_DDP(household, statespace, prices)
+	(; β, u) = household
+	(; states, policies, states_indices, policies_indices) = statespace
+    
+	R = setup_R(states, policies, prices, u)
+	Q = setup_Q(states_indices, policies_indices, z_chain)
+
+	DiscreteDP(R, Q, β)
+end
+
+# ╔═╡ 4c4c362d-c4e9-41d9-a22b-2dcc69510afc
+ddp = setup_DDP(hh, ss, prices);
+
+# ╔═╡ f0296f9d-948d-4b51-accf-4de26639251f
+results = QuantEcon.solve(ddp, PFI)
+
+# ╔═╡ fa634f37-d3e8-4200-bbfc-b6bdc21be735
+mc_ddp = results.mc
+
+# ╔═╡ 15334cac-f72d-45b0-9b3b-fdef780c313a
+mc_ddp.p |> sparse
+
+# ╔═╡ 9f68abc3-fdc4-484b-bba4-16b2b3f72a87
+path0 = simulate(mc_ddp, 100)
+
+# ╔═╡ 3a3c093d-b4e9-4554-94ed-0f795c1ae088
+let
+	fig = Figure(resolution = (800, 400))
+	path = DataFrame(ss.states[path0])
+	lines(fig[1,1], path.k, axis = (; title = "evolution of capital", xlabel="time"))
+	lines(fig[1,2], path.z, axis = (; title = "evolution of productivity", xlabel="time"))
+
+	fig
+end
+
+# ╔═╡ 8a50b23b-857b-4579-a154-db1d8794e0ea
+barplot(
+	#mc.state_values,
+	vec(π₀_ddp' * mc_ddp.p^_t_soph_ddp_), axis=(; title=latexstring("Cross-sectional distribution at \$t = $_t_soph_ddp_\$"))
+)
+
+# ╔═╡ 2856ddc7-074a-447d-9d91-425ce7e9e35d
+let
+	fig = Figure()
+	ax = Axis(fig[1,1], xlabel = L"time $t$", ylabel = "cross-sectional distribution")
+
+	for t ∈ 0:10
+		barplot!(ax, 
+			#mc.state_values, 
+			vec(π₀_ddp' * mc_ddp.p^t) .* 70, direction = :x, offset = t, color= t == _t_soph_ddp_ ? Makie.wong_colors()[1] : :gray40)
+	end
+
+	fig
+end
+
+# ╔═╡ ecf023f5-559b-4fb9-a147-403d19b5e0d2
+function solve_details0(ddp, states, policies; solver = PFI)
+	results = QuantEcon.solve(ddp, solver)
+
+	df = [DataFrame(states) DataFrame(policies[results.sigma])]
+	df.state = states
+	df.policy = policies[results.sigma]
+	df.π = stationary_distributions(results.mc)[:, 1][1]
+
+	df
+end
+
+# ╔═╡ 0c2379ba-1b8c-4ebb-8408-746d28942580
+function solve_details(ddp, states, policies; solver = PFI)
+	df = solve_details0(ddp, states, policies; solver)
+
+	@chain df begin
+		@transform(:consumption = consumption(:state, :policy, prices))
+		@transform(:saving = :k_next - :k)
+		select!(Not([:state, :policy]))
+	end
+end
 
 # ╔═╡ 313e6081-9b7b-45e4-b8e6-aabbcf30fa46
 md"""
@@ -213,6 +425,7 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
@@ -233,7 +446,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.0-rc2"
 manifest_format = "2.0"
-project_hash = "c0327cf9290b775d74a3099b8fc38aafc94e7082"
+project_hash = "45cbe12be390a33bfd590db0ca05f101435559a6"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1875,7 +2088,7 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═d653e216-e8cd-11ed-0ecc-27e45fce5065
+# ╟─d653e216-e8cd-11ed-0ecc-27e45fce5065
 # ╟─389f3a61-570f-4255-a5ea-49451b467873
 # ╟─c5c3b225-e828-4efa-ac15-ce920d87d8d0
 # ╠═ae982351-ea8a-411d-81bc-e1cfb1591bf7
@@ -1899,8 +2112,42 @@ version = "3.5.0+0"
 # ╟─b0ea845a-f842-4f47-b9b3-3a29ff012216
 # ╟─c14ca8ac-c5d9-4bd2-ad2c-751eb31cea67
 # ╟─b413cac5-6b88-4d70-906b-784df8a8fd44
+# ╟─df31e48a-9c5f-4ed9-9f5d-1185d6e25c0d
+# ╠═341b84aa-ee2b-4d4a-8751-c637eb17c973
+# ╠═6c931409-09d9-4d68-8e49-29935d45f6c3
+# ╠═6a083d99-8d23-4fba-b5e4-342a9f1158e6
+# ╠═4c4c362d-c4e9-41d9-a22b-2dcc69510afc
+# ╠═1f26bba7-d7ea-4b22-bd8e-74895b8d6771
+# ╠═3a9fc98e-4917-4fe6-8d0b-1d88a80c3a67
+# ╠═8a14dd50-946a-4c97-bfb5-f3e096ce6e0d
+# ╟─91ff2453-4a5e-4b86-8004-31d7f01cbc69
+# ╠═f0296f9d-948d-4b51-accf-4de26639251f
+# ╠═fa634f37-d3e8-4200-bbfc-b6bdc21be735
+# ╠═15334cac-f72d-45b0-9b3b-fdef780c313a
+# ╠═9f68abc3-fdc4-484b-bba4-16b2b3f72a87
+# ╟─3a3c093d-b4e9-4554-94ed-0f795c1ae088
+# ╠═66632035-f8ab-4e91-8eac-78f9bf4a2f23
+# ╠═82966154-6905-417c-9784-bb63e33c83f8
+# ╠═515aaa65-6840-4948-a651-c0bc40eacac8
 # ╟─b65a274d-2dab-444c-802d-e9bae7a76252
+# ╟─1fd4c26f-de7d-441e-a2ec-7e37da2bc2ce
+# ╠═3ed2e513-f857-42f5-ae84-feccaa1f56e7
+# ╠═08c4f9e8-6e1b-4824-aa85-30886c248a7e
+# ╟─94c1eb4e-0dd0-41f8-ab88-f1e5f97cbcbc
+# ╟─8a50b23b-857b-4579-a154-db1d8794e0ea
+# ╟─2856ddc7-074a-447d-9d91-425ce7e9e35d
 # ╟─9cd7ee6d-dfcb-42a0-b7dc-a5df01b4058a
+# ╠═2c1aab25-7983-4cda-9961-00aff9bca75c
+# ╠═1710a41a-15ce-4e41-be8c-019450e64d17
+# ╠═da62de88-32ac-4213-a389-c89e7d912beb
+# ╠═d46f1d2a-db65-474b-b6df-55f57751e09c
+# ╠═e1a88b95-aeff-476c-b6c0-e5faf0074533
+# ╠═0bed6bbc-49a2-45b6-bb76-3d76a4893cd4
+# ╠═9de2a750-42e1-4d10-9dc9-4ae05d665a71
+# ╠═a8d044c0-daca-411d-9ef9-dc23e99a28a5
+# ╠═5e0043d2-a6ba-41b7-a051-c048eada441b
+# ╠═ecf023f5-559b-4fb9-a147-403d19b5e0d2
+# ╠═0c2379ba-1b8c-4ebb-8408-746d28942580
 # ╟─313e6081-9b7b-45e4-b8e6-aabbcf30fa46
 # ╠═123ef0b2-e191-4e10-abe3-df3ced4d6f4c
 # ╠═8962129f-599f-42f1-8466-f1a6d616c9a2
