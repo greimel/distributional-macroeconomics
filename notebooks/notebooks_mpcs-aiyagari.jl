@@ -6,7 +6,7 @@ using InteractiveUtils
 
 # ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 md"""
-`mpcs-aiyagari.jl` | **Version 1.1** | *last updated: May 2 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`mpcs-aiyagari.jl` | **Version 1.2** | *last updated: May 7, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
@@ -145,7 +145,7 @@ begin
 		rz1.consumption, 
 		rz1.k, 
 		0.08;
-		method=:lc, 
+		method=:ll, 
 		kernelfun=NormalKernel
 	)
 	rz2 = results_z[2]
@@ -154,7 +154,7 @@ begin
 		rz2.consumption, 
 		rz2.k[1:n_k÷5], 
 		0.04;
-		method=:lc, 
+		method=:ll, 
 		kernelfun=NormalKernel
 		# use smaller bandwidth where curvature of consumption function is high
 	)
@@ -163,7 +163,7 @@ begin
 		rz2.consumption, 
 		rz2.k[n_k÷5+1:end], 
 		0.08;
-		method=:lc, 
+		method=:ll, 
 		kernelfun=NormalKernel
 	)
 	results2 = DataFrame(results_z)
