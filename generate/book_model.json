@@ -166,8 +166,8 @@
         "title": "Tutorials",
         "contents": [
             {
-                "name": "Assignment 1",
-                "notebook_path": "notebooks/mpcs-aiyagari.jl",
+                "name": "Assignment 1 (Solution)",
+                "notebook_path": "notebooks/mpcs-aiyagari-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
