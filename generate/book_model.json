@@ -172,8 +172,8 @@
                 "preview_image_url": ""
             },
             {
-                "name": "Tutorial 1",
-                "notebook_path": "notebooks/mobility-aiyagari.jl",
+                "name": "Tutorial 1 (Solution)",
+                "notebook_path": "notebooks/mobility-aiyagari-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
