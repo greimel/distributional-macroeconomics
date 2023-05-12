@@ -6,7 +6,7 @@ using InteractiveUtils
 
 # ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 md"""
-`mobility-aiyagari.jl` | **Version 1.1** | *last updated: May 1 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`mobility-aiyagari-solution.jl` | **Version 1.1** | *last updated: May 1 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 7951ec83-e304-42d6-a1ba-b57e4ab17226
@@ -35,7 +35,13 @@ md"""
 
 # ╔═╡ 05bfc2e3-b195-4914-8fae-4b5499c5d7bd
 md"""
-Your answer goes here ...
+**Answer**
+
+In a model without a borrowing constraint, agents will always accept the job with the higher salary if the moving cost $\xi$ is lower than the additional income from accepting the job:
+
+$$\xi < \sum_{t=0}^\infty \left(\frac{1-p_1}{1+r}\right)^t (z_2 - z_1) = \frac{1}{1-\frac{1-p_1}{1+r}}(z_2 - z_1)$$
+
+In particular, if there is no borrowing constraint, the decision whether to accept or not does not depend on wealth. 
 """
 
 # ╔═╡ b01e3545-747b-4905-8cdd-fd4cf2cecb39
@@ -154,11 +160,12 @@ function setup_Q!(Q, states_indices, policies_indices, z_chain)
     for (i_next_state, next_state) ∈ enumerate(states_indices)
         for (i_pol, pol) ∈ enumerate(policies_indices)
             for (i_state, state) ∈ enumerate(states_indices)
-				
-				# Your solution goes here
-				# ...
-				# ...
-				
+				# solution start
+                if next_state.k_i == pol.k_next_i
+                    Q[i_state, i_pol, i_next_state] = 
+						z_chain.p[pol.z_i, next_state.z_draw_i]
+                end
+				# solution end
             end
         end
     end
@@ -188,11 +195,15 @@ function setup_R!(R, states, states_indices, policies, policies_indices, prices,
 		z_i_pol = policies_indices[p_i].z_i
         for (s_i, state) ∈ enumerate(states)
 			z_i_state = states_indices[s_i].z_draw_i
-			
-			# Your solution goes here
-			# ...
-			# ...
-			
+			# solution start
+			if z_i_state == z_i_pol
+				R[s_i, p_i] = reward(state, policy, prices, u)
+			elseif (z_i_state == 3) && (z_i_pol == 1)
+				R[s_i, p_i] = reward(state, policy, prices, u)
+			else
+				R[s_i, p_i]  = - 100_000
+			end
+			# solution end
         end
     end
     return R
@@ -240,8 +251,7 @@ md"""
 👉 Activate the two cells below as soon as you are sure that your $Q$ and $R$ arrays are correctly specified.
  """
 
-# ╔═╡ a8f435a6-0f85-4c7f-851c-ff95f5ebc630
-#=
+# ╔═╡ 56232eda-b1fc-4218-a3e1-a89e83dc463b
 begin
 	results = QuantEcon.solve(ddp, PFI)
 	
@@ -257,10 +267,8 @@ begin
 	end
 	
 end
-=#
 
-# ╔═╡ 15c68ced-3db8-4042-bde1-7c7e52ecbde2
-#=
+# ╔═╡ b8f2b1e5-1c09-4c2f-9162-a7440e7307fb
 begin
 	resolution = (800, 900)
 	fig = Figure(; resolution)
@@ -291,7 +299,6 @@ begin
 
 	fig
 end
-=#
 
 # ╔═╡ f8f088da-50b2-44ee-b714-cd0ddf0da37d
 md"""
@@ -302,7 +309,14 @@ md"""
 
 # ╔═╡ 16601177-9dc0-4a12-b603-b182c8e41996
 md"""
-Your answer goes here ...
+
+**Answer**
+
+Let's only focus on ```z_draw``` = $(z_3) , i.e. the case in which the agent receives a good job offer with salary $(z_2) and has to decide whether to accept and pay the moving cost ξ = $(z_2-z_3) or to stay in the bad job with salary $(z_1).
+
+We find that the job acceptance decision depends on wealth: If the agent has very few assets, she rejects the offer because does not want to sacrifice consumption in order to pay the moving cost.
+
+Moreover, we see that agents in the bad job save so that they are able to accept good offers without enduring one period of low consumption.
 """
 
 # ╔═╡ e099f86b-3b8e-4783-9c80-84733cf174df
@@ -1996,7 +2010,7 @@ version = "3.5.0+0"
 # ╟─93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 # ╟─7951ec83-e304-42d6-a1ba-b57e4ab17226
 # ╟─926493ff-4a10-4418-9bd8-94efe9aa743f
-# ╠═05bfc2e3-b195-4914-8fae-4b5499c5d7bd
+# ╟─05bfc2e3-b195-4914-8fae-4b5499c5d7bd
 # ╟─b01e3545-747b-4905-8cdd-fd4cf2cecb39
 # ╟─bcc9b308-b2a6-4b85-9f62-d7fd4fde7a0b
 # ╠═2c93d5a7-40bd-4535-9985-420533c12666
@@ -2022,10 +2036,10 @@ version = "3.5.0+0"
 # ╠═df975df6-90db-408b-a908-52fb4b0637f6
 # ╟─e90cdbed-a880-4087-ba6b-b2190f648159
 # ╟─a871cb3d-02ed-4541-a757-2e2410efdd26
-# ╠═a8f435a6-0f85-4c7f-851c-ff95f5ebc630
-# ╠═15c68ced-3db8-4042-bde1-7c7e52ecbde2
+# ╠═56232eda-b1fc-4218-a3e1-a89e83dc463b
+# ╠═b8f2b1e5-1c09-4c2f-9162-a7440e7307fb
 # ╟─f8f088da-50b2-44ee-b714-cd0ddf0da37d
-# ╠═16601177-9dc0-4a12-b603-b182c8e41996
+# ╟─16601177-9dc0-4a12-b603-b182c8e41996
 # ╟─e099f86b-3b8e-4783-9c80-84733cf174df
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
