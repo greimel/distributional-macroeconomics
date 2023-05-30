@@ -107,8 +107,14 @@
                 "preview_image_url": ""
             },
             {
-                "name": "Continuous time",
-                "notebook_path": "notebooks/continuous-time-new.jl",
+                "name": "Huggett meets Mian-Straub-Sufi",
+                "notebook_path": "notebooks/indebted-demand-huggett.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Comparing different solution methods",
+                "notebook_path": "notebooks/continuous-time-comparison.jl",
                 "video_id": "",
                 "preview_image_url": ""
             }
@@ -149,6 +155,13 @@
             {
                 "name": "More continuous time (not working)",
                 "notebook_path": "notebooks/more-ct.jl",
+                "video_id": "",
+                "preview_image_url": ""
+
+            },
+            {
+                "name": "Towards HANK",
+                "notebook_path": "notebooks/two-assets-ct.jl",
                 "video_id": "",
                 "preview_image_url": ""
 
