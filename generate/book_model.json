@@ -191,6 +191,18 @@
                 "preview_image_url": ""
             },
             {
+                "name": "Assignment 2A (Solution)",
+                "notebook_path": "notebooks/simple-housing-wealth-effects-solution.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
+                "name": "Assignment 2B (Solution)",
+                "notebook_path": "notebooks/redistributive-growth-solution.jl",
+                "video_id": "",
+                "preview_image_url": ""
+            },
+            {
                 "name": "Tutorial 2",
                 "notebook_path": "notebooks/welfare-huggett.jl",
                 "video_id": "",
