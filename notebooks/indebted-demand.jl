@@ -37,7 +37,7 @@ using PlutoUI: Slider
 
 # ╔═╡ 76b7a87d-af6a-4dcc-a887-198abcc1e857
 md"""
-`indebted-demand.jl` | **Version 1.0** | *last updated: May 24 2022*
+`indebted-demand.jl` | **Version 1.1** | *last updated: May 31 2023*
 """
 
 # ╔═╡ 95275f17-8cbd-4718-b806-64bcbe0919eb
@@ -66,7 +66,7 @@ Base.@kwdef struct IndebtedDemandModel
 	ℓ = 0.0248 # pledgeability of real assets
 	δ = 0.025  # mortality rate
 	η̃ = 0.87   # bequest parameter 1 (calibrated)
-	ã = 0.38   # bequest parameter 2 (calibrated –match MPC out of wealth of 0.01)
+	ã = 0.38   # bequest parameter 2 (calibrated – match MPC out of wealth of 0.01)
 	λ = 1
 end
 

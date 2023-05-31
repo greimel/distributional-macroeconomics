@@ -46,16 +46,13 @@ using SparseArrays
 
 # ╔═╡ a68d5127-af7b-4bc7-ae9d-4a0dce517bb9
 md"""
-`indebted-demand-huggett.jl` | **Version 1.0** | *last updated: May 30, 2023*
+`indebted-demand-huggett.jl` | **Version 1.0** | *last updated: May 31, 2023*
 """
 
 # ╔═╡ 98f828c4-ff2e-11ed-2796-ab77975202aa
 md"""
 # Huggett model with two income states
 """
-
-# ╔═╡ 877fbde3-a07e-4fc2-9539-75355815d07b
-@bind high_income PlutoUI.Slider(0.2:0.01:0.3, default=0.2, show_value=true)
 
 # ╔═╡ f48ca9dc-87eb-4396-bf65-4f3c4a4b9b8d
 md"""
@@ -117,58 +114,6 @@ function generator((; λ))
 	    λ₂₁ -λ₂₁]
 end
 
-# ╔═╡ ca69de95-d08c-4867-8c81-6e846e85e4bb
-begin
-	
-Base.@kwdef struct HuggettCTMC
-    # income process parameters
-	zgrid::Vector{Float64}=[0.1, high_income]
-	λ = [0.02, 0.03]
-	Λ::Matrix{Float64}= generator((; λ))
-	
-    # utility parameters
-    σ::Float64=2.0
-	ρ::Float64=0.05
-	r::Float64=0.02
-	w::Float64=1.0
-	
-    aₘᵢₙ::Float64=-0.1
-    aₘₐₓ::Float64=1.0
-	an::Int=500
-	Δa::Float64=(aₘₐₓ - aₘᵢₙ)/(an - 1)
-end
-
-function (m::HuggettCTMC)(state::NamedTuple, value::NamedTuple)
-    (; zgrid, Λ, ρ) = m
-	nz = length(zgrid)
-    (; a) = state
-    (; v1, v1a_up, v1a_down, v2, v2a_up, v2a_down) = value
-
-	T = eltype(value)
-	
-	vs = [v1, v2]
-	dvf = [v1a_up, v2a_up]
-	dvb = [v1a_down, v2a_down]
-	states = [(; a, z=zgrid[1]), (; a, z=zgrid[2])]
-
-	cs = Vector{T}(undef, nz)
-	ȧs = Vector{T}(undef, nz)
-	dvs = Vector{T}(undef, nz)
-
-	for i ∈ 1:2
-		(; c, ȧ, dv) = consumption_and_drift_upwind(states[i], dvf[i], dvb[i], m)
-		cs[i] = c
-		ȧs[i] = ȧ
-		dvs[i] = dv
-	end
-		
-	vts  = ρ .* vs .- (u.(cs, Ref(m)) .+ ȧs .* dvs .+ Λ * vs)
-
-    return (; v1t=vts[1], v2t=vts[2]), (; s1=ȧs[1], s2=ȧs[2], c1=cs[1], c2=cs[2])
-end
-
-end
-
 # ╔═╡ efba7ca7-074f-4c6b-bf82-6bf3482271b0
 md"""
 ## Solving the households' problem: Helpers
@@ -218,31 +163,6 @@ end
 md"""
 ## Solving the households' problem
 """
-
-# ╔═╡ 125a8b2a-993c-4e55-9ebe-817a4d457683
-(; output, m) = let
-	r = 0.011
-	crit = 1e-11
-
-	m = HuggettCTMC(; r)
-	output = solve_HJB_econpdes(m; crit)
-	(; output, m)
-end
-
-# ╔═╡ f3cbf37b-d55b-4a74-9395-fbb858067ce7
-let
-	(; df) = output
-
-	@chain df begin
-		stack(Not([:a, :z]))
-		data(_) * mapping(
-			:a, :value,
-			layout = :variable, color=:z => nonnumeric,
-			#linestyle = :method => nonnumeric
-		) * visual(Lines)
-		draw(_, facet = (linkyaxes=false, ))
-	end
-end
 
 # ╔═╡ 0b3287a2-f881-4a08-98be-435541835d5f
 md"""
@@ -333,6 +253,94 @@ function construct_A_switch((; λ, an))
 	  λ₂₁ * id  -λ₂₁ * id]
 end
 
+# ╔═╡ b7bcf6bd-3143-4edc-ad58-c1bb5b86c785
+md"""
+## Solving the equilibrium
+"""
+
+# ╔═╡ 7a682086-559d-494c-967a-c7b48b6e40f4
+r_grid = range(0.001, 0.03, 15)
+
+# ╔═╡ 877fbde3-a07e-4fc2-9539-75355815d07b
+@bind high_income PlutoUI.Slider(0.2:0.01:0.3, default=0.2, show_value=true)
+
+# ╔═╡ ca69de95-d08c-4867-8c81-6e846e85e4bb
+begin
+	
+Base.@kwdef struct HuggettCTMC
+    # income process parameters
+	zgrid::Vector{Float64}=[0.1, high_income]
+	λ = [0.02, 0.03]
+	Λ::Matrix{Float64}= generator((; λ))
+	
+    # utility parameters
+    σ::Float64=2.0
+	ρ::Float64=0.05
+	r::Float64=0.02
+	w::Float64=1.0
+	
+    aₘᵢₙ::Float64=-0.1
+    aₘₐₓ::Float64=1.0
+	an::Int=500
+	Δa::Float64=(aₘₐₓ - aₘᵢₙ)/(an - 1)
+end
+
+function (m::HuggettCTMC)(state::NamedTuple, value::NamedTuple)
+    (; zgrid, Λ, ρ) = m
+	nz = length(zgrid)
+    (; a) = state
+    (; v1, v1a_up, v1a_down, v2, v2a_up, v2a_down) = value
+
+	T = eltype(value)
+	
+	vs = [v1, v2]
+	dvf = [v1a_up, v2a_up]
+	dvb = [v1a_down, v2a_down]
+	states = [(; a, z=zgrid[1]), (; a, z=zgrid[2])]
+
+	cs = Vector{T}(undef, nz)
+	ȧs = Vector{T}(undef, nz)
+	dvs = Vector{T}(undef, nz)
+
+	for i ∈ 1:2
+		(; c, ȧ, dv) = consumption_and_drift_upwind(states[i], dvf[i], dvb[i], m)
+		cs[i] = c
+		ȧs[i] = ȧ
+		dvs[i] = dv
+	end
+		
+	vts  = ρ .* vs .- (u.(cs, Ref(m)) .+ ȧs .* dvs .+ Λ * vs)
+
+    return (; v1t=vts[1], v2t=vts[2]), (; s1=ȧs[1], s2=ȧs[2], c1=cs[1], c2=cs[2])
+end
+
+end
+
+# ╔═╡ 125a8b2a-993c-4e55-9ebe-817a4d457683
+(; output, m) = let
+	r = 0.011
+	crit = 1e-11
+
+	m = HuggettCTMC(; r)
+	output = solve_HJB_econpdes(m; crit)
+	(; output, m)
+end
+
+# ╔═╡ f3cbf37b-d55b-4a74-9395-fbb858067ce7
+let
+	(; df) = output
+
+	@chain df begin
+		stack(Not([:a, :z]))
+		data(_) * mapping(
+			:a, :value,
+			layout = :variable, color=:z => nonnumeric,
+			#linestyle = :method => nonnumeric
+		) * visual(Lines)
+		draw(_, facet = (linkyaxes=false, ))
+	end
+end
+
 # ╔═╡ 93f2b21c-dc3f-44a2-b5c0-d56d77cfe736
 df_π = let
 	A_switch = construct_A_switch(m)
@@ -341,8 +349,6 @@ df_π = let
 	(; ȧ) = output.df
 	
 	A = construct_A(ȧ, Δa, an, 2) + A_switch
-
-	
 
 	@chain output.df begin
 		@transform(:π = @bycol vec(solve_KF(m, A)))
@@ -364,14 +370,6 @@ output.df
 	) * visual(Lines)
 	draw(_, facet = (linkyaxes=false, ))
 end
-
-# ╔═╡ b7bcf6bd-3143-4edc-ad58-c1bb5b86c785
-md"""
-## Solving the equilibrium
-"""
-
-# ╔═╡ 7a682086-559d-494c-967a-c7b48b6e40f4
-r_grid = range(0.001, 0.03, 15)
 
 # ╔═╡ e4ed5491-7c3e-4789-b8ad-6bf5cc3b5427
 excess_savings = map(r_grid) do r
@@ -420,13 +418,13 @@ In this assignment we will check if the results from _Mian, Straub & Sufi (2020)
 
 # ╔═╡ fe75a5c8-c0a8-4b02-b7e0-5386493418ca
 md"""
-### Task 1: Huggett in Continuous Time (X points)
+### Task 1: Huggett in Continuous Time (4 points)
 
-👉 Solve for the equilibrium interest rate.
+👉 (1.1 | 1 point) Solve for the equilibrium interest rate.
 
-👉 Compute aggregate debt-to-income in this economy.
+👉 (1.2 | 1 point) Compute aggregate debt-to-income in this economy.
 
-👉 What happens to debt and the interest rate if you increase income inequality?
+👉 (1.3 | 2 points) What happens to debt and the interest rate if you increase income inequality? (How do you control income inequality?)
 """
 
 # ╔═╡ be65576a-6785-4aca-91e2-86f86bea1232
@@ -441,9 +439,6 @@ md"""
 # ╔═╡ d0244ce6-b7aa-4d7c-ae84-0c5dc4f9140d
 # here
 
-# ╔═╡ b712b495-c98a-4599-9ee8-516a5f58335c
-
-
 # ╔═╡ f2ca5936-1c64-4b66-9fbf-97a4a1041b84
 answer1 = md"""
 Your answer goes here ...
@@ -451,29 +446,32 @@ Your answer goes here ...
 
 # ╔═╡ ca210518-67c0-4963-9fe3-35fc717ab093
 md"""
-### Task 2: Non-homothetic preferences (X points)
+### Task 2: Non-homothetic preferences (6 points)
 
-👉 How does the HJB equation change when adding Mian-Straub-Sufi's preferences?
+👉 (2.1 | 1 points) How does the HJB equation change when adding Mian-Straub-Sufi's preferences?
 """
 
 # ╔═╡ ec5f9b1a-299e-4310-82fa-9c091b969e82
 md"""
 _**Adjust the HJB equation below!**_
 ```math
-\rho v(k, z) = \max_{c} u(c) + v_k(k, z)(r - c) + \underbrace{v_z(k, z) \mu(z) + \frac{1}{2} v_{zz}(k, z) \sigma^2(z)}_{\text{exo}}
+\rho v_i(a) = \max_{c} u(c) + v'_i(a)(r a + y_i - c) + \underbrace{\sum_{j\ne i} \lambda_{ij} (v_j(a) - v_i(a))}_{\text{exo}}
 ```
-The first order condition is ``u'(c) = v'(k) \iff c^* = (u')^{-1}(v'(k))``
+The first order condition is ``u'(c) = v_i'(a) \iff c^* = (u')^{-1}(v_i'(a))``
 or
 ```math
-\rho v(k) = \underbrace{u(c^*) + v'(k)(r - c^*)}_{\text{endo}} + \underbrace{v_z(k, z) \mu(z) + \frac{1}{2} v_{zz}(k, z) \sigma^2(z)}_{\text{exo}}
+\rho v(k) = \underbrace{u(c^*) + v_i'(a)(r a + y_i - c^*)}_{\text{endo}} + \text{exo}
 ```
 """
 
 # ╔═╡ 8cf86cdb-a7f8-4890-93be-3b8b95e21477
 md"""
-👉 Implement the adjusted HJB equation.
+👉 (2.2 | 2 points) Implement the adjusted HJB equation. (You can adjust all the functions for the Huggett model)
+"""
 
-👉 What happens to debt and the interest rate when you increase inequality?
+# ╔═╡ 234630f7-6843-47ae-a71e-eec9742341aa
+md"""
+👉 (2.3 | 2 points) What happens to debt and the interest rate when you increase inequality?
 """
 
 # ╔═╡ cd1a6415-e7f4-4080-b3cb-9888f93ad430
@@ -488,11 +486,6 @@ md"""
 # ╔═╡ 4f03f4c6-a773-4c29-925d-439667c752ef
 # here
 
-# ╔═╡ 234630f7-6843-47ae-a71e-eec9742341aa
-md"""
-👉 What happens to debt and the interest rate when you increase inequality?
-"""
-
 # ╔═╡ b01a1779-e7bc-491a-820e-f623489badad
 answer2_1 = md"""
 Your answer goes here ...
@@ -500,7 +493,7 @@ Your answer goes here ...
 
 # ╔═╡ 95c2e2a2-c185-4a11-8755-8ca7b27f8812
 md"""
-👉 Discuss any differences.
+👉 (2.3 | 1 point) Discuss. _(< 100 words)_
 """
 
 # ╔═╡ 33a1617a-266c-415d-92db-36d744c8a947
@@ -521,14 +514,6 @@ md"""
 👉 Make sure that you are **within the word limit**. Short and concise answers are appreciated. Answers longer than the word limit will lead to deductions.
 
 👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
-"""
-
-# ╔═╡ 62a57e9c-7353-4aea-a8c9-9f7dd032a979
-md"""
-### Assignment to dos
-* provide some skeleton code for Huggett
-* try if the assignment works
-* compute MPCs
 """
 
 # ╔═╡ 7ea45233-310a-4e05-b825-f4ac0e6cf7a6
@@ -580,7 +565,7 @@ show_words_limit(answer1, 200)
 show_words_limit(answer2_1, 200)
 
 # ╔═╡ 8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
-show_words_limit(answer2_2, 200)
+show_words_limit(answer2_2, 100)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2292,24 +2277,22 @@ version = "3.5.0+0"
 # ╠═dc0f8a6d-aa07-4f3c-aea4-52823a5c585f
 # ╠═6c87eec8-ceb4-48bf-aabe-09c8125b03d2
 # ╠═d0244ce6-b7aa-4d7c-ae84-0c5dc4f9140d
-# ╠═b712b495-c98a-4599-9ee8-516a5f58335c
 # ╠═f2ca5936-1c64-4b66-9fbf-97a4a1041b84
 # ╠═bbde284e-b8a8-4c4f-9aa4-61a0f2fb8fa8
 # ╟─ca210518-67c0-4963-9fe3-35fc717ab093
 # ╟─ec5f9b1a-299e-4310-82fa-9c091b969e82
 # ╟─8cf86cdb-a7f8-4890-93be-3b8b95e21477
+# ╟─234630f7-6843-47ae-a71e-eec9742341aa
 # ╠═cd1a6415-e7f4-4080-b3cb-9888f93ad430
 # ╠═3bca1c15-dbd1-4d71-aef6-0a3d11a6ef5b
 # ╠═87f67faf-903c-4fc6-9e33-01c83f6e8698
 # ╠═4f03f4c6-a773-4c29-925d-439667c752ef
-# ╟─234630f7-6843-47ae-a71e-eec9742341aa
 # ╠═b01a1779-e7bc-491a-820e-f623489badad
 # ╟─a696449a-609f-45df-8a14-c2c4fc8d8baa
-# ╠═95c2e2a2-c185-4a11-8755-8ca7b27f8812
+# ╟─95c2e2a2-c185-4a11-8755-8ca7b27f8812
 # ╠═33a1617a-266c-415d-92db-36d744c8a947
 # ╟─8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
 # ╟─1ed541ff-943b-49fc-945a-4de113a0dead
-# ╠═62a57e9c-7353-4aea-a8c9-9f7dd032a979
 # ╟─7ea45233-310a-4e05-b825-f4ac0e6cf7a6
 # ╠═e486cdf9-a073-468d-a923-8cf6dca7f393
 # ╠═24bf81fb-db05-43e5-9e3a-4f8bf6328234
