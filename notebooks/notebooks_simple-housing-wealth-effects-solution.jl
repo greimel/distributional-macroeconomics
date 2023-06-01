@@ -390,13 +390,13 @@ answer2 = md"""
 It is helpful to consider the Berger et al. (2018) formula which says that the consumption response to a house price shock is (approximately) the product of housing wealth and the MPC out of a transitory income shock:
 ```math
 \begin{align}
-\frac{dc_{it}}{dp_t} \approx p_t h_{it} MPC_{it}
+\frac{dc_{it}}{dp_t/p_t} \approx p_t h_{it} MPC_{it}
 \end{align}
 ```
 The response of aggregate consumption can therefore be written as
 ```math
 \begin{align}
-\frac{dC_t}{dp_t} = \sum_i\frac{dc_{it}}{dp_t} \approx \sum_i p_t h_{it} MPC_{it}
+\frac{dC_t}{dp_t/p_t} = \sum_i\frac{dc_{it}}{dp_t/p_t} \approx \sum_i p_t h_{it} MPC_{it}
 \end{align}
 ```
 Using the approximation, we can see that the model is a good choice if ...
