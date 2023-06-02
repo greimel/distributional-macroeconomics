@@ -59,6 +59,12 @@ md"""
 # Simple Housing Wealth Effects
 
 _Based on the article **Understanding Housing Wealth Effects: Debt, Homeownership and the Lifecycle** (Greimel & Zadow, 2020)._
+
+**TODO 2024** Students suggested to add more information to the calibration exercise:
+- It is fine to say that some parameters can be set according to external information (e.g. $\delta$). Only parameters for which such external information is not available need to be calibrated "internally" using the method of moments.
+- The discussion of the chosen moments should ideally explain informally how the chosen moments identify the calibrated parameters.
+- It is was not obvious to everyone that they are supposed to redefine the ```model_statistics``` and ```data_statistics``` lists which are displayed below the parameter sliders.
+
 """
 
 # ╔═╡ c2af58e4-3e90-4013-814e-84224aa8575a

@@ -49,7 +49,7 @@ using QuantEcon
 
 # ╔═╡ 1b5abb2b-5dc7-433c-9c83-6cfd06c8eadf
 md"""
-`welfare-huggett.jl` | **Version 1.2** | *last updated: June 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`welfare-huggett-solution.jl` | **Version 1.2** | *last updated: June 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ a0825503-c132-4c12-93e2-60537d0f6085
@@ -150,7 +150,7 @@ end;
 
 # ╔═╡ 520250f5-0877-4c36-a6f5-0b74a2916f37
 md"""
-- We start with a partial equilibrium version of the model. The interest rate $r=$ $(r) is exogenous.
+- We start with a partial equilibrium version of the model. The interest rate $r=$ $(round(r,digits=4)) is exogenous.
 - The death probability is $(m) which implies an expected lifetime (as an adult) of $(1/m) years.
 - The income process has only two states $y^1 < y^2$ and the transition matrix is symmetric. In this case, the probability $\rho$ to stay in the current income state completely determines the transition matrix.
 - We assume that there is no income tax in the initial stationary equilibrium, i.e. $T(y) = 0$.
@@ -252,7 +252,10 @@ The plot of the value functions above shows that agents who are born into the lo
 
 # ╔═╡ 0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
 md"""
-Your answer goes here ...
+The introduction of the redistributive income tax has two effects on the agent in the high income state:
+1. Current net income and expected future net incomes decrease
+2. Income risk in the future decreases
+The first effect decreases the value function in the high income state, the second effect increases it (the agents dislike income risk). It depends on the parameter values which of the two effects is more important quantitatively. 
 """
 
 # ╔═╡ 02d23829-b7f8-415d-aca1-b71992b72bdb
@@ -332,7 +335,22 @@ Hint: Try to express $W(k,y; \Delta)$ in terms of $V(k,y)$.
 
 # ╔═╡ a453a9dc-0345-4630-8a75-e26a0de10e66
 md"""
-Your answer goes here ...
+Step 1:
+```math
+\begin{align}
+u((1+\Delta)c) &= \frac{((1+\Delta)c)^{1-\sigma}}{1-\sigma} = (1+\Delta)^{1-\sigma} u(c)\\
+\implies W(k,y;\Delta) &= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u((1+\Delta)c(k_{t-1}, y_t)) \Bigr) = (1+\Delta)^{1-\sigma} V(k, y)
+\end{align}
+```
+
+Step 2:
+```math
+\begin{align}
+V_\tau(k,y) &= W(k,y; \Delta)\\
+\implies V_\tau(k,y) &= (1+\Delta)^{1-\sigma} V(k, y)\\
+\implies \Delta &= \Bigl(\frac{V_\tau(k,y)}{V(k,y)}\Bigr)^{1/(1-\sigma)} - 1
+\end{align}
+```
 """
 
 # ╔═╡ 3e5158e4-146e-4b68-a20a-9b315de51de3
@@ -342,7 +360,7 @@ md"""
 
 # ╔═╡ f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 function Δ_CRRA(v_τ, v, σ)
-	NaN # Your code goes here
+	(v_τ / v) ^ (1/(1-σ)) - 1
 end
 
 # ╔═╡ 849308de-b2e9-4f97-a948-60341863e7f8
@@ -415,7 +433,7 @@ Explore the conditional and the unconditional welfare changes using the sliders 
 
 # ╔═╡ bb48a69b-72bd-4b50-848a-1b438555164c
 md"""
-Your answer goes here ...
+Agents in the high income state are worse off with the reform if the persistence parameter $\rho$ is sufficiently high (e.g. $\rho = 0.95$).
 """
 
 # ╔═╡ 143aa896-fc61-450c-843d-88546e129abd
@@ -425,7 +443,19 @@ md"""
 
 # ╔═╡ 24e51342-df5d-448a-a76f-18375af543aa
 md"""
-Your answer goes here ...
+
+ $\sigma \uparrow$
+
+Agents in both income states:
+- decrease of income risk is valued more by agents $\implies$ $\Delta(k,y)$ increases
+
+ $\rho \uparrow$
+
+Agents in low income state: 
+- stronger positive effect on expected future incomes $\implies$ $\Delta(k,y=y^1)$ increases
+Agents in high income state: 
+- stronger negative effect on expected future incomes $\implies$ $\Delta(k,y=y^2)$ decreases
+
 """
 
 # ╔═╡ 8252bc6d-7303-4c67-9daa-f536b173cfde
@@ -481,7 +511,7 @@ md"""
 
 # ╔═╡ 54887913-20f4-48c8-ae1a-8ae623ee44ee
 md"""
-Your answer goes here ...
+The higher the difference in net incomes across the two income states, the higher asset demand in the model (both because of consumption smoothing and for precautionary reasons). Since the tax reform decreases the difference in net incomes, asset demand decreases and hence the interest rate has to increase.
 """
 
 # ╔═╡ 281fca35-1d20-417a-8928-ddd81c32b305
@@ -508,7 +538,7 @@ md"""
 
 # ╔═╡ 18b470fa-d747-4ac2-a5aa-01f7671499a8
 md"""
-Your answer goes here ...
+Higher interest rates are bad for households that borrow, and good for households that lend. This is why the welfare gain for agents with little or no assets is lower in GE than in PE, while the welfare gain for wealthy assets is higher in GE than in PE.
 """
 
 # ╔═╡ cbcf8f08-0330-4458-ba7d-eb35f0d6b120
@@ -2555,12 +2585,12 @@ version = "3.5.0+0"
 # ╠═7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
 # ╟─9c1efccf-1235-472d-b395-10dc5494d114
 # ╟─69004cfb-29ea-4757-8eb6-3e905da0b2cb
-# ╠═0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
+# ╟─0abcb92d-838a-4fa6-a1bb-5bc6d7499e85
 # ╟─02d23829-b7f8-415d-aca1-b71992b72bdb
 # ╟─59f22787-ab1e-4096-9e43-39f33ba42713
 # ╟─66e4ff89-288c-4963-bb7d-8cfde20e42a0
 # ╟─8c185d30-7de4-4273-a739-d2af1d46a3a8
-# ╠═a453a9dc-0345-4630-8a75-e26a0de10e66
+# ╟─a453a9dc-0345-4630-8a75-e26a0de10e66
 # ╟─3e5158e4-146e-4b68-a20a-9b315de51de3
 # ╠═f6faaf5b-e7ca-4081-8faf-f2cf189e8ab4
 # ╟─849308de-b2e9-4f97-a948-60341863e7f8
@@ -2577,9 +2607,9 @@ version = "3.5.0+0"
 # ╟─fcafcc6c-cc23-4ae1-8ff3-5bebd4e1ec13
 # ╟─1f192db7-0c79-42e9-b433-8d6f78bafee4
 # ╟─8382365c-99a0-4c29-9917-3a1f5f0b5af4
-# ╠═bb48a69b-72bd-4b50-848a-1b438555164c
+# ╟─bb48a69b-72bd-4b50-848a-1b438555164c
 # ╟─143aa896-fc61-450c-843d-88546e129abd
-# ╠═24e51342-df5d-448a-a76f-18375af543aa
+# ╟─24e51342-df5d-448a-a76f-18375af543aa
 # ╟─8252bc6d-7303-4c67-9daa-f536b173cfde
 # ╟─28762c0a-76a3-44e8-8a48-dbc57dec4282
 # ╠═f54c97f9-bd22-4e81-966e-b68ef9e71efe
@@ -2594,7 +2624,7 @@ version = "3.5.0+0"
 # ╠═7443becb-1a5b-46eb-a2df-bbd289c5bfe6
 # ╟─24961de2-8e9a-4fd5-b6bf-8c0ccbd9d9a1
 # ╟─28599228-417f-404f-bf3d-15ae388aff3b
-# ╠═54887913-20f4-48c8-ae1a-8ae623ee44ee
+# ╟─54887913-20f4-48c8-ae1a-8ae623ee44ee
 # ╟─281fca35-1d20-417a-8928-ddd81c32b305
 # ╠═b8bf3582-d6a0-4a23-b080-a9b777893205
 # ╟─d379a396-0735-4fc9-aa6c-190d69a00fb0
@@ -2602,7 +2632,7 @@ version = "3.5.0+0"
 # ╠═dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
 # ╟─23695e8e-9e3a-4519-bcef-82094833dcd9
 # ╟─8cde58db-b774-4348-9ae1-25791a20a997
-# ╠═18b470fa-d747-4ac2-a5aa-01f7671499a8
+# ╟─18b470fa-d747-4ac2-a5aa-01f7671499a8
 # ╟─cbcf8f08-0330-4458-ba7d-eb35f0d6b120
 # ╟─a7130a4b-fb28-420e-b3a2-b0fd57532ce8
 # ╠═9c4eeb4c-bc2c-428e-9c5b-d1424e7d42fe
