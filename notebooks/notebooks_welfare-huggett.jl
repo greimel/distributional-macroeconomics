@@ -16,7 +16,7 @@ end
 
 # ╔═╡ 1b5abb2b-5dc7-433c-9c83-6cfd06c8eadf
 md"""
-`welfare-huggett.jl` | **Version 1.1** | *last updated: May 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`welfare-huggett.jl` | **Version 1.2** | *last updated: June 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ a0825503-c132-4c12-93e2-60537d0f6085
@@ -630,13 +630,15 @@ md"""
 begin
 	
 	prices_eq    = (q = 1/(1+r_eq), w = 1.0, Δr = 0.)
-	prices_τ_eq  = (q = 1/(1+r),    w = 1.0, Δr = 0.)
+	prices_τ_eq  = (q = 1/(1+r_eq_τ),    w = 1.0, Δr = 0.)
 	
 	
-	df_eq   = solve_PE(hh, ss,   prices_eq, π₀)
+	df_eq     = solve_PE(hh, ss,   prices_eq, π₀)
+	df_τ_noeq = solve_PE(hh, ss_τ, prices_eq, π₀)
 	df_τ_eq = solve_PE(hh, ss_τ, prices_τ_eq, π₀)
 
-	df_eq.Δ = Δ_CRRA.(df_τ_eq.value, df_eq.value, σ)
+	df_τ_noeq.Δ = Δ_CRRA.(df_τ_noeq.value, df_eq.value, σ)
+	df_τ_eq.Δ   = Δ_CRRA.(df_τ_eq.value, df_eq.value, σ)
 
 end;
 
@@ -656,7 +658,7 @@ end
 let
 	figure = (; resolution = (600, 300))
 
-	df_big = vcat(dfΔ, df_eq, source = :equilibrium => ["PE", "GE"])
+	df_big = vcat(df_τ_noeq, df_τ_eq, source = :equilibrium => ["PE", "GE"])
 	@chain df_big begin
 		data(_) * mapping(
 			:k, :Δ,
