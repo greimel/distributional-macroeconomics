@@ -203,8 +203,8 @@
                 "preview_image_url": ""
             },
             {
-                "name": "Tutorial 2",
-                "notebook_path": "notebooks/welfare-huggett.jl",
+                "name": "Tutorial 2 (Solution)",
+                "notebook_path": "notebooks/welfare-huggett-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
