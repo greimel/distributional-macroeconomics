@@ -46,7 +46,7 @@ using SparseArrays
 
 # ╔═╡ a68d5127-af7b-4bc7-ae9d-4a0dce517bb9
 md"""
-`indebted-demand-huggett.jl` | **Version 1.0** | *last updated: May 31, 2023*
+`indebted-demand-huggett.jl` | **Version 1.1** | *last updated: June 5, 2023*
 """
 
 # ╔═╡ 98f828c4-ff2e-11ed-2796-ab77975202aa
@@ -276,7 +276,7 @@ Base.@kwdef struct HuggettCTMC
     # utility parameters
     σ::Float64=2.0
 	ρ::Float64=0.05
-	r::Float64=0.02
+	r::Float64=0.03
 	w::Float64=1.0
 	
     aₘᵢₙ::Float64=-0.1
@@ -318,7 +318,7 @@ end
 
 # ╔═╡ 125a8b2a-993c-4e55-9ebe-817a4d457683
 (; output, m) = let
-	r = 0.011
+	r = 0.03
 	crit = 1e-11
 
 	m = HuggettCTMC(; r)
