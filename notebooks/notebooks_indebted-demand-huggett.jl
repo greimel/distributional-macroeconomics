@@ -16,7 +16,7 @@ end
 
 # ╔═╡ a68d5127-af7b-4bc7-ae9d-4a0dce517bb9
 md"""
-`indebted-demand-huggett.jl` | **Version 1.0** | *last updated: May 30, 2023*
+`indebted-demand-huggett.jl` | **Version 1.1** | *last updated: June 5, 2023*
 """
 
 # ╔═╡ 98f828c4-ff2e-11ed-2796-ab77975202aa
@@ -41,7 +41,7 @@ Base.@kwdef struct HuggettCTMC
     # utility parameters
     σ::Float64=2.0
 	ρ::Float64=0.05
-	r::Float64=0.02
+	r::Float64=0.03
 	w::Float64=1.0
 	
     aₘᵢₙ::Float64=-0.1
@@ -188,7 +188,7 @@ md"""
 
 # ╔═╡ 125a8b2a-993c-4e55-9ebe-817a4d457683
 (; output, m) = let
-	r = 0.011
+	r = 0.03
 	crit = 1e-11
 
 	m = HuggettCTMC(; r)
@@ -309,8 +309,6 @@ df_π = let
 	
 	A = construct_A(ȧ, Δa, an, 2) + A_switch
 
-	
-
 	@chain output.df begin
 		@transform(:π = @bycol vec(solve_KF(m, A)))
 	end
@@ -390,13 +388,13 @@ In this assignment we will check if the results from _Mian, Straub & Sufi (2020)
 
 # ╔═╡ fe75a5c8-c0a8-4b02-b7e0-5386493418ca
 md"""
-### Task 1: Huggett in Continuous Time (X points)
+### Task 1: Huggett in Continuous Time (4 points)
 
-👉 Solve for the equilibrium interest rate.
+👉 (1.1 | 1 point) Solve for the equilibrium interest rate.
 
-👉 Compute aggregate debt-to-income in this economy.
+👉 (1.2 | 1 point) Compute aggregate debt-to-income in this economy.
 
-👉 What happens to debt and the interest rate if you increase income inequality?
+👉 (1.3 | 2 points) What happens to debt and the interest rate if you increase income inequality? (How do you control income inequality?)
 """
 
 # ╔═╡ be65576a-6785-4aca-91e2-86f86bea1232
@@ -411,9 +409,6 @@ md"""
 # ╔═╡ d0244ce6-b7aa-4d7c-ae84-0c5dc4f9140d
 # here
 
-# ╔═╡ b712b495-c98a-4599-9ee8-516a5f58335c
-
-
 # ╔═╡ f2ca5936-1c64-4b66-9fbf-97a4a1041b84
 answer1 = md"""
 Your answer goes here ...
@@ -424,29 +419,32 @@ show_words_limit(answer1, 200)
 
 # ╔═╡ ca210518-67c0-4963-9fe3-35fc717ab093
 md"""
-### Task 2: Non-homothetic preferences (X points)
+### Task 2: Non-homothetic preferences (6 points)
 
-👉 How does the HJB equation change when adding Mian-Straub-Sufi's preferences?
+👉 (2.1 | 1 points) How does the HJB equation change when adding Mian-Straub-Sufi's preferences?
 """
 
 # ╔═╡ ec5f9b1a-299e-4310-82fa-9c091b969e82
 md"""
 _**Adjust the HJB equation below!**_
 ```math
-\rho v(k, z) = \max_{c} u(c) + v_k(k, z)(r - c) + \underbrace{v_z(k, z) \mu(z) + \frac{1}{2} v_{zz}(k, z) \sigma^2(z)}_{\text{exo}}
+\rho v_i(a) = \max_{c} u(c) + v'_i(a)(r a + y_i - c) + \underbrace{\sum_{j\ne i} \lambda_{ij} (v_j(a) - v_i(a))}_{\text{exo}}
 ```
-The first order condition is ``u'(c) = v'(k) \iff c^* = (u')^{-1}(v'(k))``
+The first order condition is ``u'(c) = v_i'(a) \iff c^* = (u')^{-1}(v_i'(a))``
 or
 ```math
-\rho v(k) = \underbrace{u(c^*) + v'(k)(r - c^*)}_{\text{endo}} + \underbrace{v_z(k, z) \mu(z) + \frac{1}{2} v_{zz}(k, z) \sigma^2(z)}_{\text{exo}}
+\rho v(k) = \underbrace{u(c^*) + v_i'(a)(r a + y_i - c^*)}_{\text{endo}} + \text{exo}
 ```
 """
 
 # ╔═╡ 8cf86cdb-a7f8-4890-93be-3b8b95e21477
 md"""
-👉 Implement the adjusted HJB equation.
+👉 (2.2 | 2 points) Implement the adjusted HJB equation. (You can adjust all the functions for the Huggett model)
+"""
 
-👉 What happens to debt and the interest rate when you increase inequality?
+# ╔═╡ 234630f7-6843-47ae-a71e-eec9742341aa
+md"""
+👉 (2.3 | 2 points) What happens to debt and the interest rate when you increase inequality?
 """
 
 # ╔═╡ cd1a6415-e7f4-4080-b3cb-9888f93ad430
@@ -461,11 +459,6 @@ md"""
 # ╔═╡ 4f03f4c6-a773-4c29-925d-439667c752ef
 # here
 
-# ╔═╡ 234630f7-6843-47ae-a71e-eec9742341aa
-md"""
-👉 What happens to debt and the interest rate when you increase inequality?
-"""
-
 # ╔═╡ b01a1779-e7bc-491a-820e-f623489badad
 answer2_1 = md"""
 Your answer goes here ...
@@ -476,7 +469,7 @@ show_words_limit(answer2_1, 200)
 
 # ╔═╡ 95c2e2a2-c185-4a11-8755-8ca7b27f8812
 md"""
-👉 Discuss any differences.
+👉 (2.3 | 1 point) Discuss. _(< 100 words)_
 """
 
 # ╔═╡ 33a1617a-266c-415d-92db-36d744c8a947
@@ -485,7 +478,7 @@ Your answer goes here ...
 """
 
 # ╔═╡ 8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
-show_words_limit(answer2_2, 200)
+show_words_limit(answer2_2, 100)
 
 # ╔═╡ 1ed541ff-943b-49fc-945a-4de113a0dead
 md"""
@@ -500,14 +493,6 @@ md"""
 👉 Make sure that you are **within the word limit**. Short and concise answers are appreciated. Answers longer than the word limit will lead to deductions.
 
 👉 Go to the very top of the notebook and click on the symbol in the very top-right corner. **Export a static html file** of this notebook for submission. (The source code is embedded in the html file.)
-"""
-
-# ╔═╡ 62a57e9c-7353-4aea-a8c9-9f7dd032a979
-md"""
-### Assignment to dos
-* provide some skeleton code for Huggett
-* try if the assignment works
-* compute MPCs
 """
 
 # ╔═╡ 7ea45233-310a-4e05-b825-f4ac0e6cf7a6
@@ -2293,24 +2278,22 @@ version = "3.5.0+0"
 # ╠═dc0f8a6d-aa07-4f3c-aea4-52823a5c585f
 # ╠═6c87eec8-ceb4-48bf-aabe-09c8125b03d2
 # ╠═d0244ce6-b7aa-4d7c-ae84-0c5dc4f9140d
-# ╠═b712b495-c98a-4599-9ee8-516a5f58335c
 # ╠═f2ca5936-1c64-4b66-9fbf-97a4a1041b84
 # ╠═bbde284e-b8a8-4c4f-9aa4-61a0f2fb8fa8
 # ╟─ca210518-67c0-4963-9fe3-35fc717ab093
 # ╟─ec5f9b1a-299e-4310-82fa-9c091b969e82
 # ╟─8cf86cdb-a7f8-4890-93be-3b8b95e21477
+# ╟─234630f7-6843-47ae-a71e-eec9742341aa
 # ╠═cd1a6415-e7f4-4080-b3cb-9888f93ad430
 # ╠═3bca1c15-dbd1-4d71-aef6-0a3d11a6ef5b
 # ╠═87f67faf-903c-4fc6-9e33-01c83f6e8698
 # ╠═4f03f4c6-a773-4c29-925d-439667c752ef
-# ╟─234630f7-6843-47ae-a71e-eec9742341aa
 # ╠═b01a1779-e7bc-491a-820e-f623489badad
 # ╟─a696449a-609f-45df-8a14-c2c4fc8d8baa
-# ╠═95c2e2a2-c185-4a11-8755-8ca7b27f8812
+# ╟─95c2e2a2-c185-4a11-8755-8ca7b27f8812
 # ╠═33a1617a-266c-415d-92db-36d744c8a947
 # ╟─8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
 # ╟─1ed541ff-943b-49fc-945a-4de113a0dead
-# ╠═62a57e9c-7353-4aea-a8c9-9f7dd032a979
 # ╟─7ea45233-310a-4e05-b825-f4ac0e6cf7a6
 # ╠═e486cdf9-a073-468d-a923-8cf6dca7f393
 # ╠═24bf81fb-db05-43e5-9e3a-4f8bf6328234
