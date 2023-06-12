@@ -6,7 +6,7 @@ using InteractiveUtils
 
 # ╔═╡ 8d268ee9-6a3b-4bf3-a0d1-59d86fe8f263
 md"""
-`social-connectedness.jl` | **Version 1.2** | _last updated on June 20, 2022_
+`social-connectedness.jl` | **Version 1.3** | _last updated on June 9, 2023_
 """
 
 # ╔═╡ 662cad72-af63-41c9-a895-5633be486f3f
