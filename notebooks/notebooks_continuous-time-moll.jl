@@ -6,7 +6,7 @@ using InteractiveUtils
 
 # ╔═╡ cdd24518-1cd3-43af-9a88-f0a8cd3cd6ed
 md"""
-`continuous-time-moll-solution.jl` | **Version 1.1** | *last updated: May 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
+`continuous-time-moll.jl` | **Version 1.1** | *last updated: May 2, 2023* | *created by [Daniel Schmidt](https://github.com/danieljschmidt)*
 """
 
 # ╔═╡ 0edf9214-7213-4b1d-8fa6-54a365525d29
@@ -410,15 +410,7 @@ md"""
 
 # ╔═╡ 90d0941c-d952-44c5-8acf-6adf30361b57
 md"""
-Version 1:
-
-$$\rho v_j(a) = \max_c u(c) + v_j'(a) (z_j + ra - c) + \sum_{k=1}^3 \Lambda_{j,k} v_k(a)$$
-
-Version 2:
-
-$$\rho v_j(a) = \max_c u(c) + v_j'(a) (z_j + ra - c) + \sum_{k\neq j} \lambda_{j,k} (v_k(a) - v_j(a))$$
-
-for $j = 1,2,3$
+Your answer goes here ...
 """
 
 # ╔═╡ fe3bf03d-eb60-40d6-aae8-8e85b0bb9213
@@ -428,19 +420,7 @@ md"""
 
 # ╔═╡ 514c081b-5343-4e63-abdf-eda3356c110a
 md"""
-```math
-\begin{align}
-A^n = \begin{pmatrix} 
-	\bar{A}_{11}^n & 0 & 0 \\ 
-	0 & \bar{A}_{22}^n & 0 \\ 
-	0 & 0 & \bar{A}_{33}^n 
-\end{pmatrix} + \begin{pmatrix} 
-	-(\lambda_{12} + \lambda_{13}) I & \lambda_{12} I & \lambda_{13} I \\ 
-	\lambda_{21} I & -(\lambda_{21} + \lambda_{23}) I & \lambda_{23} I \\
-	\lambda_{31} I & \lambda_{32} I & -(\lambda_{31} + \lambda_{32})I
-\end{pmatrix}
-\end{align}
-```
+Your answer goes here ...
 """
 
 # ╔═╡ 612478ce-215b-4020-a2f7-a64818f8fb03
@@ -453,24 +433,23 @@ md"""
 # ╔═╡ ec54c169-f795-40fe-8c5c-b63600834d77
 function solve_HJB_implicit(m::HuggettPoisson3, r; maxit = 100, crit = 1e-6, Δ = 1000)
 
-	(; σ, ρ, z, Λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
 	# construct asset grid
 	a = construct_a(m)
 
 	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, 3)
-	dvb = zeros(N_a, 3)
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
 
 	# precompute A_switch matrix
 	id = sparse(I, N_a, N_a)
-	A_switch_1 = hcat(Λ[1,1] * id,  Λ[1,2] * id, Λ[1,3] * id)
-	A_switch_2 = hcat(Λ[2,1] * id,  Λ[2,2] * id, Λ[2,3] * id)
-	A_switch_3 = hcat(Λ[3,1] * id,  Λ[3,2] * id, Λ[3,3] * id)
-	A_switch   = vcat(A_switch_1, A_switch_2, A_switch_3)
+	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
+	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
+	A_switch   = vcat(A_switch_1, A_switch_2)
 
 	# initial guess for value function
-	v₀ = zeros(N_a, 3)
+	v₀ = zeros(N_a, 2)
 	for (i, zᵢ) in enumerate(z)
 		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
 	end
@@ -524,19 +503,16 @@ function solve_HJB_implicit(m::HuggettPoisson3, r; maxit = 100, crit = 1e-6, Δ 
 		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
 		Z =   max.(ȧf,0)/da
 
-		zero = spzeros(N_a, N_a)
 		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
 		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
-		A33 = spdiagm(-1 => X[2:N_a,3], 0 => Y[:,3], 1 => Z[1:N_a-1,3])
-		A1 = hcat(A11, zero, zero)
-		A2 = hcat(zero, A22, zero)
-		A3 = hcat(zero, zero, A33)
-		A = vcat(A1, A2, A3) + A_switch
+		A1 = hcat(A11, spzeros(N_a, N_a))
+		A2 = hcat(spzeros(N_a, N_a), A22)
+		A = vcat(A1, A2) + A_switch
 
-		B = (ρ + 1/Δ) * sparse(I, 3*N_a, 3*N_a) - A
+		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, 3)
+		v_new = reshape(v_new_stacked, N_a, 2)
 
 		# STEP 4
 
@@ -571,10 +547,10 @@ m3 = HuggettPoisson3();
 initial_bracket3 = (0.01, 0.03)
 
 # ╔═╡ d31538cc-4223-47bf-ad19-b1ed9c1ab1f5
-r_eq3 = find_zero(r -> excess_demand(m3, r), initial_bracket3, Brent())
+#r_eq3 = find_zero(r -> excess_demand(m3, r), initial_bracket3, Brent())
 
 # ╔═╡ f29e5256-ccec-4c99-9f90-5f98142b1f40
-(df3, it_last3, dist3) = solve_df(m3, r_eq3);
+#(df3, it_last3, dist3) = solve_df(m3, r_eq3);
 
 # ╔═╡ 30496b92-df7c-4f48-9983-5cbb99d81f7a
 let 
@@ -638,24 +614,23 @@ md"""
 # ╔═╡ 573757f8-8093-4310-8073-11ae7fcff776
 function solve_HJB_implicit(m::HuggettPoissonN, r; maxit = 100, crit = 1e-6, Δ = 1000)
 
-	(; σ, ρ, N_z, z, Λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
+	(; σ, ρ, z, λ, N_a, aₘᵢₙ, aₘₐₓ, da) = m
 
 	# construct asset grid
 	a = construct_a(m)
 
 	# initialize arrays for forward and backward difference
-	dvf = zeros(N_a, N_z)
-	dvb = zeros(N_a, N_z)
+	dvf = zeros(N_a, 2)
+	dvb = zeros(N_a, 2)
 
 	# precompute A_switch matrix
 	id = sparse(I, N_a, N_a)
-	A_switch_rows = [
-		hcat([Λ[j,k] * id for k in range(1,N_z)]...) for j in range(1,N_z)
-	]
-	A_switch   = vcat(A_switch_rows...)
+	A_switch_1 = hcat(-λ[1] * id,  λ[1] * id)
+	A_switch_2 = hcat( λ[2] * id, -λ[2] * id)
+	A_switch   = vcat(A_switch_1, A_switch_2)
 
 	# initial guess for value function
-	v₀ = zeros(N_a, N_z)
+	v₀ = zeros(N_a, 2)
 	for (i, zᵢ) in enumerate(z)
 		v₀[:,i] = (zᵢ .+ r * a).^(1-σ) / (1-σ) / ρ
 	end
@@ -709,16 +684,16 @@ function solve_HJB_implicit(m::HuggettPoissonN, r; maxit = 100, crit = 1e-6, Δ 
 		Y = - max.(ȧf,0)/da + min.(ȧb,0)/da
 		Z =   max.(ȧf,0)/da
 
-		A_bar = blockdiag([
-			spdiagm(-1 => X[2:N_a,j], 0 => Y[:,j], 1 => Z[1:N_a-1,j])
-		for j in range(1,N_z)]...)
-		
-		A = A_bar + A_switch
+		A11 = spdiagm(-1 => X[2:N_a,1], 0 => Y[:,1], 1 => Z[1:N_a-1,1])
+		A22 = spdiagm(-1 => X[2:N_a,2], 0 => Y[:,2], 1 => Z[1:N_a-1,2])
+		A1 = hcat(A11, spzeros(N_a, N_a))
+		A2 = hcat(spzeros(N_a, N_a), A22)
+		A = vcat(A1, A2) + A_switch
 
-		B = (ρ + 1/Δ) * sparse(I, N_z*N_a, N_z*N_a) - A
+		B = (ρ + 1/Δ) * sparse(I, 2*N_a, 2*N_a) - A
 		b = vec(u) + vec(v)/Δ
 		v_new_stacked = B \ b
-		v_new = reshape(v_new_stacked, N_a, N_z)
+		v_new = reshape(v_new_stacked, N_a, 2)
 
 		# STEP 4
 
@@ -753,10 +728,10 @@ mN = HuggettPoissonN();
 initial_bracketN = (0.01, 0.035)
 
 # ╔═╡ 2d15caf9-986d-4595-ab24-39ada24c9778
-r_eqN = find_zero(r -> excess_demand(mN, r), initial_bracketN, Brent())
+#r_eqN = find_zero(r -> excess_demand(mN, r), initial_bracketN, Brent())
 
 # ╔═╡ 9f901ed5-0458-4358-a793-a530e397c01f
-(dfN, it_lastN, distN) = solve_df(mN, r_eqN);
+#(dfN, it_lastN, distN) = solve_df(mN, r_eqN);
 
 # ╔═╡ 6f18ea5e-5816-4791-974f-78910f393e57
 let 
@@ -1030,7 +1005,7 @@ Roots = "~2.0.13"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.9.0-rc2"
+julia_version = "1.9.0"
 manifest_format = "2.0"
 project_hash = "6fdb7cb925bf14054da5b191e195a02a90f68a90"
 
@@ -2452,7 +2427,7 @@ version = "0.15.1+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.4.0+0"
+version = "5.7.0+0"
 
 [[deps.libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2534,9 +2509,9 @@ version = "3.5.0+0"
 # ╠═d7f08043-fa3e-476c-a25a-dac7c16cc570
 # ╟─49d69255-20f3-490d-b068-81ec0cb22ff3
 # ╟─ec990221-bff1-41f3-8a94-2ef23a836f2c
-# ╟─90d0941c-d952-44c5-8acf-6adf30361b57
+# ╠═90d0941c-d952-44c5-8acf-6adf30361b57
 # ╟─fe3bf03d-eb60-40d6-aae8-8e85b0bb9213
-# ╟─514c081b-5343-4e63-abdf-eda3356c110a
+# ╠═514c081b-5343-4e63-abdf-eda3356c110a
 # ╟─612478ce-215b-4020-a2f7-a64818f8fb03
 # ╠═ec54c169-f795-40fe-8c5c-b63600834d77
 # ╟─9ebdb7e1-c1e3-4e22-8c24-e82e5d927160
