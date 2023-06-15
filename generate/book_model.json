@@ -210,12 +210,12 @@
             },
             {
                 "name": "Tutorial 3A",
-                "notebook_path": "notebooks/continuous-time-moll-solution.jl",
+                "notebook_path": "notebooks/continuous-time-moll.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
             {
-                "name": "Tutorial 3B",
+                "name": "Tutorial 3B (Solution)",
                 "notebook_path": "notebooks/stopping-time-problem-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
