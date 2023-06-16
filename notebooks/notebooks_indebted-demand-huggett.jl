@@ -16,7 +16,7 @@ end
 
 # ╔═╡ a68d5127-af7b-4bc7-ae9d-4a0dce517bb9
 md"""
-`indebted-demand-huggett.jl` | **Version 1.1** | *last updated: June 5, 2023*
+`indebted-demand-huggett.jl` | **Version 2.0** | *last updated: June 16, 2023*
 """
 
 # ╔═╡ 98f828c4-ff2e-11ed-2796-ab77975202aa
@@ -34,7 +34,7 @@ begin
 	
 Base.@kwdef struct HuggettCTMC
     # income process parameters
-	zgrid::Vector{Float64}=[0.1, high_income]
+	zgrid::Vector{Float64}=[0.14-ineq*2/3, 0.14+ineq]
 	λ = [0.02, 0.03]
 	Λ::Matrix{Float64}= generator((; λ))
 	
@@ -43,9 +43,10 @@ Base.@kwdef struct HuggettCTMC
 	ρ::Float64=0.05
 	r::Float64=0.03
 	w::Float64=1.0
+	γ::Float64=0.0 # determines the degree of non-homotheticity
 	
     aₘᵢₙ::Float64=-0.1
-    aₘₐₓ::Float64=1.0
+    aₘₐₓ::Float64= 1.5
 	an::Int=500
 	Δa::Float64=(aₘₐₓ - aₘᵢₙ)/(an - 1)
 end
@@ -74,7 +75,7 @@ function (m::HuggettCTMC)(state::NamedTuple, value::NamedTuple)
 		dvs[i] = dv
 	end
 		
-	vts  = ρ .* vs .- (u.(cs, Ref(m)) .+ ȧs .* dvs .+ Λ * vs)
+	vts  = ρ .* vs .- (u.(cs, a, Ref(m)) .+ ȧs .* dvs .+ Λ * vs)
 
     return (; v1t=vts[1], v2t=vts[2]), (; s1=ȧs[1], s2=ȧs[2], c1=cs[1], c2=cs[2])
 end
@@ -124,10 +125,10 @@ u_prime_inv(x, (; σ)) = x^(-1/σ)
 u_prime(c, (; σ)) = c^(-σ)
 
 # ╔═╡ 175c4e55-32e6-4803-815b-0d3c2e094154
-u(c, (; σ)) = c > 0 ? σ == 1 ? log(c) : c^(1-σ)/(1-σ) : 10.0 * c - 100.0
+u(c, a, (; σ, γ)) = c > 0 ? σ == 1 ? log(c) + γ*a : c^(1-σ)/(1-σ) + γ*a : 10.0 * c - 100.0
 
 # ╔═╡ 411f9432-f06a-4ed1-8c43-50e30e3f493d
-v₀((; z, a), (; r, σ, ρ)) = u(z + r*a, (; σ))/ρ
+v₀((; z, a), (; r, σ, ρ, γ)) = u(z + r*a, a, (; σ, γ))/ρ
 
 # ╔═╡ 7115a9ce-00ac-4e63-8716-8646dd409851
 function generator((; λ))
@@ -194,7 +195,7 @@ md"""
 	m = HuggettCTMC(; r)
 	output = solve_HJB_econpdes(m; crit)
 	(; output, m)
-end
+end;
 
 # ╔═╡ f3cbf37b-d55b-4a74-9395-fbb858067ce7
 let
@@ -336,13 +337,14 @@ md"""
 """
 
 # ╔═╡ 7a682086-559d-494c-967a-c7b48b6e40f4
-r_grid = range(0.001, 0.03, 15)
+r_grid = range(0.001, 0.03, 10)
 
-# ╔═╡ e4ed5491-7c3e-4789-b8ad-6bf5cc3b5427
-excess_savings = map(r_grid) do r
+# ╔═╡ 70c2cb4b-643d-48f5-a036-fc6b53635624
+function compute_A_D(r; γ=0.0)
+
 	crit = 1e-11
 
-	m = HuggettCTMC(; r)
+	m = HuggettCTMC(; r, γ)
 	output = solve_HJB_econpdes(m; crit)
 
 	A_switch = construct_A_switch(m)
@@ -352,17 +354,24 @@ excess_savings = map(r_grid) do r
 	
 	A = construct_A(ȧ, Δa, an, 2) + A_switch
 
-	
-
 	df_π = @chain output.df begin
 		@transform(:π = @bycol vec(solve_KF(m, A)))
 	end
 
+	# excess savings/ demand
 	A = dot(df_π.π, df_π.a) * Δa
 
+	# aggreage debt
 	D = - dot(df_π.π, df_π.a .* (df_π.a .< 0)) * Δa
-	
-	(; A, D)
+
+	return A, D
+
+end
+
+# ╔═╡ e4ed5491-7c3e-4789-b8ad-6bf5cc3b5427
+excess_savings = map(r_grid) do r
+	(A, D) = compute_A_D(r; γ=0.)
+	(; r, A, D)
 end |> DataFrame
 
 # ╔═╡ d4ecfb0a-131b-4083-8993-1815ec31d485
@@ -376,9 +385,6 @@ let
 	fig
 end
 
-# ╔═╡ 877fbde3-a07e-4fc2-9539-75355815d07b
-@bind high_income PlutoUI.Slider(0.2:0.01:0.3, default=0.2, show_value=true)
-
 # ╔═╡ 5e274d35-f0b4-4417-a92c-14e5278de756
 md"""
 # Assignment: Mian-Straub-Sufi Meet Huggett in Continuous Time
@@ -388,97 +394,125 @@ In this assignment we will check if the results from _Mian, Straub & Sufi (2020)
 
 # ╔═╡ fe75a5c8-c0a8-4b02-b7e0-5386493418ca
 md"""
-### Task 1: Huggett in Continuous Time (4 points)
+### Task 1: Huggett in Continuous Time (5 points)
+In this part of the exercise, we consider homothetic preferences $u(c) = log(c)$, i.e. the case $\gamma=0$.
+"""
 
-👉 (1.1 | 1 point) Solve for the equilibrium interest rate.
+# ╔═╡ 959236ff-e986-4ed7-94bc-2b01e6bee53b
+md"""
+👉 (1.1 | 1 point) Solve for the equilibrium interest rate. 
 
-👉 (1.2 | 1 point) Compute aggregate debt-to-income in this economy.
-
-👉 (1.3 | 2 points) What happens to debt and the interest rate if you increase income inequality? (How do you control income inequality?)
+Hint: You can use the function ```compute_A_D``` defined above.
 """
 
 # ╔═╡ be65576a-6785-4aca-91e2-86f86bea1232
-# your
+using Roots: find_zero, Brent
 
-# ╔═╡ dc0f8a6d-aa07-4f3c-aea4-52823a5c585f
-# analysis
+# ╔═╡ 3df54992-ab5a-4c85-9627-18129ccf40ff
+# Your code goes here
+
+# ╔═╡ 8297632b-c656-47ed-9811-58c591ab9412
+md"""
+👉 (1.2 | 1 point) Compute the aggregate debt-to-income ratio in this economy.
+"""
 
 # ╔═╡ 6c87eec8-ceb4-48bf-aabe-09c8125b03d2
-# goes
+# Your code goes here
 
-# ╔═╡ d0244ce6-b7aa-4d7c-ae84-0c5dc4f9140d
-# here
+# ╔═╡ 311acef0-8b4a-4599-9e82-7687f5b7b442
+md"""
+👉 (1.3 | 1 points) Consider the following income process:
+
+$z_1 = 0.14 - \frac{2}{3}\xi$
+
+$z_2 = 0.14 + \xi$
+
+$\lambda_1 = 0.02$
+
+$\lambda_2 = 0.03$
+
+where $\xi$ is a measure of income inequality. Prove that changes in $\xi$ do not affect aggregate income.
+"""
 
 # ╔═╡ f2ca5936-1c64-4b66-9fbf-97a4a1041b84
-answer1 = md"""
+md"""
 Your answer goes here ...
 """
 
-# ╔═╡ bbde284e-b8a8-4c4f-9aa4-61a0f2fb8fa8
-show_words_limit(answer1, 200)
+# ╔═╡ e65b48fa-b518-480b-88e4-269e37a3a9ad
+md"""
+👉 (1.4 | 1 points) What happens to debt and the interest rate if you increase income inequality $\xi$?
+"""
+
+# ╔═╡ 877fbde3-a07e-4fc2-9539-75355815d07b
+@bind ineq PlutoUI.Slider(0.06:0.005:0.07, default=0.06, show_value=true)
+
+# ╔═╡ 93d936dd-8391-46df-9065-ecb75a95153a
+md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ 0c144400-c96d-4b30-8b9d-38201a8ba51e
+md"""
+👉 (1.5 | 1 points) Find an explanation for the effect of income inequality on the interest rate.
+"""
+
+# ╔═╡ bb0d8202-5858-42d0-b9fd-8a049b52ac41
+md"""
+Your answer goes here ...
+"""
 
 # ╔═╡ ca210518-67c0-4963-9fe3-35fc717ab093
 md"""
-### Task 2: Non-homothetic preferences (6 points)
+### Task 2: Non-homothetic preferences (5 points)
 
-👉 (2.1 | 1 points) How does the HJB equation change when adding Mian-Straub-Sufi's preferences?
+Now we consider nonhomothetic preferences $u(c, a) = log(c) + \gamma a$ with $\gamma = 0.1$. 
+
+The term $\gamma a$ has the interpretation that agents get utility from the higher status associated with wealth.
+
+👉 (2.1 | 2 points) How does the model in this notebook differ from the model in the Mian-Straub-Sufi paper? Name two key differences.
 """
 
-# ╔═╡ ec5f9b1a-299e-4310-82fa-9c091b969e82
+# ╔═╡ e7962e20-fb8d-4d0c-a732-95cf3a7593e8
 md"""
-_**Adjust the HJB equation below!**_
-```math
-\rho v_i(a) = \max_{c} u(c) + v'_i(a)(r a + y_i - c) + \underbrace{\sum_{j\ne i} \lambda_{ij} (v_j(a) - v_i(a))}_{\text{exo}}
-```
-The first order condition is ``u'(c) = v_i'(a) \iff c^* = (u')^{-1}(v_i'(a))``
-or
-```math
-\rho v(k) = \underbrace{u(c^*) + v_i'(a)(r a + y_i - c^*)}_{\text{endo}} + \text{exo}
-```
-"""
-
-# ╔═╡ 8cf86cdb-a7f8-4890-93be-3b8b95e21477
-md"""
-👉 (2.2 | 2 points) Implement the adjusted HJB equation. (You can adjust all the functions for the Huggett model)
+Your answer goes here ...
 """
 
 # ╔═╡ 234630f7-6843-47ae-a71e-eec9742341aa
 md"""
-👉 (2.3 | 2 points) What happens to debt and the interest rate when you increase inequality?
+👉 (2.2 | 1 point) Compute the interest rate and debt with the non-homothetic preferences. Explain why the equilibrium interest rate is smaller than in the homothetic ($\gamma=0$) case.
 """
 
 # ╔═╡ cd1a6415-e7f4-4080-b3cb-9888f93ad430
-# your
+# Your code goes here
 
 # ╔═╡ 3bca1c15-dbd1-4d71-aef6-0a3d11a6ef5b
-# analysis
-
-# ╔═╡ 87f67faf-903c-4fc6-9e33-01c83f6e8698
-# goes
-
-# ╔═╡ 4f03f4c6-a773-4c29-925d-439667c752ef
-# here
+# Your code goes here
 
 # ╔═╡ b01a1779-e7bc-491a-820e-f623489badad
-answer2_1 = md"""
-Your answer goes here ...
-"""
-
-# ╔═╡ a696449a-609f-45df-8a14-c2c4fc8d8baa
-show_words_limit(answer2_1, 200)
-
-# ╔═╡ 95c2e2a2-c185-4a11-8755-8ca7b27f8812
 md"""
-👉 (2.3 | 1 point) Discuss. _(< 100 words)_
+Your answer goes here ...
 """
 
 # ╔═╡ 33a1617a-266c-415d-92db-36d744c8a947
-answer2_2 = md"""
-Your answer goes here ...
+md"""
+👉 (2.3| 1 point) What happens to debt and the interest rate if you increase income inequality?
 """
 
 # ╔═╡ 8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
-show_words_limit(answer2_2, 100)
+md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ f09b8b15-9941-4dec-9491-07728cd28c3f
+md"""
+👉 (2.4| 1 point) Do your results agree (qualitatively) with the results in the Mian-Straub-Sufi paper? Discuss.
+"""
+
+# ╔═╡ a41aa66a-da91-4e59-8f53-a54cf27a6d82
+md"""
+Your answer goes here ...
+"""
 
 # ╔═╡ 1ed541ff-943b-49fc-945a-4de113a0dead
 md"""
@@ -578,6 +612,7 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 EconPDEs = "a3315474-fad9-5060-8696-cee5f38a87b7"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
@@ -589,6 +624,7 @@ DataFrameMacros = "~0.4.1"
 DataFrames = "~1.5.0"
 EconPDEs = "~1.0.3"
 PlutoUI = "~0.7.51"
+Roots = "~2.0.17"
 StructArrays = "~0.6.15"
 """
 
@@ -598,7 +634,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.0"
 manifest_format = "2.0"
-project_hash = "69662b254300ef8216143fd95a7f3c94407fd305"
+project_hash = "1123513ebbac962a229b594e20553b14aca133cb"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "dcfdf328328f2645531c4ddebf841228aef74130"
@@ -806,6 +842,11 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "fc08e5930ee9a4e03f84bfb5211cb54e7769758a"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.10"
+
+[[deps.CommonSolve]]
+git-tree-sha1 = "0eee5eb66b1cf62cd6ad1b460238e60e4b09400c"
+uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
+version = "0.2.4"
 
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -1796,6 +1837,22 @@ git-tree-sha1 = "6ed52fdd3382cf21947b15e8870ac0ddbff736da"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
 version = "0.4.0+0"
 
+[[deps.Roots]]
+deps = ["ChainRulesCore", "CommonSolve", "Printf", "Setfield"]
+git-tree-sha1 = "de432823e8aab4dd1a985be4be768f95acf152d4"
+uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+version = "2.0.17"
+
+    [deps.Roots.extensions]
+    RootsForwardDiffExt = "ForwardDiff"
+    RootsIntervalRootFindingExt = "IntervalRootFinding"
+    RootsSymPyExt = "SymPy"
+
+    [deps.Roots.weakdeps]
+    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+    IntervalRootFinding = "d2bf35a9-74e0-55ec-b149-d360ff49b807"
+    SymPy = "24249f21-da20-56a4-8eb1-6a02cf4ae2e6"
+
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
@@ -2269,30 +2326,33 @@ version = "3.5.0+0"
 # ╠═576a8b62-4796-4974-9bfc-f270cec8295c
 # ╟─b7bcf6bd-3143-4edc-ad58-c1bb5b86c785
 # ╠═7a682086-559d-494c-967a-c7b48b6e40f4
+# ╠═70c2cb4b-643d-48f5-a036-fc6b53635624
 # ╠═e4ed5491-7c3e-4789-b8ad-6bf5cc3b5427
 # ╠═d4ecfb0a-131b-4083-8993-1815ec31d485
-# ╠═877fbde3-a07e-4fc2-9539-75355815d07b
 # ╟─5e274d35-f0b4-4417-a92c-14e5278de756
 # ╟─fe75a5c8-c0a8-4b02-b7e0-5386493418ca
+# ╟─959236ff-e986-4ed7-94bc-2b01e6bee53b
 # ╠═be65576a-6785-4aca-91e2-86f86bea1232
-# ╠═dc0f8a6d-aa07-4f3c-aea4-52823a5c585f
+# ╠═3df54992-ab5a-4c85-9627-18129ccf40ff
+# ╟─8297632b-c656-47ed-9811-58c591ab9412
 # ╠═6c87eec8-ceb4-48bf-aabe-09c8125b03d2
-# ╠═d0244ce6-b7aa-4d7c-ae84-0c5dc4f9140d
+# ╟─311acef0-8b4a-4599-9e82-7687f5b7b442
 # ╠═f2ca5936-1c64-4b66-9fbf-97a4a1041b84
-# ╠═bbde284e-b8a8-4c4f-9aa4-61a0f2fb8fa8
+# ╟─e65b48fa-b518-480b-88e4-269e37a3a9ad
+# ╠═877fbde3-a07e-4fc2-9539-75355815d07b
+# ╠═93d936dd-8391-46df-9065-ecb75a95153a
+# ╟─0c144400-c96d-4b30-8b9d-38201a8ba51e
+# ╠═bb0d8202-5858-42d0-b9fd-8a049b52ac41
 # ╟─ca210518-67c0-4963-9fe3-35fc717ab093
-# ╟─ec5f9b1a-299e-4310-82fa-9c091b969e82
-# ╟─8cf86cdb-a7f8-4890-93be-3b8b95e21477
+# ╠═e7962e20-fb8d-4d0c-a732-95cf3a7593e8
 # ╟─234630f7-6843-47ae-a71e-eec9742341aa
 # ╠═cd1a6415-e7f4-4080-b3cb-9888f93ad430
 # ╠═3bca1c15-dbd1-4d71-aef6-0a3d11a6ef5b
-# ╠═87f67faf-903c-4fc6-9e33-01c83f6e8698
-# ╠═4f03f4c6-a773-4c29-925d-439667c752ef
 # ╠═b01a1779-e7bc-491a-820e-f623489badad
-# ╟─a696449a-609f-45df-8a14-c2c4fc8d8baa
-# ╟─95c2e2a2-c185-4a11-8755-8ca7b27f8812
-# ╠═33a1617a-266c-415d-92db-36d744c8a947
-# ╟─8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
+# ╟─33a1617a-266c-415d-92db-36d744c8a947
+# ╠═8b8896a2-51ca-4ba8-9c92-6e0e791b1a59
+# ╟─f09b8b15-9941-4dec-9491-07728cd28c3f
+# ╠═a41aa66a-da91-4e59-8f53-a54cf27a6d82
 # ╟─1ed541ff-943b-49fc-945a-4de113a0dead
 # ╟─7ea45233-310a-4e05-b825-f4ac0e6cf7a6
 # ╠═e486cdf9-a073-468d-a923-8cf6dca7f393
