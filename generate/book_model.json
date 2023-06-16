@@ -210,7 +210,7 @@
             },
             {
                 "name": "Tutorial 3A",
-                "notebook_path": "notebooks/continuous-time-moll.jl",
+                "notebook_path": "notebooks/continuous-time-moll-solution.jl",
                 "video_id": "",
                 "preview_image_url": ""
             },
