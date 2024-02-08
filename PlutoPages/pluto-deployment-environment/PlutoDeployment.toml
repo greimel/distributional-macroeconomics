@@ -1,0 +1,13 @@
+[Export]
+baked_state = false
+baked_notebookfile = true
+offer_binder = true
+ignore_cache = [
+    "index.jl",
+]
+create_index = true
+exclude = [
+    # these are in the repo but not used on the website
+    "tools/*",
+    "PlutoPages.jl",
+]

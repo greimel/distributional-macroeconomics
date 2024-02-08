@@ -1,30 +1,42 @@
 name: Export Pluto notebooks & Deploy
+permissions:
+    contents: write
 on:
     push:
         branches:
             - main
     workflow_dispatch:
+concurrency:
+    group: export
+    cancel-in-progress: true
 
 jobs:
     build-and-deploy:
         runs-on: ubuntu-latest
         steps:
-            - name: Checkout repository
+            - name: Checkout Spring 24 source
               uses: actions/checkout@v2
 
             - name: 🙌 Install Julia
               uses: julia-actions/setup-julia@v1
               with:
-                  version: "1.8"
-            - name: GLMakie dependencies
-              run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+                  version: "1"
+           # - name: Install R
+           #   uses: r-lib/actions/setup-r@v2
+           # - name: Add RHOME to LD_LIBRARY_PATH
+           #   run: echo "LD_LIBRARY_PATH=$(R RHOME)/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+           #   # if: matrix.os == 'ubuntu-latest'
+           # - name: Install R packages
+           #   shell: Rscript {0}
+           #   run: |
+           #     install.packages("nets")
             - name: ⏱ Cache notebook states
               uses: actions/cache@v2
               with:
-                path: pluto_state_cache
-                key: ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}-${{ hashFiles('**/*.jl') }}
+                path: _cache
+                key: ${{ runner.os }}-pluto_state_cache-v3-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}-${{ github.run_id }}
                 restore-keys: |
-                    ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
+                    ${{ runner.os }}-pluto_state_cache-v3-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
 
             - name: ⏱ Cache .julia
               uses: actions/cache@v2
@@ -34,18 +46,29 @@ jobs:
                 restore-keys: |
                     ${{ runner.os }}-dotjulia-v1-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
 
+            - name: 🪴 Generate site
+              run: julia --project=PlutoPages/pluto-deployment-environment -e '
+                  import Pkg;
+                  Pkg.instantiate();
 
-            - name: Run Pluto notebooks and generate website
-              shell: julia --color=yes --project=. {0} 
+                  include("./PlutoPages/generate.jl")'
+
+            - name: 📰 Upload site generation report
+              uses: actions/upload-artifact@v2
+              if: always()
+              with:
+                path: generation_report.html
+
+            - name: 🔀 Combine semesters into single site
               run: |
-                dir = pwd()
-                import Pkg
-                Pkg.activate(joinpath(dir, "pluto-deployment-environment"))
-                Pkg.instantiate()
-                include(joinpath(dir, "generate/generate.jl"))
-            - name: Build and Deploy
+                mkdir www
+                mv content/assets_pub www/assets
+                mv PlutoPages/_site www/Spring24
+                mv PlutoPages/extra_outputs/* www
+
+            - name: 🚀 Deploy to GitHub Pages
               uses: JamesIves/github-pages-deploy-action@releases/v3
               with:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  BRANCH: gh-pages
-                  FOLDER: ./website/__site
+                  BRANCH: output
+                  FOLDER: www
