@@ -1,3 +1,9 @@
+---
+title: "Welcome"
+tags: ["homepage"]
+layout: "md.jlmd"
+---
+
 # _Topics in Distributional Macroeconomics_
 
  This website hosts some of the material for the PhD-level course _Topics in Distributional Macroeconomics_ at the Tinbergen Institute Amsterdam. The corresponding Github repository is [here](https://github.com/greimel/distributional-macroeconomics).

@@ -70,5 +70,5 @@ jobs:
               uses: JamesIves/github-pages-deploy-action@releases/v3
               with:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  BRANCH: output
+                  BRANCH: gh-pages
                   FOLDER: www
