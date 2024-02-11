@@ -3,6 +3,9 @@ Dict(
         "welcome" => collections["welcome"].pages,
         "Julia basics" => collections["julia-basics"].pages,
         "Preliminaries" => collections["preliminaries"].pages,
+        "Housing" => collections["housing"].pages,
+        "Long-run" => collections["long-run"].pages,
+        "Continuous time" => collections["continuous-time"].pages,
     ],
     :about => Dict(
         :authors => [
