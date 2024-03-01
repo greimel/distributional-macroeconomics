@@ -1,0 +1,138 @@
+<!DOCTYPE html><html lang="en">
+<head>
+
+<title>Assignment 1 — Pluto.jl</title>
+<meta name="description" content='' />
+
+<link rel="root" href="../.." />
+
+<link rel="icon" href="../../assets/favicon.ico" />
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="stylesheet" href="../../assets/styles/index.css" type="text/css" />
+<link rel="stylesheet" href="../../assets/styles/layout.css" type="text/css" />
+<script src="../../assets/scripts/sidebar.js" type="module"></script>
+
+<link rel="pp-search-data" href="../../pp_search_data.json" />
+<script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js" integrity="sha256-DFDZACuFeAqEKv/7Vnu1Tt5ALa58bcWZegGGFNgET8g=" crossorigin="anonymous" defer></script>
+<script src="../../assets/scripts/search.js" type="module" defer></script>
+
+<script src="https://cdn.jsdelivr.net/npm/lite-youtube-embed@0.2.0/src/lite-yt-embed.js" integrity="sha256-wwYlfEzWnCf2nFlIQptfFKdUmBeH5d3G7C2352FdpWE=" crossorigin="anonymous" defer></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lite-youtube-embed@0.2.0/src/lite-yt-embed.css" integrity="sha256-99PgDZnzzjO63EyMRZfwIIA+i+OS2wDx6k+9Eo7JDKo=" crossorigin="anonymous">
+
+<meta name="viewport" content="width=device-width"><meta charset="utf-8">
+<meta name="pluto-insertion-spot-meta">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="white"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2a2928"><meta name="color-scheme" content="light dark"><link rel="pluto-logo-big" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/logo.004c1d7c.svg" integrity="sha384-GkQkODcGxsrSRJCkeakBXihum0GUM44cwBgKyutDimectXCbCgj6Vu3jlrueqEcN" crossorigin="anonymous"><link rel="pluto-logo-small" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/favicon_unsaturated.d1387b25.svg" integrity="sha384-omwjH+Qy3hpAVf5FYd/pkaDBuVAfsEDRN7eBxEA8Ek00OAWP+aiV+GpEYk3I7lyo" crossorigin="anonymous"><script type="module" src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.0c13a924.js" integrity="sha384-q8cO+lFO46JfgnUPjKIx0Wq2bi7VUEL3IC7rlX48twUcwXr23VYfIwsIa/V7Ok+N" crossorigin="anonymous"></script><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/juliamono.c6034ab4.css" integrity="sha384-n0za6lUXlyf4XC+nGkZWj3TLDnRbNpAcoi4PZGSlQMPoyqGa9kGY+ZXkUgZGIhQt" crossorigin="anonymous"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.13c75024.css" integrity="sha384-+8lBWsI9ovzoUK6PJMu3Yzbi00lePOHmVdwcP81oC6/dFbzDUo0UccEZdK82demH" crossorigin="anonymous"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/vollkorn.089565a8.css" integrity="sha384-jnV/84VtSgBLF70H+s2rxJcOUZIMDR+X/ElFZA83i9ZtZSWiIMFAgPyrWkOJV08q" crossorigin="anonymous"><script defer="">console.log("Pluto.jl, by Fons van der Plas (https://github.com/fonsp), Mikołaj Bochenski (https://github.com/malyvsen), Michiel Dral (https://github.com/dralletje) and friends 🌈");</script><script src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.b8733d72.js" defer="" integrity="sha384-84yPd6AGZ/1IUiaBlssipmMKMFz9WGFQ+u8vYZ9cWicH6bZm7ZOej+kLDXnIIAQJ" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.9f9dc874.js" defer="" integrity="sha384-tkFo1EK72I9JvoTmHFa199dfRzW8mkXPUkHb/N7UhYI+bxKzX3Kh8LNCZz1ltsFF" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.90ede145.js" defer="" integrity="sha384-CuNU9gQg6fa/yynNqNWjHWzPm4nj+d7O6+HXsNGSqClhs/bYQIbBC3Lw/kh8Ukui" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.dbeed08a.js" defer="" integrity="sha384-1BEdQwXfZi4ZpsNV8w1X8pQcVK1/DS/+/M8OTo3gol7mdEspSN7nT6llX57NQCSt" crossorigin="anonymous"></script><script id="iframe-resizer-content-window-script" src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.6386bd9d.js" crossorigin="anonymous" defer="" integrity="sha384-tgN2a0VDi/lCYwZuDqT7L+A/Y/9kpxf3HV7zv2BJ5Fu7zW0EClq0nM4crfK3TRPs"></script><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.a3d93540.css" type="text/css" integrity="sha384-B0KWNr8jxl8wBW7XZTO8KORIjwjXk75K5O5WsVTqbgCkx3q+9ihdMnGU8DzNtCRG" crossorigin="anonymous"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.52bd66ba.css" type="text/css" media="all" data-pluto-file="hide-ui" integrity="sha384-mZn6RuXF1UXCTqkld9/QJshMPUFGT/EBEcr0lZfUV7TULrxk0fZqe+YHXMk+6Qb0" crossorigin="anonymous"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.ec3a6a5b.css" type="text/css" integrity="sha384-SuGFZkuBuG+lmfz6RbnvjtcyIh8W1xDYi1sebwn7bl9VMQnhmr6EniSmIdcHJ55l" crossorigin="anonymous"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.1f4cf2ca.css" type="text/css" integrity="sha384-lBSBsn8FT1UzGOsNVudfV8RSHQEuNWqrCb6xQnF10uvF9AiCzYsCRXvKlhtQvV3c" crossorigin="anonymous"><link rel="preload" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/juliamono.c6034ab4.css" as="style" integrity="sha384-n0za6lUXlyf4XC+nGkZWj3TLDnRbNpAcoi4PZGSlQMPoyqGa9kGY+ZXkUgZGIhQt" crossorigin="anonymous"><link rel="preload" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/vollkorn.089565a8.css" as="style" integrity="sha384-jnV/84VtSgBLF70H+s2rxJcOUZIMDR+X/ElFZA83i9ZtZSWiIMFAgPyrWkOJV08q" crossorigin="anonymous"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.e82e08bd.css" type="text/css" integrity="sha384-7YN+h8b6N4N65qk8TG/J2KPF95D8z3sGNd06rokz4CX9oWu0KnRAF5cVWu3BkkaN" crossorigin="anonymous"><script data-pluto-file="launch-parameters">
+window.pluto_notebook_id = undefined;
+window.pluto_isolated_cell_ids = undefined;
+window.pluto_notebookfile = undefined;
+window.pluto_disable_ui = true;
+window.pluto_slider_server_url = undefined;
+window.pluto_binder_url = "https://mybinder.org/v2/gh/fonsp/pluto-on-binder/v0.19.38";
+window.pluto_statefile = undefined;
+window.pluto_preamble_html = undefined;
+</script>
+
+<meta name="pluto-insertion-spot-parameters">
+<script src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.14013f37.js" type="module" defer="" integrity="sha384-k6phcCIJynZNXwuHcKTQ2RbUBk1xE5YsBRgh07IoIwRAKTE6DWJg6WapARqSMwqY" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/gh/fonsp/Pluto.jl@0.19.38/frontend-dist/editor.8a3292da.js" integrity="sha384-itp4oE2PRbSrrTHVpWh8sqAuVUsz7ja6L2Dgp/JRfMCD2AwVdTk56K96POF3oLmu" crossorigin="anonymous"></script><script type="text/javascript" id="MathJax-script" integrity="sha384-4kE/rQ11E8xT9QgrCBTyvenkuPfQo8rXYQvJZuMgxyPOoUfpatjQPlgdv6V5yhUK" crossorigin="" not-the-src-yet="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg-full.js" async=""></script>
+
+</head>
+<body>
+    <div id="pages-layout">
+        <button id="toggle-nav" title="Open navigation"></button>
+        <nav id="pages-sidebar">
+        <div>
+        <ul>
+                <li class="sidebar-about">
+        <div class="course-title">
+            
+            <h1><a href="../.."><span>Topics in Distributional Macroeconomics</span></a></h1>
+            <h2><span>PhD-level Elective Course</h2>
+        </div>
+        <div class="authors">
+            by <a href='https://www.greimel.eu'>Fabian Greimel</a> &amp <a href='https://www.enricoperotti.eu'>Enrico Perotti</a>
+        </div>
+    </li>
+    <li>
+        <div class="search-bar">
+            <form action="../../search" method="GET">
+                <input type="search" name="q" placeholder="Search...">
+                <input type=submit value="🔎">
+            </form>
+        </div>
+    </li>
+
+            
+        <li>
+<h3>welcome</h3>
+<ul>
+<li class=' lecture'><a href='../../syllabus/'><span class="entry-number"></span> Syllabus</a></li><li class=' lecture'><a href='../../installation/'><span class="entry-number"></span> Software installation</a></li><li class=' lecture'><a href='../../cheatsheets/'><span class="entry-number"></span> Cheatsheets</a></li>
+</ul>
+</li>
+<li>
+<h3>Julia basics</h3>
+<ul>
+<li class=' lecture'><a href='../../julia-basics/basic-julia/' title=''><span class="entry-number">1.1</span> Basic Julia</a></li><li class=' lecture'><a href='../../julia-basics/more-julia/' title=''><span class="entry-number">1.2</span> More Julia</a></li>
+</ul>
+</li>
+<li>
+<h3>Preliminaries</h3>
+<ul>
+<li class=' lecture'><a href='../../preliminaries/macroeconomic-trends/' title=''><span class="entry-number">2.1</span> Macroeconomic trends</a></li><li class=' lecture'><a href='../../preliminaries/rbc-to-imrohoroglu/' title=''><span class="entry-number">2.2</span> RBC &amp; Imrohoroglu (1989) as Markov Chains</a></li><li class=' lecture'><a href='../../preliminaries/aiyagari/' title=''><span class="entry-number">2.3</span> Aiyagari</a></li><li class=' lecture'><a href='../../preliminaries/lifecycle/' title=''><span class="entry-number">2.4</span> Lifecycle models</a></li>
+</ul>
+</li>
+<li>
+<h3>Housing</h3>
+<ul>
+<li class=' lecture'><a href='../../housing/housing/' title=''><span class="entry-number">4.1</span> Simple Housing</a></li><li class=' lecture'><a href='../../housing/simple-housing-wealth-effects/' title=''><span class="entry-number">4.2</span> Simple Housing Wealth Effects</a></li><li class=' lecture'><a href='../../housing/housing-wealth-effects/' title=''><span class="entry-number">4.3</span> Housing Wealth Effects</a></li>
+</ul>
+</li>
+<li>
+<h3>Long-run</h3>
+<ul>
+<li class=' lecture'><a href='../../long-run/comparisons/' title=''><span class="entry-number">5.1</span> Has Rising Inequality Fueled the American Debt Boom?</a></li><li class=' lecture'><a href='../../long-run/indebted-demand/' title=''><span class="entry-number">5.2</span> Indebted demand</a></li><li class=' lecture'><a href='../../long-run/redistributive-growth/' title=''><span class="entry-number">5.3</span> Redistributive growth</a></li>
+</ul>
+</li>
+<li>
+<h3>Continuous time</h3>
+<ul>
+<li class=' lecture'><a href='../../continuous-time/continuous-time-processes/' title=''><span class="entry-number">6.1</span> Continuous time processes</a></li><li class=' lecture'><a href='../../continuous-time/indebted-demand-huggett/' title=''><span class="entry-number">6.2</span> Huggett meets Mian-Sufi-Straub</a></li><li class=' lecture'><a href='../../continuous-time/continuous-time-comparison/' title=''><span class="entry-number">6.3</span> Comparing different solution methods</a></li>
+</ul>
+</li>
+<li>
+<h3>Assignments and Tutorials</h3>
+<ul>
+<li class='active lecture'><a href='../../tutorials/mpcs-aiyagari/' title=''><span class="entry-number">7.1</span> Assignment 1</a></li><li class=' lecture'><a href='../../tutorials/mpcs-aiyagari-solution/' title=''><span class="entry-number">7.1</span> Assignment 1 (Solution)</a></li><li class=' lecture'><a href='../../tutorials/mobility-aiyagari/' title=''><span class="entry-number">7.2</span> Tutorial 1</a></li><li class=' lecture'><a href='../../tutorials/mobility-aiyagari-solution/' title=''><span class="entry-number">7.2</span> Tutorial 1 (Solution)</a></li><li class=' lecture'><a href='../../tutorials/simple-housing-wealth-effects-solution/' title=''><span class="entry-number">7.3</span> Assignment 2A (Solution)</a></li><li class=' lecture'><a href='../../tutorials/redistributive-growth-solution/' title=''><span class="entry-number">7.4</span> Assignment 2B (Solution)</a></li><li class=' lecture'><a href='../../tutorials/welfare-huggett/' title=''><span class="entry-number">7.5</span> Tutorial 2</a></li><li class=' lecture'><a href='../../tutorials/welfare-huggett-solution/' title=''><span class="entry-number">7.5</span> Tutorial 2 (Solution)</a></li><li class=' lecture'><a href='../../tutorials/continuous-time-moll/' title=''><span class="entry-number">7.6</span> Tutorial 3A</a></li><li class=' lecture'><a href='../../tutorials/continuous-time-moll-solution/' title=''><span class="entry-number">7.6</span> Tutorial 3A (Solution)</a></li><li class=' lecture'><a href='../../tutorials/stopping-time-problem-solution/' title=''><span class="entry-number">7.7</span> Tutorial 3B (Solution)</a></li>
+</ul>
+</li>
+
+                <li><hr></li>
+            <li class="sidebar-about">
+                <div class="semester-details">
+    <a href="../../semesters/">Spring 2024</a>
+</div>
+<div class="logos">
+    <picture title='Tinbergen Institute'>
+        <source srcset="../../assets/tinbergen-logo-white.svg" media="(prefers-color-scheme: dark)" />
+        <img src="../../assets/tinbergen-institute-logo.svg">
+    </picture>
+</div>
+
+            </li>
+        </ul>
+        </div>
+        </nav>
+        <div id="pages-content">
+           
+        <pluto-editor 
+ statefile='../../generated_assets/mpcs-aiyagari_64fd5244.plutostate' 
+ notebookfile='../../generated_assets/mpcs-aiyagari_a72077f7.jl' 
+
+
+	disable_ui
+>
+
+        </div>
+    </div>
+</body>
+</html>
