@@ -6,6 +6,7 @@ Dict(
         "Housing" => collections["housing"].pages,
         "Long-run" => collections["long-run"].pages,
         "Continuous time" => collections["continuous-time"].pages,
+        "Assignments and Tutorials" => collections["assignments"].pages,
     ],
     :about => Dict(
         :authors => [
