@@ -7,6 +7,7 @@ Dict(
         "Long-run" => collections["long-run"].pages,
         "Continuous time" => collections["continuous-time"].pages,
         "Assignments and Tutorials" => collections["assignments"].pages,
+        "Unfinished notebooks" => collections["unfinished"].pages,
     ],
     :about => Dict(
         :authors => [
