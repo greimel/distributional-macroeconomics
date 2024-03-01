@@ -254,7 +254,7 @@ let
 		@transform(:age = :j + 25)
 		stack(Not([:age, :j]))
 		data(_) * mapping(:age, :value, color = :variable) * visual(ScatterLines, markersize = 5)
-		draw
+		draw(; figure=(; figure_padding=3, size = (300, 300)))
 	end	
 	
 end
@@ -417,7 +417,7 @@ begin
     		"SCF$(year)",
     		"",
     		"https://www.federalreserve.gov/econres/files/scfp$(year)excel.zip",
-   			scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
+   			#scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
     		post_fetch_method=unpack
 		))
 	end
@@ -2492,7 +2492,7 @@ version = "3.5.0+0"
 # ╟─ca06bc4b-85ca-4f16-96ff-5956c3ad72cd
 # ╟─dc1680b3-7754-4923-ad93-895a26f676b6
 # ╟─5a18c115-254d-4eeb-993f-42f2772f91f0
-# ╟─6af88c45-7e54-4b32-b943-48064b2b4736
+# ╠═6af88c45-7e54-4b32-b943-48064b2b4736
 # ╟─f437f295-4ccf-4d57-b358-51df02e1deae
 # ╟─7266f832-71a0-40bb-92cc-462fd95e546b
 # ╟─a468386a-d300-4665-92b1-5ef7636fdfc0

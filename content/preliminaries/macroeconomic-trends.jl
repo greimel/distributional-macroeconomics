@@ -375,7 +375,7 @@ begin
     		"SCF$(year)",
     		"",
     		"https://www.federalreserve.gov/econres/files/scfp$(year)excel.zip",
-   			scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
+   			#scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
     		post_fetch_method=unpack
 		))
 	end

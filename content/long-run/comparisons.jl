@@ -307,33 +307,10 @@ md"""
 """
 
 # ╔═╡ 155047e2-70c6-49af-b836-80e59fcdea26
-scf_checksums = Dict(
-	1989 => "3600d39fa908f2b6b32a63518fe38d2b7ca7d9c8047e947b054ea2e7d36f7b9e",
-	1992 => "d86da7dc07819adb1f08683d7b04f782d2fb1c135ea94880ce4b6550db3c0ccd",
-	1995 => "c28169ca73855a1b1f22a999655ea573fc5391b11884b9272c9cf2bf1ee5c442",
-	1998 => "69fda43abc88df203f03b9a9e8cf5bf5bc0a626da4b99d44f2fd11dee2c0b11e",
-	2001 => "28f5548f91d5f851ad643d9c172e00ecfeb1d6fe47126fb2496af5b980f75ffd",
-	2004 => "bb08a6122a25348f6507fcd9377511820972108e8642d6ec1ab3ddf262c21071",
-	2007 => "85324789b2ab6f5e5dfc05a8de294e4fd837f7e2174f41e5be5e146435a68aa9",
-	2010 => "a85ee57748ec28b3366a4f0b9446ec8b0c34710f14097b6a6e03089c9ad8823a",
-	2013 => "f13ed12756798c7e696dbf56ec26438cc2e0c46de4c3343afd3fd05ddfb9e6e8",
-	2016 => "11e92c267f333fe10678c9cbb9752c10290085c35abd7c52f7f21c8df45dc468",
-	2019 => "87766da9024f7b6742d277c955234cf6bee439248fbc5f689c81d91880fd1b05",
-)
 
 # ╔═╡ a2784f1c-a6c1-457f-aa4a-556e5c6eb663
 begin
 	using DataDeps; ENV["DATADEPS_ALWAYS_ACCEPT"] = true
-
-	for year in 1989:3:2019
-		register(DataDep(
-    		"SCF$(year)",
-    		"",
-    		"https://www.federalreserve.gov/econres/files/scfp$(year)excel.zip",
-   			scf_checksums[year];# [checksum::Union{String,Vector{String}...},]; # Optional, if not provided will generate
-    		post_fetch_method=unpack
-		))
-	end
 
 	register(DataDep(
    		"MacroHistory",
