@@ -429,7 +429,7 @@ H(rand(100), (0.7 * K_ss(par), K_ss(par), C_ss(par)))
 # ╔═╡ 2e8069ec-1f01-46f3-adc1-609fabb7ea5a
 function H_simulate(K, (K₋, K_T, C_T))
 	TT = eltype(K)
-	K = OffsetVector([K₋; K; K_T], -1:length(K))
+	K = OffsetVector([K₋; K[1:end-1]; K_T], -1:length(K)-1)
 
 	simulate_backward_forward(K, C_T, TT)
 end
@@ -475,6 +475,13 @@ let
 
 	lines(cs)
 end
+
+# ╔═╡ 8864b699-819b-4516-ae14-cb82b55bd400
+md"""
+Todo: 
+1. check convergence using python version
+2. last K_T is ignored in python version
+"""
 
 # ╔═╡ a09f3f7b-3f6c-4f18-9260-6d3898a7a21b
 function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
@@ -525,7 +532,10 @@ function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
     # block 4: market clearing
     #clearing_A = (A-A_hh)
 
-	(; A, A_hh =OffsetVector(A_hh[0:T-1], 0:T-1))#clearing_A, C_hh)
+	(; A, 
+		A_hh=OffsetVector(A_hh[0:T-1], 0:T-1),
+		C_hh=OffsetVector(C_hh[0:T-1], 0:T-1)
+			)#clearing_A, C_hh)
 end
 
 # ╔═╡ 5ce5cb52-f233-48a1-8761-a5edf87f3c02
@@ -620,12 +630,14 @@ let
 	C_T = 0.5
  	c_jl = H_simulate(K, (K₋, K_T, C_T)).A
 
-	c_py = H_python_test(K₋, K_T, C_T, K).A_hh
+	c_py = H_python_test(K₋, K_T, C_T, K)
+	#.A_hh
 
-	c_py2 = H_python_new(K₋, K_T, C_T, K).A_hh
+	c_py2 = H_python_new(K₋, K_T, C_T, K)
+	#.A_hh
 
-	@test c_py == c_py2
-
+	@test c_py.A_hh == c_py2.A_hh
+	@test c_py.C_hh == c_py2.C_hh
 	#c_py, c_py2, c_jl
 end
 
@@ -2969,6 +2981,7 @@ version = "3.5.0+0"
 # ╠═acee479a-af82-4516-aa67-329b5fd9d040
 # ╠═6e707940-72b2-4723-923a-1fa24fa38ede
 # ╠═c4d59115-a419-4a1d-bfbf-379408e5c8e6
+# ╠═8864b699-819b-4516-ae14-cb82b55bd400
 # ╠═a09f3f7b-3f6c-4f18-9260-6d3898a7a21b
 # ╠═5ce5cb52-f233-48a1-8761-a5edf87f3c02
 # ╟─ee909667-22bc-4c51-89d8-5a3acfd94cf6
