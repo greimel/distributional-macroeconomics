@@ -478,7 +478,7 @@ end
 
 # ╔═╡ a09f3f7b-3f6c-4f18-9260-6d3898a7a21b
 function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
-	T = length(K) + 1
+	T = length(K)
 
 	alpha = par.α
 	beta = par.β
@@ -497,7 +497,7 @@ function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
 	
  
 
-	K = OffsetVector([K_lag_ini; K; K_ss], -1:T-1)
+	K = OffsetVector([K_lag_ini; K[1:end-1]; K_ss], -1:T-1)
     # a. allocate
     w = OffsetVector(zeros(T), 0:T-1)
     C_hh = OffsetVector(zeros(T+1), 0:T)
@@ -525,7 +525,7 @@ function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
     # block 4: market clearing
     #clearing_A = (A-A_hh)
 
-	(; A, A_hh)# =OffsetVector(A_hh[0:T-1], 0:T-1))#clearing_A, C_hh)
+	(; A, A_hh =OffsetVector(A_hh[0:T-1], 0:T-1))#clearing_A, C_hh)
 end
 
 # ╔═╡ 5ce5cb52-f233-48a1-8761-a5edf87f3c02
@@ -624,9 +624,9 @@ let
 
 	c_py2 = H_python_new(K₋, K_T, C_T, K).A_hh
 
-	#@test c_py == c_py2
+	@test c_py == c_py2
 
-	c_py, c_py2, c_jl
+	#c_py, c_py2, c_jl
 end
 
 # ╔═╡ ee909667-22bc-4c51-89d8-5a3acfd94cf6
