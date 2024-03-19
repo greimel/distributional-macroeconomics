@@ -356,7 +356,15 @@ md"""
 """
 
 # ╔═╡ ddf6c03b-3a96-464c-9063-8f915122050f
-Γs(Γ_ss, range) = OffsetVector(Γ_ss .+ (0.01 * Γ_ss) .* (0.95 .^ range), range)
+function Γs(Γ_ss, range)
+	N = length(range)
+	N_half = N ÷ 2
+	
+	head = Γ_ss .+ (0.05 * Γ_ss) .* (0.9 .^ (0:N_half-1))
+	tail = fill(Γ_ss, N - N_half)
+
+	OffsetVector([head; tail], range)
+end
 
 # ╔═╡ b848b778-4c5a-4d97-a5ba-94071f206e7e
 function offsetarray_to_df((label, oa))
@@ -366,6 +374,9 @@ function offsetarray_to_df((label, oa))
 		#label
 	)
 end
+
+# ╔═╡ 52dbe746-b83f-4181-943b-aa7723807646
+
 
 # ╔═╡ 75ea1ceb-b2e4-4dc1-bc50-cd8fc1a73970
 function simulate_backward_forward(K, Γ, C_T, par; TT=eltype(K))
@@ -478,11 +489,17 @@ let
 	df =  H_fun(collect(sol), p, par; Γ, return_df = true)
 
 	cols = [:K, :C, :test, :Γ]
-	data(dropmissing(df)) * 
-		mapping(:t, cols, row = dims(1) => renamer(cols)) * 
-		visual(Lines) |> 
-		draw
 
+	@chain df begin
+		dropmissing
+		@subset(:t < 150)
+		data(_) * 
+			mapping(:t, cols, row = dims(1) => renamer(cols)) * 
+			visual(Lines)
+		draw
+	end
+
+	#df
 end
 
 # ╔═╡ 2d0eb9c0-121d-40d1-91d8-3aa17299e9db
@@ -3082,6 +3099,7 @@ version = "3.5.0+0"
 # ╠═b848b778-4c5a-4d97-a5ba-94071f206e7e
 # ╠═f0910909-f868-4afa-8e86-bfd6fe79d249
 # ╠═535aeb31-d095-438a-9199-f980e6a27599
+# ╠═52dbe746-b83f-4181-943b-aa7723807646
 # ╠═2d0eb9c0-121d-40d1-91d8-3aa17299e9db
 # ╠═f68a056a-5e3f-4aa8-9044-3e04b849f5fb
 # ╠═75ea1ceb-b2e4-4dc1-bc50-cd8fc1a73970
