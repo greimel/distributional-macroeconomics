@@ -19,11 +19,17 @@ using OffsetArrays
 # ╔═╡ 90d089f4-c495-4d73-85f6-406302ef41d9
 using CairoMakie
 
+# ╔═╡ 4e4abade-b83f-4f2b-8f75-4493edb56a79
+using LinearAlgebra
+
 # ╔═╡ 9f35b1aa-0150-4c43-8776-71c9e4640b54
 using ForwardDiff
 
 # ╔═╡ 6e707940-72b2-4723-923a-1fa24fa38ede
 using PlutoTest
+
+# ╔═╡ 8bac5e51-7f7c-4c30-b23f-61578b70385e
+using LinearAlgebra: norm
 
 # ╔═╡ 65f3f899-41da-48c3-9198-48275f7a575a
 using PlutoUI
@@ -34,7 +40,7 @@ md"""
 """
 
 # ╔═╡ 3add7eed-9b64-4d22-9866-85c291772cb7
-α = 0.3
+#α = 0.3
 
 # ╔═╡ f5c464e2-a744-4c9c-b027-28fb2683cd7e
 # ╠═╡ disabled = true
@@ -43,29 +49,17 @@ using ForwardDiff
   ╠═╡ =#
 
 # ╔═╡ 6a95f08c-713a-47e1-baaf-644359c3fb9f
-F(Γ, K₋, L) = Γ * K₋^α * L^(1-α)
+F(K₋, L, (; α, Γ)) = Γ * K₋^α * L^(1-α)
 
 # ╔═╡ d558ed40-6adf-448c-829b-03fe7588fe94
-Π(Γ, K₋, L, r, w) = F(Γ, K₋, L) - w * L - r * K₋
+Π(K₋, L, r, w, par) = F(K₋, L, par) - w * L - r * K₋
 
 # ╔═╡ bbc647b7-c02d-421f-af60-469e9277878f
-function prices(Γ, K₋, L)
+function prices(K₋, L, par)
 	#r, w = 
-	∇F(KL) = ForwardDiff.gradient(kl -> F(Γ, kl...), KL)
+	∇F(KL) = ForwardDiff.gradient(kl -> F(kl..., par), KL)
 	rᴷ, w = ∇F([K₋, L])
 	(; rᴷ, w)
-end
-
-# ╔═╡ 00482dd7-af94-41a2-be20-232dcad5f985
-let
-	Γ = 1.0
-	K = 1.0
-	L = 1.0
-	
-	(; rᴷ, w) = prices(Γ, K, L)
-	Y = F(Γ, K, L)
-	profit = Π(Γ, K, L, rᴷ, w)
-	(; rᴷ, w, Y, profit)
 end
 
 # ╔═╡ 88e11f3f-ee1e-494a-91cb-5b089668997d
@@ -179,12 +173,12 @@ How to move from one steady state to another?
 """
 
 # ╔═╡ 74db8ab7-2e1f-4d9c-9cef-bec0062cf23a
-K_ss((; L, Γ, δ, σ, β)) = ((1/β - 1 + δ) / (Γ * α)) ^ (1/(α-1))
+K_ss((; L, Γ, δ, σ, β, α)) = ((1/β - 1 + δ) / (Γ * α)) ^ (1/(α-1))
 
 # ╔═╡ 7abb8c16-2673-41ba-a5dc-eed2a072c1e7
 function C_ss(par) 
 	K = K_ss(par)
-	(; δ, Γ) = par
+	(; δ, Γ, α) = par
 	Γ * K^α - δ * K
 end
 
@@ -232,6 +226,18 @@ end
 
 # ╔═╡ 43e275a5-d404-4dc6-adad-fadf1471107a
 par = (; L=1, Γ=1.0, δ=0.1, σ=2, β=0.96, α=0.36)
+
+# ╔═╡ 00482dd7-af94-41a2-be20-232dcad5f985
+let
+	#Γ = 1.0
+	K = 1.0
+	L = 1.0
+	
+	(; rᴷ, w) = prices(K, L, par)
+	Y = F(K, L, par)
+	profit = Π(K, L, rᴷ, w, par)
+	(; rᴷ, w, Y, profit)
+end
 
 # ╔═╡ 6b3598f3-b715-4658-8d95-688d8784042d
 K_ss(par)
@@ -310,11 +316,20 @@ offset_zeros(inds, T=Float64) = OffsetVector(zeros(T, length(inds)), inds)
 # ╔═╡ 8dd6deed-b9ae-4781-9312-487a955d56fc
 offset_zeros(-1:10)[-1]
 
-# ╔═╡ ca4461fa-15bb-4af5-a595-9f708747e53b
+# ╔═╡ e73ff64f-2155-46ec-b2f4-9fba16c05105
 
+
+# ╔═╡ 4c022269-3337-40ee-9bda-76d9ffea6544
+let 
+	K_rand = rand(10)
+	K_rand2 = copy(K_rand)
+	K_rand2[4] *= 1.1
+
+	#H(K_rand, (K₋ = 0.7 * K_ss(par), C_ss(par))) .- H(K_rand2, (0.7 * K_ss(par), C_ss(par)))
+end
 
 # ╔═╡ 75ea1ceb-b2e4-4dc1-bc50-cd8fc1a73970
-function simulate_backward_forward(K, C_T, TT=eltype(K))
+function simulate_backward_forward(K, C_T; TT=eltype(K))
 	T = lastindex(K)
 
 	#@assert K[-1] == K₋
@@ -379,102 +394,102 @@ end
 	
 
 # ╔═╡ f68a056a-5e3f-4aa8-9044-3e04b849f5fb
-function H(K, (K₋, K_T, C_T))
+function H_jl(K, (; K₋, K_T, C_T))
 	TT = eltype(K)
 	K = OffsetVector([K₋; K; K_T], -1:length(K))
 
-	(; A) = simulate_backward_forward(K, C_T, TT)
+	(; A, K, C) = simulate_backward_forward(K, C_T; TT)
 
-	(A - K)[0:end]
+	
+	(; A, K, C, clearing_A = (A - K)[0:end-1])
 end
 
 
 # ╔═╡ bd407590-ae83-44e7-964a-da98465502c4
-ForwardDiff.jacobian(K -> H(K, (0.7 * K_ss(par), C_ss(par))), rand(10))
+ForwardDiff.jacobian(K -> H_jl(K, (; K₋ = 0.7 * K_ss(par), K_T = K_ss(par), C_T = C_ss(par))).clearing_A[begin:end], rand(10))
 
 # ╔═╡ fb9f4702-bef1-470f-a137-4a37ba1edff5
 sol_path = let
+	H_fun = H_jl
 	
-	x0 = fill(K_ss(par), 200)
-	ss = (; K=K_ss(par), C=C_ss(par))
-	p = (0.75 * ss.K, ss.K, ss.C)
-#	H(x0, p)
-	prob = NonlinearProblem(H, x0, p)
-	sol = solve(prob, NewtonRaphson())
+	x0 = fill(K_ss(par), 100)
+	ss = (; K_T=K_ss(par), C_T=C_ss(par))
+	p = (; K₋ = 0.75 * ss.K_T, ss...)
+	H_fun(x0, p).clearing_A |> length
+	
+	prob = NonlinearProblem((x_, p_) -> H_fun(x_, p_).clearing_A[begin:end], x0, p)
+	sol = solve(prob, 
+	#	NewtonRaphson(),
+		LevenbergMarquardt(),
+#		PseudoTransient()
+#		TrustRegion()
+#		Broyden(),
+#		FastShortcutNonlinearPolyalg()
+		#RobustMultiNewton(),
+		show_trace=Val(true),
+		abstol = 1e-8,
+		#trace_level = TraceAll(), store_trace = Val(true)
+	)
 
-	(; sol, p, ss)
+	(; sol, p, ss, H_fun)
 end
 
 # ╔═╡ c59f4a7b-06e2-439a-8f56-f54f54926ed2
 sol_path.sol |> typeof |> fieldnames
 
 # ╔═╡ e555a9b0-fd08-4023-81e4-b78fefeb5028
-sol_path.sol.resid
+sol_path.sol.resid |> maximum
 
 # ╔═╡ 212a76d6-35d2-4854-a6b7-4baf75026316
 sol_path.sol.retcode
 
-# ╔═╡ 4c022269-3337-40ee-9bda-76d9ffea6544
-let 
-	K_rand = rand(10)
-	K_rand2 = copy(K_rand)
-	K_rand2[4] *= 1.1
-
-	H(K_rand, (0.7 * K_ss(par), C_ss(par))) .- H(K_rand2, (0.7 * K_ss(par), C_ss(par)))
-end
-
-# ╔═╡ 2d0eb9c0-121d-40d1-91d8-3aa17299e9db
-H(rand(100), (0.7 * K_ss(par), K_ss(par), C_ss(par)))
-
-# ╔═╡ 2e8069ec-1f01-46f3-adc1-609fabb7ea5a
-function H_simulate(K, (K₋, K_T, C_T))
-	TT = eltype(K)
-	K = OffsetVector([K₋; K[1:end-1]; K_T], -1:length(K)-1)
-
-	simulate_backward_forward(K, C_T, TT)
-end
-
 # ╔═╡ 535aeb31-d095-438a-9199-f980e6a27599
 let
-	(; sol, p) = sol_path
-	(; A, K, C) = H_simulate(collect(sol), p)
-
+	(; sol, p, H_fun) = sol_path
+	(; K, A, C) =  H_fun(collect(sol), p)
+	#K = A
+	#A = A_hh
+	#C = C_hh
+	
 	fig = Figure()
 	
 	lines(fig[1,1], collect(axes(C, 1)), OffsetArrays.no_offset_view(C), axis = (; title = "Consumption"))
+	hlines!(p.C_T, color=:gray)
+	
 
 	ax = Axis(fig[1,2])
 	lines!(ax, collect(axes(A, 1)), OffsetArrays.no_offset_view(A), label = L"A")
 	lines!(ax, collect(axes(K, 1)), OffsetArrays.no_offset_view(K), label = L"K")
-
+	hlines!(ax, p.K_T, color=:gray)
+	
 	axislegend(ax, position = :rb)
 
 	fig
 
-	ax2 = Axis(fig[2,1], xlabel = L"capital $K$", ylabel=L"consumption $C$")
+	#ax2 = Axis(fig[2,1], xlabel = L"capital $K$", ylabel=L"consumption $C$")
 	#inds = 190:199
 	#@show K[inds]
-	scatter!(ax2, A[0:end], C[0:end])
-	scatter!(ax2, p..., label="init")
-	scatter!(ax2, K_ss(par), C_ss(par), label="SS")
-	axislegend(ax2, position = :rb)
+	#scatter!(ax2, A[0:end], C[0:end-1])
+	#scatter!(ax2, p..., label="init", color = :gray)
+	#scatter!(ax2, K_ss(par), C_ss(par), label="SS")
+	#axislegend(ax2, position = :ct)
 	
 	fig
 end
 
-# ╔═╡ acee479a-af82-4516-aa67-329b5fd9d040
-let
-	β = 0.95
-	r = 0.04
-	cs = [c₀]
+# ╔═╡ 2d0eb9c0-121d-40d1-91d8-3aa17299e9db
+H_jl(rand(100), (K₋ = 0.7 * K_ss(par), K_T = K_ss(par), C_T = C_ss(par)))
 
-	for t ∈ 1:100
-		c = last(cs)
-		push!(cs, c_next_from_c(c, β, r))
-	end
+# ╔═╡ 2e8069ec-1f01-46f3-adc1-609fabb7ea5a
+function H_simulate(K, (; K₋, K_T, C_T))
+	TT = eltype(K)
+	K = OffsetVector([K₋; K[1:end-1]; K_T], -1:length(K)-1)
 
-	lines(cs)
+	simulate_backward_forward(K, C_T; TT)
 end
+
+# ╔═╡ acee479a-af82-4516-aa67-329b5fd9d040
+
 
 # ╔═╡ 8864b699-819b-4516-ae14-cb82b55bd400
 md"""
@@ -484,7 +499,11 @@ Todo:
 """
 
 # ╔═╡ a09f3f7b-3f6c-4f18-9260-6d3898a7a21b
-function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
+function H_python_new(K, (; K₋, K_T, C_T))
+	K_lag_ini = K₋
+	K_ss = K_T
+	C_hh_ss = C_T
+	
 	T = length(K)
 
 	alpha = par.α
@@ -493,8 +512,8 @@ function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
 	Gamma = OffsetVector(fill(par.Γ, T+1), 0:T)
 	delta = par.δ
 
-	rK_func(Gamma,K_lag) = Gamma*alpha*K_lag^(alpha-1)
-	w_func(Gamma,K_lag) = Gamma*(1-alpha)*K_lag^(alpha)
+	rK_func(Gamma,K_lag) = K_lag < 0 ? NaN : Gamma*alpha*K_lag^(alpha-1)
+	w_func(Gamma,K_lag) = K_lag < 0 ? NaN : Gamma*(1-alpha)*K_lag^(alpha)
 
 	Gamma_ss = par.Γ
 	#K_ss = ((1/beta-1+delta)/(Gamma_ss*alpha))^(1/(alpha-1))
@@ -530,16 +549,21 @@ function H_python_new(K_lag_ini,K_ss,C_hh_ss,K)
 	end
     
     # block 4: market clearing
-    #clearing_A = (A-A_hh)
+    clearing_A = (A-A_hh)
 
-	(; A, 
-		A_hh=OffsetVector(A_hh[0:T-1], 0:T-1),
-		C_hh=OffsetVector(C_hh[0:T-1], 0:T-1)
-			)#clearing_A, C_hh)
+	(; K=A, 
+		A=A_hh,#OffsetVector(A_hh[0:T-1], 0:T-1),
+		C=C_hh,# =OffsetVector(C_hh[0:T-1], 0:T-1),
+		clearing_A=OffsetVector(clearing_A[0:T-1], 0:T-1))
 end
 
 # ╔═╡ 5ce5cb52-f233-48a1-8761-a5edf87f3c02
-function H_python_test(K_lag_ini,K_ss,C_hh_ss,K)
+function H_python_test(K, (; K₋, K_T, C_T))
+	K_lag_ini = K₋
+	K_ss = K_T
+	C_hh_ss = C_T
+
+	TT = eltype(K)
 	T = length(K)# + 1
 
 	alpha = par.α
@@ -548,8 +572,8 @@ function H_python_test(K_lag_ini,K_ss,C_hh_ss,K)
 	Gamma = OffsetVector(fill(par.Γ, T), 0:T-1)
 	delta = par.δ
 
-	rK_func(Gamma,K_lag) = Gamma*alpha*K_lag^(alpha-1)
-	w_func(Gamma,K_lag) = Gamma*(1-alpha)*K_lag^(alpha)
+	rK_func(Gamma,K_lag) = K_lag < 0 ? NaN : Gamma*alpha*K_lag^(alpha-1)
+	w_func(Gamma,K_lag) = K_lag < 0 ? NaN : Gamma*(1-alpha)*K_lag^(alpha)
 
 	Gamma_ss = par.Γ
 	#K_ss = ((1/beta-1+delta)/(Gamma_ss*alpha))^(1/(alpha-1))
@@ -566,12 +590,15 @@ function H_python_test(K_lag_ini,K_ss,C_hh_ss,K)
     # truncation length T
 
 	K = OffsetVector(K, 0:T-1)
+	#K[T-1] = K_ss
     # a. allocate
-    rK = OffsetVector(zeros(T), 0:T-1)
-    w = OffsetVector(zeros(T), 0:T-1)
-    C_hh = OffsetVector(zeros(T), 0:T-1)
-    A_hh = OffsetVector(zeros(T), 0:T-1)
+    rK = OffsetVector(zeros(TT, T), 0:T-1)
+    w = OffsetVector(zeros(TT, T), 0:T-1)
+    C_hh = OffsetVector(zeros(TT, T+1), 0:T)
+    A_hh = OffsetVector(zeros(TT, T), 0:T-1)
 
+	C_hh[T] = C_T
+	
     # block 1: production firm [K_lag_ini,K -> rK,w]
     for t in 0:T-1
 
@@ -615,11 +642,22 @@ function H_python_test(K_lag_ini,K_ss,C_hh_ss,K)
 
         A_hh[t] = (1+r[t])*A_hh_lag + w[t] - C_hh[t]  
 	end
-    
+
+	#A_hh[T-1] = K_T
+		
     # block 4: market clearing
     clearing_A = A-A_hh
 
-	(; A, A_hh, clearing_A, C_hh)
+	(; K=A, A=A_hh, clearing_A, C=C_hh)
+end
+
+# ╔═╡ 99179c42-9d49-4e8d-89b8-144de3c9f6f8
+let
+	p = (; K₋ = 0.7 * K_ss(par), K_T = K_ss(par), C_T = C_ss(par))
+	K = rand(10)
+
+	#collect(H_python_test(K, p).clearing_A)
+	ForwardDiff.jacobian(K_ -> H_python_test(K_, p).clearing_A[begin:end], K)
 end
 
 # ╔═╡ c4d59115-a419-4a1d-bfbf-379408e5c8e6
@@ -628,16 +666,19 @@ let
 	K₋ = 0.5
 	K_T = 0.5
 	C_T = 0.5
- 	c_jl = H_simulate(K, (K₋, K_T, C_T)).A
+ 	c_jl = H_jl(K, (; K₋, K_T, C_T)).A
 
-	c_py = H_python_test(K₋, K_T, C_T, K)
+	c_py = H_python_test(K, (; K₋, K_T, C_T))
 	#.A_hh
 
-	c_py2 = H_python_new(K₋, K_T, C_T, K)
+	c_py2 = H_python_new(K, (; K₋, K_T, C_T))
 	#.A_hh
 
-	@test c_py.A_hh == c_py2.A_hh
-	@test c_py.C_hh == c_py2.C_hh
+	@test c_py.A == OffsetVector(c_py2.A[0:9], 0:9)
+	@test c_py.C == c_py2.C
+	 c_py.K, OffsetVector(c_py2.K[0:9], 0:9)
+#	norm((c_py.clearing_A .- c_py2.clearing_A) ./ abs.(max.(c_py.clearing_A, c_py2.clearing_A)))
+	
 	#c_py, c_py2, c_jl
 end
 
@@ -655,6 +696,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 PlutoTest = "cb4044da-4d16-4ffa-a6a3-8cad7f73ebdc"
@@ -678,7 +720,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.1"
 manifest_format = "2.0"
-project_hash = "78584bf308d296ccfe4c75ef0a21fda01391c885"
+project_hash = "dac1b6493cd6c9bf631a39863c637060052b3e8f"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "41c37aa88889c171f1300ceac1313c06e891d245"
@@ -2962,11 +3004,13 @@ version = "3.5.0+0"
 # ╠═2c62f981-cf0e-4df0-8e8e-6ac6ff8112bf
 # ╠═a0943dd9-905d-43e9-89be-c278c8301d26
 # ╠═90d089f4-c495-4d73-85f6-406302ef41d9
+# ╠═4e4abade-b83f-4f2b-8f75-4493edb56a79
 # ╠═97b48d12-805c-4b3c-92d8-0770d164f919
 # ╠═8dd6deed-b9ae-4781-9312-487a955d56fc
-# ╠═ca4461fa-15bb-4af5-a595-9f708747e53b
 # ╠═5e32c9ec-a872-4535-b9eb-4e85612181c6
 # ╠═bd407590-ae83-44e7-964a-da98465502c4
+# ╠═99179c42-9d49-4e8d-89b8-144de3c9f6f8
+# ╠═e73ff64f-2155-46ec-b2f4-9fba16c05105
 # ╠═fb9f4702-bef1-470f-a137-4a37ba1edff5
 # ╠═c59f4a7b-06e2-439a-8f56-f54f54926ed2
 # ╠═e555a9b0-fd08-4023-81e4-b78fefeb5028
@@ -2980,6 +3024,7 @@ version = "3.5.0+0"
 # ╠═75ea1ceb-b2e4-4dc1-bc50-cd8fc1a73970
 # ╠═acee479a-af82-4516-aa67-329b5fd9d040
 # ╠═6e707940-72b2-4723-923a-1fa24fa38ede
+# ╠═8bac5e51-7f7c-4c30-b23f-61578b70385e
 # ╠═c4d59115-a419-4a1d-bfbf-379408e5c8e6
 # ╠═8864b699-819b-4516-ae14-cb82b55bd400
 # ╠═a09f3f7b-3f6c-4f18-9260-6d3898a7a21b
