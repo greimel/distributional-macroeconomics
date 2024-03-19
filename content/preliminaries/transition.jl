@@ -317,7 +317,9 @@ offset_zeros(inds, T=Float64) = OffsetVector(zeros(T, length(inds)), inds)
 offset_zeros(-1:10)[-1]
 
 # ╔═╡ e73ff64f-2155-46ec-b2f4-9fba16c05105
-
+md"""
+# Transition path for the Ramsey problem
+"""
 
 # ╔═╡ 4c022269-3337-40ee-9bda-76d9ffea6544
 let 
@@ -3010,7 +3012,7 @@ version = "3.5.0+0"
 # ╠═5e32c9ec-a872-4535-b9eb-4e85612181c6
 # ╠═bd407590-ae83-44e7-964a-da98465502c4
 # ╠═99179c42-9d49-4e8d-89b8-144de3c9f6f8
-# ╠═e73ff64f-2155-46ec-b2f4-9fba16c05105
+# ╟─e73ff64f-2155-46ec-b2f4-9fba16c05105
 # ╠═fb9f4702-bef1-470f-a137-4a37ba1edff5
 # ╠═c59f4a7b-06e2-439a-8f56-f54f54926ed2
 # ╠═e555a9b0-fd08-4023-81e4-b78fefeb5028
