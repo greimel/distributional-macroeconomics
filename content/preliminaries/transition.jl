@@ -11,7 +11,7 @@ using Roots
 using NonlinearSolve
 
 # ╔═╡ 2d800036-709d-4b4e-ae98-405f1babbf2e
-using DataFrames
+using DataFrames, DataFrameMacros, Chain
 
 # ╔═╡ a0943dd9-905d-43e9-89be-c278c8301d26
 using OffsetArrays
@@ -22,14 +22,17 @@ using CairoMakie
 # ╔═╡ 4e4abade-b83f-4f2b-8f75-4493edb56a79
 using LinearAlgebra
 
-# ╔═╡ 9f35b1aa-0150-4c43-8776-71c9e4640b54
-using ForwardDiff
+# ╔═╡ f0910909-f868-4afa-8e86-bfd6fe79d249
+using AlgebraOfGraphics
 
 # ╔═╡ 6e707940-72b2-4723-923a-1fa24fa38ede
 using PlutoTest
 
 # ╔═╡ 8bac5e51-7f7c-4c30-b23f-61578b70385e
 using LinearAlgebra: norm
+
+# ╔═╡ 9f35b1aa-0150-4c43-8776-71c9e4640b54
+using ForwardDiff
 
 # ╔═╡ 65f3f899-41da-48c3-9198-48275f7a575a
 using PlutoUI
@@ -49,15 +52,15 @@ using ForwardDiff
   ╠═╡ =#
 
 # ╔═╡ 6a95f08c-713a-47e1-baaf-644359c3fb9f
-F(K₋, L, (; α, Γ)) = Γ * K₋^α * L^(1-α)
+F(Γ, K₋, L, (; α)) = Γ * K₋^α * L^(1-α)
 
 # ╔═╡ d558ed40-6adf-448c-829b-03fe7588fe94
-Π(K₋, L, r, w, par) = F(K₋, L, par) - w * L - r * K₋
+Π(Γ, K₋, L, r, w, par) = F(Γ, K₋, L, par) - w * L - r * K₋
 
 # ╔═╡ bbc647b7-c02d-421f-af60-469e9277878f
-function prices(K₋, L, par)
+function prices(Γ, K₋, L, par)
 	#r, w = 
-	∇F(KL) = ForwardDiff.gradient(kl -> F(kl..., par), KL)
+	∇F(KL) = ForwardDiff.gradient(kl -> F(Γ, kl..., par), KL)
 	rᴷ, w = ∇F([K₋, L])
 	(; rᴷ, w)
 end
@@ -69,38 +72,52 @@ u(c) = log(c)
 u_prime(c) = ForwardDiff.derivative(u, c)
 
 # ╔═╡ 08cca11b-ba71-4de3-96ee-94ee4368e4e2
-euler(C, C_next, β, r) = u_prime(C) - β * (1+r) * u_prime(C_next)
+# ╠═╡ disabled = true
+#=╠═╡
+euler(C, C_next, r, (; β)) = u_prime(C) - β * (1+r) * u_prime(C_next)
+  ╠═╡ =#
 
 # ╔═╡ 82d7f521-ac74-49d2-ba7e-51931f55778e
-function c_next_from_c(c, β, r)
+#=╠═╡
+function c_next_from_c(c, r, par)
 	find_zero(c_next -> euler(c, c_next, β, r), c)
 end
+  ╠═╡ =#
 
 # ╔═╡ 9acd5a3a-a616-4c7b-a295-0cac8c4108db
-LOM(K, K_prev, Γ, C, δ) = (1-δ) * K_prev + F(Γ, K_prev, 1) - (C + K)
+# ╠═╡ disabled = true
+#=╠═╡
+LOM(K, K_prev, C, par) = (1-par.δ) * K_prev + F(K_prev, 1, par) - (C + K)
+  ╠═╡ =#
 
 # ╔═╡ 14a9953e-aa74-49a3-a92c-88d6eebce384
-function loss(K, K_prev, Γ, C, C_next, β, δ)
-	(; rᴷ, w) = prices(Γ, K_prev, 1)
+#=╠═╡
+function loss(K, K_prev, C, C_next, par)
+	(; rᴷ, w) = prices(K_prev, 1, par)
 	r = rᴷ - δ
 	
-	[euler(C, C_next, β, r)
-	LOM(K, K_prev, Γ, C, δ)]
+	[euler(C, C_next, r, par)
+	LOM(K, K_prev, C, par)]
 end
+  ╠═╡ =#
 
 # ╔═╡ c9cc51b0-7d71-4d94-afac-1c2a793ced05
+#=╠═╡
 function steady_state(x, p)
 	K, C = x
 	β, δ = p
 	loss(K, K, 1.0, C, C, β, δ)
 end
+  ╠═╡ =#
 
 # ╔═╡ 16130dee-e966-47d4-8f0b-6d0538bcb292
+#=╠═╡
 function update(x, p)
 	K, C_next = x
 	K_prev, C, β, δ = p
 	loss(K, K_prev, 1.0, C, C_next, β, δ)
 end
+  ╠═╡ =#
 
 # ╔═╡ d878c9f3-57b4-48a2-a14b-c88d74f94303
 # ╠═╡ disabled = true
@@ -127,6 +144,7 @@ md"""
 """
 
 # ╔═╡ 1d66418f-c592-4c09-8f12-35b4d5392f59
+#=╠═╡
 sol_update = let
 	β = 0.95
 	δ = 0.02
@@ -160,6 +178,7 @@ sol_update = let
 	
 	
 end
+  ╠═╡ =#
 
 # ╔═╡ c11be91d-a19d-4d61-ba21-a4ff7c32befb
 md"""
@@ -173,12 +192,12 @@ How to move from one steady state to another?
 """
 
 # ╔═╡ 74db8ab7-2e1f-4d9c-9cef-bec0062cf23a
-K_ss((; L, Γ, δ, σ, β, α)) = ((1/β - 1 + δ) / (Γ * α)) ^ (1/(α-1))
+K_ss(Γ, (; L, δ, σ, β, α)) = ((1/β - 1 + δ) / (Γ * α)) ^ (1/(α-1))
 
 # ╔═╡ 7abb8c16-2673-41ba-a5dc-eed2a072c1e7
-function C_ss(par) 
-	K = K_ss(par)
-	(; δ, Γ, α) = par
+function C_ss(Γ, par) 
+	K = K_ss(Γ, par)
+	(; δ, α) = par
 	Γ * K^α - δ * K
 end
 
@@ -186,12 +205,14 @@ end
 As = rand(20)
 
 # ╔═╡ 1c8559da-e418-4d68-b23a-0960052d17e7
-rᴷ(K₋, (; Γ, α, L)) = α * Γ * (K₋ / L) ^ (α - 1)
+rᴷ(Γ, K₋, (; α, L)) = α * Γ * (K₋ / L) ^ (α - 1)
 
 # ╔═╡ a50411b4-3029-42d2-99e8-b2cb9d8dec3f
-get_w(K₋, (; Γ, α, L)) = (1-α) * Γ * (K₋ / L) ^ α
+get_w(Γ, K₋, (; α, L)) = (1-α) * Γ * (K₋ / L) ^ α
 
 # ╔═╡ 0ef7e772-5caa-4c6f-9500-c78aee929c26
+# ╠═╡ disabled = true
+#=╠═╡
 function compute2((; Aₜ₋₁, Cₜ, t), par)
 	(; L, Γ, δ, σ, β, α) = par
 	#rᴷ = α * Γ * (Aₜ₋₁ / L) ^ (α - 1)
@@ -207,8 +228,10 @@ function compute2((; Aₜ₋₁, Cₜ, t), par)
 
 	(; t, Aₜ₋₁, Aₜ, Cₜ, Cₜ₊₁, rₜ, rₜ₊₁)
 end
+  ╠═╡ =#
 
 # ╔═╡ 555825a4-2d90-47db-8fb2-9282fd3ac82d
+#=╠═╡
 function simulate2(A₀, C₁, T, par)
 
 	out = [compute2((; Aₜ₋₁=A₀, Cₜ=C₁, t=1), par)]
@@ -223,32 +246,36 @@ function simulate2(A₀, C₁, T, par)
 
 	DataFrame(out)
 end
+  ╠═╡ =#
 
 # ╔═╡ 43e275a5-d404-4dc6-adad-fadf1471107a
 par = (; L=1, Γ=1.0, δ=0.1, σ=2, β=0.96, α=0.36)
 
 # ╔═╡ 00482dd7-af94-41a2-be20-232dcad5f985
 let
-	#Γ = 1.0
+	Γ = 1.0
 	K = 1.0
 	L = 1.0
 	
-	(; rᴷ, w) = prices(K, L, par)
-	Y = F(K, L, par)
-	profit = Π(K, L, rᴷ, w, par)
+	(; rᴷ, w) = prices(Γ, K, L, par)
+	Y = F(Γ, K, L, par)
+	profit = Π(Γ, K, L, rᴷ, w, par)
 	(; rᴷ, w, Y, profit)
 end
 
 # ╔═╡ 6b3598f3-b715-4658-8d95-688d8784042d
-K_ss(par)
+K_ss(1.0, par)
 
 # ╔═╡ 59920afb-cad1-4f0f-a84c-4fabd0e1232c
-C_ss(par)
+C_ss(1.0, par)
 
 # ╔═╡ eb8f0195-049e-4844-9798-9907a99847f6
+#=╠═╡
 df = simulate2(K_ss(par) * 0.99, 0.9 * C_ss(par), 10, par)
+  ╠═╡ =#
 
 # ╔═╡ b76ad156-02e4-4fa7-838f-4ab0b16ed233
+#=╠═╡
 let
 	df = simulate2(K_ss(par) * 0.75, 0.75 * C_ss(par), 10, par)
 
@@ -263,8 +290,11 @@ let
 	@info df
 	fig
 end
+  ╠═╡ =#
 
 # ╔═╡ 7f476805-cf98-4abd-b887-2c6b169727b1
+# ╠═╡ disabled = true
+#=╠═╡
 function compute((; Aₜ₋₁, Aₜ, t), (; L, Γ, δ, σ, β, α))
 	rᴷ = α * Γ * (Aₜ₋₁ / L) ^ (α - 1)
 	w  = (1-α) * Γ * (Aₜ₋₁ / L) ^ α
@@ -280,8 +310,10 @@ function compute((; Aₜ₋₁, Aₜ, t), (; L, Γ, δ, σ, β, α))
 	#ed
 	(; Aₜ₋₁, Aₜ, Cₜ, Cₜ₊₁)
 end
+  ╠═╡ =#
 
 # ╔═╡ cd809dc0-c4e8-46ab-9eb7-9d80110bc00f
+#=╠═╡
 function simulate(As, par)
 	ts = 1:length(As)
 
@@ -300,12 +332,17 @@ function simulate(As, par)
 
 	DataFrame(out)
 end
+  ╠═╡ =#
 
 # ╔═╡ 6893a640-5a27-4111-b2d8-d01c95f2678c
+#=╠═╡
 simulate(rand(10), par)
+  ╠═╡ =#
 
 # ╔═╡ a8d52129-4189-4903-90ad-55aa0e7607ae
+#=╠═╡
 c_next_from_c(1.0, 0.95, 0.02)
+  ╠═╡ =#
 
 # ╔═╡ 2c62f981-cf0e-4df0-8e8e-6ac6ff8112bf
 c₀ = 0.1
@@ -313,35 +350,34 @@ c₀ = 0.1
 # ╔═╡ 97b48d12-805c-4b3c-92d8-0770d164f919
 offset_zeros(inds, T=Float64) = OffsetVector(zeros(T, length(inds)), inds)
 
-# ╔═╡ 8dd6deed-b9ae-4781-9312-487a955d56fc
-offset_zeros(-1:10)[-1]
-
 # ╔═╡ e73ff64f-2155-46ec-b2f4-9fba16c05105
 md"""
 # Transition path for the Ramsey problem
 """
 
-# ╔═╡ 4c022269-3337-40ee-9bda-76d9ffea6544
-let 
-	K_rand = rand(10)
-	K_rand2 = copy(K_rand)
-	K_rand2[4] *= 1.1
+# ╔═╡ ddf6c03b-3a96-464c-9063-8f915122050f
+Γs(Γ_ss, range) = OffsetVector(Γ_ss .+ (0.01 * Γ_ss) .* (0.95 .^ range), range)
 
-	#H(K_rand, (K₋ = 0.7 * K_ss(par), C_ss(par))) .- H(K_rand2, (0.7 * K_ss(par), C_ss(par)))
+# ╔═╡ b848b778-4c5a-4d97-a5ba-94071f206e7e
+function offsetarray_to_df((label, oa))
+	DataFrame(
+		"t" => collect(axes(oa, 1)),
+		label => OffsetArrays.no_offset_view(oa),
+		#label
+	)
 end
 
 # ╔═╡ 75ea1ceb-b2e4-4dc1-bc50-cd8fc1a73970
-function simulate_backward_forward(K, C_T; TT=eltype(K))
+function simulate_backward_forward(K, Γ, C_T, par; TT=eltype(K))
 	T = lastindex(K)
 
-	#@assert K[-1] == K₋
-	
 	C = offset_zeros(0:T, TT)
+	
 	C[T] = C_T
 
 	for t ∈ T-1:-1:0
 		if K[t] > 0
-			r = rᴷ(K[t], par) - par.δ
+			r = rᴷ(Γ[t+1], K[t], par) - par.δ
 			C[t] = (par.β * (1+r))^(-1/par.σ) * C[t+1]
 		else 
 			NaN
@@ -353,73 +389,64 @@ function simulate_backward_forward(K, C_T; TT=eltype(K))
 
 	for t ∈ 0:T
 		if K[t-1] > 0
-			r = rᴷ(K[t-1], par) - par.δ
-			w = get_w(K[t-1], par)
+			r = rᴷ(Γ[t], K[t-1], par) - par.δ
+			w = get_w(Γ[t], K[t-1], par)
 			A[t] = (1 + r) * A[t-1] + w - C[t]
 		else
 			A[t] = NaN
 		end
 	end
 
-	(; A, K, C)
+	(; A, K, C, Γ)
 end
-
-# ╔═╡ 5e32c9ec-a872-4535-b9eb-4e85612181c6
-let
-	C_T = C_ss(par)
-	T = 100
-	K = OffsetVector(fill(0.7 * K_ss(par), length(-1:T)), -1:T)
-
-	(; A, C) = simulate_backward_forward(K, 0.7 * K_ss(par), C_T)
-
-	for i ∈ 1:0
-		λ = 0.5
-		K = λ * K + (1-λ) * A
-
-		@assert all(K .> 0)
-		(; A, C) = simulate_backward_forward(K, 0.7 * K_ss(par), C_T)
-	end
-	
-	fig = Figure()
-	
-	lines(fig[1,1], collect(axes(C, 1)), OffsetArrays.no_offset_view(C), axis = (; title = "Consumption"))
-
-	ax = Axis(fig[1,2])
-	lines!(ax, collect(axes(A, 1)), OffsetArrays.no_offset_view(A), label = L"A")
-	lines!(ax, collect(axes(K, 1)), OffsetArrays.no_offset_view(K), label = L"K")
-
-	axislegend(ax)
-
-	fig
-		
-end
-	
 
 # ╔═╡ f68a056a-5e3f-4aa8-9044-3e04b849f5fb
-function H_jl(K, (; K₋, K_T, C_T))
+function H_jl(K, (; K₋, K_T, C_T), par; 
+					T = length(K),
+					Γ = OffsetVector(fill(1.0, T+1), 0:T),
+					return_df = false)
 	TT = eltype(K)
-	K = OffsetVector([K₋; K; K_T], -1:length(K))
+	K = OffsetVector([K₋; K; K_T], -1:T)
 
-	(; A, K, C) = simulate_backward_forward(K, C_T; TT)
-
+	(; A, K, C, Γ) = simulate_backward_forward(K, Γ, C_T, par; TT)
 	
-	(; A, K, C, clearing_A = (A - K)[0:end-1])
-end
+	if return_df
+		df = outerjoin(
+			offsetarray_to_df("K" => K),
+			offsetarray_to_df("A" => A),
+			offsetarray_to_df("C" => C),
+			offsetarray_to_df("Γ" => Γ),
+			#offsetarray_to_df("test" => clearing_A),
+			on = :t
+		)
 
+		@transform!(df, :test = :A - :K)
+		
+		return sort!(df, :t)
+	else
+		return (; A, K, C, clearing_A = (A - K)[0:end-1])
+	end
+end
 
 # ╔═╡ bd407590-ae83-44e7-964a-da98465502c4
 ForwardDiff.jacobian(K -> H_jl(K, (; K₋ = 0.7 * K_ss(par), K_T = K_ss(par), C_T = C_ss(par))).clearing_A[begin:end], rand(10))
 
 # ╔═╡ fb9f4702-bef1-470f-a137-4a37ba1edff5
 sol_path = let
+	T = 150
 	H_fun = H_jl
+	Γ_ss = 1.0
+	#Γ = OffsetVector(fill(Γ_ss, T+1), 0:T)
+	#Γ[0:2] .= 0.9
+
+	Γ = Γs(Γ_ss, 0:T)
 	
-	x0 = fill(K_ss(par), 100)
-	ss = (; K_T=K_ss(par), C_T=C_ss(par))
-	p = (; K₋ = 0.75 * ss.K_T, ss...)
-	H_fun(x0, p).clearing_A |> length
+	x0 = fill(K_ss(Γ_ss, par), T-1)
+	ss = (; K_T=K_ss(Γ_ss, par), C_T=C_ss(Γ_ss, par))
+	p = (; K₋ = 1.0 * ss.K_T, ss...)
+	#H_fun(x0, p, par).clearing_A |> length
 	
-	prob = NonlinearProblem((x_, p_) -> H_fun(x_, p_).clearing_A[begin:end], x0, p)
+	prob = NonlinearProblem((x_, p_) -> H_fun(x_, p_, par; Γ).clearing_A[begin:end], x0, p)
 	sol = solve(prob, 
 	#	NewtonRaphson(),
 		LevenbergMarquardt(),
@@ -433,7 +460,7 @@ sol_path = let
 		#trace_level = TraceAll(), store_trace = Val(true)
 	)
 
-	(; sol, p, ss, H_fun)
+	(; sol, p, ss, H_fun, Γ)
 end
 
 # ╔═╡ c59f4a7b-06e2-439a-8f56-f54f54926ed2
@@ -447,51 +474,19 @@ sol_path.sol.retcode
 
 # ╔═╡ 535aeb31-d095-438a-9199-f980e6a27599
 let
-	(; sol, p, H_fun) = sol_path
-	(; K, A, C) =  H_fun(collect(sol), p)
-	#K = A
-	#A = A_hh
-	#C = C_hh
-	
-	fig = Figure()
-	
-	lines(fig[1,1], collect(axes(C, 1)), OffsetArrays.no_offset_view(C), axis = (; title = "Consumption"))
-	hlines!(p.C_T, color=:gray)
-	
+	(; sol, p, H_fun, Γ) = sol_path
+	df =  H_fun(collect(sol), p, par; Γ, return_df = true)
 
-	ax = Axis(fig[1,2])
-	lines!(ax, collect(axes(A, 1)), OffsetArrays.no_offset_view(A), label = L"A")
-	lines!(ax, collect(axes(K, 1)), OffsetArrays.no_offset_view(K), label = L"K")
-	hlines!(ax, p.K_T, color=:gray)
-	
-	axislegend(ax, position = :rb)
+	cols = [:K, :C, :test, :Γ]
+	data(dropmissing(df)) * 
+		mapping(:t, cols, row = dims(1) => renamer(cols)) * 
+		visual(Lines) |> 
+		draw
 
-	fig
-
-	#ax2 = Axis(fig[2,1], xlabel = L"capital $K$", ylabel=L"consumption $C$")
-	#inds = 190:199
-	#@show K[inds]
-	#scatter!(ax2, A[0:end], C[0:end-1])
-	#scatter!(ax2, p..., label="init", color = :gray)
-	#scatter!(ax2, K_ss(par), C_ss(par), label="SS")
-	#axislegend(ax2, position = :ct)
-	
-	fig
 end
 
 # ╔═╡ 2d0eb9c0-121d-40d1-91d8-3aa17299e9db
-H_jl(rand(100), (K₋ = 0.7 * K_ss(par), K_T = K_ss(par), C_T = C_ss(par)))
-
-# ╔═╡ 2e8069ec-1f01-46f3-adc1-609fabb7ea5a
-function H_simulate(K, (; K₋, K_T, C_T))
-	TT = eltype(K)
-	K = OffsetVector([K₋; K[1:end-1]; K_T], -1:length(K)-1)
-
-	simulate_backward_forward(K, C_T; TT)
-end
-
-# ╔═╡ acee479a-af82-4516-aa67-329b5fd9d040
-
+H_jl(rand(100), (K₋ = 0.7 * K_ss(1.0, par), K_T = K_ss(1.0, par), C_T = C_ss(1.0, par)), par)
 
 # ╔═╡ 8864b699-819b-4516-ae14-cb82b55bd400
 md"""
@@ -695,7 +690,10 @@ TableOfContents()
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -706,7 +704,10 @@ PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 
 [compat]
+AlgebraOfGraphics = "~0.6.18"
 CairoMakie = "~0.11.9"
+Chain = "~0.6.0"
+DataFrameMacros = "~0.4.1"
 DataFrames = "~1.6.1"
 ForwardDiff = "~0.10.36"
 NonlinearSolve = "~3.7.3"
@@ -722,7 +723,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.1"
 manifest_format = "2.0"
-project_hash = "dac1b6493cd6c9bf631a39863c637060052b3e8f"
+project_hash = "ef829e919c42e6108c79d2fddb4f11c8b275b3c1"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "41c37aa88889c171f1300ceac1313c06e891d245"
@@ -786,6 +787,12 @@ weakdeps = ["StaticArrays"]
 
     [deps.Adapt.extensions]
     AdaptStaticArraysExt = "StaticArrays"
+
+[[deps.AlgebraOfGraphics]]
+deps = ["Colors", "Dates", "Dictionaries", "FileIO", "GLM", "GeoInterface", "GeometryBasics", "GridLayoutBase", "KernelDensity", "Loess", "Makie", "PlotUtils", "PooledArrays", "PrecompileTools", "RelocatableFolders", "StatsBase", "StructArrays", "Tables"]
+git-tree-sha1 = "3fbdee81b0cdc2b106b681dd2b9d4bdc60ca35a2"
+uuid = "cbdf2221-f076-402e-a563-3d30da359d67"
+version = "0.6.18"
 
 [[deps.Animations]]
 deps = ["Colors"]
@@ -922,6 +929,11 @@ deps = ["LinearAlgebra"]
 git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
 uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
 version = "0.5.1"
+
+[[deps.Chain]]
+git-tree-sha1 = "9ae9be75ad8ad9d26395bf625dea9beac6d519f1"
+uuid = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+version = "0.6.0"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra"]
@@ -1062,6 +1074,12 @@ git-tree-sha1 = "abe83f3a2f1b857aac70ef8b269080af17764bbe"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.16.0"
 
+[[deps.DataFrameMacros]]
+deps = ["DataFrames", "MacroTools"]
+git-tree-sha1 = "5275530d05af21f7778e3ef8f167fb493999eea1"
+uuid = "75880514-38bc-4a95-a458-c2aea5a3a702"
+version = "0.4.1"
+
 [[deps.DataFrames]]
 deps = ["Compat", "DataAPI", "DataStructures", "Future", "InlineStrings", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrecompileTools", "PrettyTables", "Printf", "REPL", "Random", "Reexport", "SentinelArrays", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
 git-tree-sha1 = "04c738083f29f86e62c8afc341f0967d8717bdb8"
@@ -1088,6 +1106,12 @@ deps = ["DataStructures", "EnumX", "ExactPredicates", "Random", "SimpleGraphs"]
 git-tree-sha1 = "d4e9dc4c6106b8d44e40cd4faf8261a678552c7c"
 uuid = "927a84f5-c5f4-47a5-9785-b46e178433df"
 version = "0.8.12"
+
+[[deps.Dictionaries]]
+deps = ["Indexing", "Random", "Serialization"]
+git-tree-sha1 = "1f3b7b0d321641c1f2e519f7aed77f8e1f6cb133"
+uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
+version = "0.3.29"
 
 [[deps.DiffEqBase]]
 deps = ["ArrayInterface", "DataStructures", "DocStringExtensions", "EnumX", "EnzymeCore", "FastBroadcast", "ForwardDiff", "FunctionWrappers", "FunctionWrappersWrappers", "LinearAlgebra", "Logging", "Markdown", "MuladdMacro", "Parameters", "PreallocationTools", "PrecompileTools", "Printf", "RecursiveArrayTools", "Reexport", "SciMLBase", "SciMLOperators", "Setfield", "SparseArrays", "Static", "StaticArraysCore", "Statistics", "Tricks", "TruncatedStacktraces"]
@@ -1130,6 +1154,17 @@ deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialF
 git-tree-sha1 = "23163d55f885173722d1e4cf0f6110cdbaf7e272"
 uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
 version = "1.15.1"
+
+[[deps.Distances]]
+deps = ["LinearAlgebra", "Statistics", "StatsAPI"]
+git-tree-sha1 = "66c4c81f259586e8f002eacebc177e1fb06363b0"
+uuid = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+version = "0.10.11"
+weakdeps = ["ChainRulesCore", "SparseArrays"]
+
+    [deps.Distances.extensions]
+    DistancesChainRulesCoreExt = "ChainRulesCore"
+    DistancesSparseArraysExt = "SparseArrays"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -1360,6 +1395,12 @@ version = "0.1.3"
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
+[[deps.GLM]]
+deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns", "StatsModels"]
+git-tree-sha1 = "273bd1cd30768a2fddfa3fd63bbc746ed7249e5f"
+uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
+version = "1.9.0"
+
 [[deps.GPUArraysCore]]
 deps = ["Adapt"]
 git-tree-sha1 = "ec632f177c0d990e64d955ccc1b8c04c485a0950"
@@ -1495,6 +1536,11 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "3d09a9f60edf77f8a4d99f9e015e8fbf9989605d"
 uuid = "905a6f67-0a94-5f89-b386-d35d92009cd1"
 version = "3.1.7+0"
+
+[[deps.Indexing]]
+git-tree-sha1 = "ce1566720fd6b19ff3411404d4b977acd4814f9f"
+uuid = "313cdc1a-70c2-5d6a-ae34-0150d3930a38"
+version = "1.1.1"
 
 [[deps.IndirectArrays]]
 git-tree-sha1 = "012e604e1c7458645cb8b436f8fba789a51b257f"
@@ -1803,6 +1849,12 @@ version = "2.26.0"
     Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
     Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
     RecursiveArrayTools = "731186ca-8d62-57ce-b412-fbd966d074cd"
+
+[[deps.Loess]]
+deps = ["Distances", "LinearAlgebra", "Statistics", "StatsAPI"]
+git-tree-sha1 = "a113a8be4c6d0c64e217b472fb6e61c760eb4022"
+uuid = "4345ca2d-374a-55d4-8d30-97f9976e7612"
+version = "0.6.3"
 
 [[deps.LogExpFunctions]]
 deps = ["DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
@@ -2475,6 +2527,11 @@ version = "0.4.1"
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 
+[[deps.ShiftedArrays]]
+git-tree-sha1 = "503688b59397b3307443af35cd953a13e8005c16"
+uuid = "1277b4bf-5013-50f5-be3d-901d8477a67a"
+version = "2.0.0"
+
 [[deps.Showoff]]
 deps = ["Dates", "Grisu"]
 git-tree-sha1 = "91eddf657aca81df9ae6ceb20b959ae5653ad1de"
@@ -2661,6 +2718,12 @@ weakdeps = ["ChainRulesCore", "InverseFunctions"]
     [deps.StatsFuns.extensions]
     StatsFunsChainRulesCoreExt = "ChainRulesCore"
     StatsFunsInverseFunctionsExt = "InverseFunctions"
+
+[[deps.StatsModels]]
+deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsAPI", "StatsBase", "StatsFuns", "Tables"]
+git-tree-sha1 = "5cf6c4583533ee38639f73b880f35fc85f2941e0"
+uuid = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
+version = "0.7.3"
 
 [[deps.StrideArraysCore]]
 deps = ["ArrayInterface", "CloseOpenIntervals", "IfElse", "LayoutPointers", "ManualMemory", "SIMDTypes", "Static", "StaticArrayInterface", "ThreadingUtilities"]
@@ -3008,25 +3071,23 @@ version = "3.5.0+0"
 # ╠═90d089f4-c495-4d73-85f6-406302ef41d9
 # ╠═4e4abade-b83f-4f2b-8f75-4493edb56a79
 # ╠═97b48d12-805c-4b3c-92d8-0770d164f919
-# ╠═8dd6deed-b9ae-4781-9312-487a955d56fc
-# ╠═5e32c9ec-a872-4535-b9eb-4e85612181c6
 # ╠═bd407590-ae83-44e7-964a-da98465502c4
 # ╠═99179c42-9d49-4e8d-89b8-144de3c9f6f8
 # ╟─e73ff64f-2155-46ec-b2f4-9fba16c05105
 # ╠═fb9f4702-bef1-470f-a137-4a37ba1edff5
 # ╠═c59f4a7b-06e2-439a-8f56-f54f54926ed2
+# ╠═ddf6c03b-3a96-464c-9063-8f915122050f
 # ╠═e555a9b0-fd08-4023-81e4-b78fefeb5028
 # ╠═212a76d6-35d2-4854-a6b7-4baf75026316
+# ╠═b848b778-4c5a-4d97-a5ba-94071f206e7e
+# ╠═f0910909-f868-4afa-8e86-bfd6fe79d249
 # ╠═535aeb31-d095-438a-9199-f980e6a27599
-# ╠═4c022269-3337-40ee-9bda-76d9ffea6544
 # ╠═2d0eb9c0-121d-40d1-91d8-3aa17299e9db
 # ╠═f68a056a-5e3f-4aa8-9044-3e04b849f5fb
-# ╠═2e8069ec-1f01-46f3-adc1-609fabb7ea5a
-# ╠═9f35b1aa-0150-4c43-8776-71c9e4640b54
 # ╠═75ea1ceb-b2e4-4dc1-bc50-cd8fc1a73970
-# ╠═acee479a-af82-4516-aa67-329b5fd9d040
 # ╠═6e707940-72b2-4723-923a-1fa24fa38ede
 # ╠═8bac5e51-7f7c-4c30-b23f-61578b70385e
+# ╠═9f35b1aa-0150-4c43-8776-71c9e4640b54
 # ╠═c4d59115-a419-4a1d-bfbf-379408e5c8e6
 # ╠═8864b699-819b-4516-ae14-cb82b55bd400
 # ╠═a09f3f7b-3f6c-4f18-9260-6d3898a7a21b
