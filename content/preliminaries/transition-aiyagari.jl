@@ -35,6 +35,9 @@ md"""
 # Non-stationary rewards
 """
 
+# ╔═╡ 01ef1782-9cc3-4963-a643-b92400e129ac
+rᴷ(K₋, (; Γ, α, L)) = α * Γ * (K₋/L)^(α-1)
+
 # ╔═╡ 47b3744b-ee2f-478f-912e-3afbe023d946
 function bellman_operator!((; β, R, Q), v, Tv, σ)	
     vals = R + β * (Q * v)
@@ -44,13 +47,15 @@ function bellman_operator!((; β, R, Q), v, Tv, σ)
 end
 
 # ╔═╡ bee0cb6d-330c-4616-94f5-ba05cbecfc25
-function backward_induction((; β, R, Q), T, vᵀ)
+function backward_induction((; β, Rs, Q), vᵀ)
+	T = length(Rs)
 	vₜ = copy(vᵀ)
 	vₜ₋₁ = zeros(length(vᵀ))
 	σ = zeros(Int, length(vᵀ))
 	out = [(; t = T, v = copy(vₜ), σ=copy(σ))]	
 
 	for t ∈ T:-1:1
+		R = Rs[t]
 		bellman_operator!((; β, R, Q), vₜ, vₜ₋₁, σ)
 	
 		push!(out, (; t = t-1, v = copy(vₜ₋₁), σ = copy(σ)))
@@ -249,14 +254,26 @@ out1 = let
 	(; β, u) = household
 	(; states, policies, states_indices, policies_indices) = statespace
 
-	R = setup_R(states, policies, prices, u)
+	par = (; Γ = 1, α = 0.3, δ = 0.02, L = 1.0)
+
+	T = 15
+	Ks = [(; t, K = 20.0 + t) for t ∈ 0:T-1]
+
+	Rs = map(Ks) do (; t, K)
+		r = rᴷ(K, par) - par.δ
+		prices = (q = q(r), w = 1.0, Δr = r/2)
+
+		R = setup_R(states, policies, prices, u)
+		(; R, r, K₋=K, t=t+1)
+	end |> DataFrame
+
 	Q = setup_Q(states_indices, policies_indices, z_chain)
 
 	v_T = reward.(states, Ref((; k_next = 0.0)), Ref(prices), u) / (1/β-1)
 
-	T = 15
 
-	out = backward_induction((; β, R, Q), T, v_T)
+
+	out = backward_induction((; β, Rs=Rs.R, Q), v_T)
 	
 	(; out, T, Q, states)
 end	
@@ -299,6 +316,7 @@ let (; Qσ_df, π₀, T, states) = out2
 		select(:t, :s => AsTable, Not(:s))	
 	end
 
+	if true
 	@chain df_dists begin
 		@groupby(:t)
 		@combine(:K = mean(:k, weights(:π)))
@@ -306,7 +324,7 @@ let (; Qσ_df, π₀, T, states) = out2
 		draw
 	end
 
-	#=
+	else
 	@chain df_dists begin
 		data(_) * mapping(:k, :π, 
 			color = :t => nonnumeric, 
@@ -314,7 +332,7 @@ let (; Qσ_df, π₀, T, states) = out2
 		) * visual(Lines)
 		draw
 	end
-	=#
+	end
 end
 
 # ╔═╡ 7b22d292-4032-49e1-903f-45222125006c
@@ -2235,6 +2253,7 @@ version = "3.5.0+0"
 # ╠═e26d3617-166f-489f-8815-1ebf42c1aa5a
 # ╟─791ecd02-e69b-481f-8393-1d52c75321e8
 # ╠═0bd67a5d-3fde-4117-a75e-52240a4f293c
+# ╠═01ef1782-9cc3-4963-a643-b92400e129ac
 # ╠═889b2348-97a8-400e-a61e-1462d8b19053
 # ╠═848202be-788d-48e8-9787-c55bc8232199
 # ╠═f50236dc-b795-4af4-9bd7-3553027c6054
