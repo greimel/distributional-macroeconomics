@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ 0bd67a5d-3fde-4117-a75e-52240a4f293c
 using SparseArrays
 
+# ╔═╡ 12a06feb-a284-49a7-bec0-6b907abe6421
+using OffsetArrays
+
 # ╔═╡ f50236dc-b795-4af4-9bd7-3553027c6054
 using StatsBase: weights
 
@@ -44,6 +47,59 @@ rᴷ(K₋, (; Γ, α, L)) = α * Γ * (K₋/L)^(α-1)
 # ╔═╡ d8953949-1bb6-4eee-ae73-a3472ee427dd
 KK = 8
 
+# ╔═╡ e9e06ab6-c944-4b16-a6d6-a52a8275b81b
+function iterate_forward((; Qσ_df, π₀, T, states, K_df))
+	#T = maximum(K_df.t)
+	
+	dists = [(; t=0, π=π₀)]
+
+	for t ∈ 0:T-1
+		i = t+1
+		π = Qσ_df.Qσ[i] * π₀
+		push!(dists, (; t, π))
+	end
+
+	df_dists = @chain dists begin
+		DataFrame
+		@transform(:s = states)
+		flatten([:s, :π])
+		select(:t, :s => AsTable, Not(:s))	
+	end
+
+	df_agg = @chain df_dists begin
+		@groupby(:t)
+		@combine(:K_hh = mean(:k, weights(:π)))
+		innerjoin(K_df, on = :t)
+	end
+
+	(; df_dists, df_agg)
+end
+
+# ╔═╡ 0346172d-25c4-4c99-bc06-e7b87d963385
+function visualize((; df_dists, df_agg))
+	fig = Figure()
+
+	vars = [:K_hh, :K_demand]
+	# Supply and demand for capital
+	SnD = data(df_agg) * mapping(:t, vars, color=dims(1) => renamer(vars)) * visual(Lines)
+	p = draw!(fig[1,1][2,1], SnD)
+	legend!(fig[1,1][1,1], p, orientation = :horizontal, titleposition=:left)
+	
+	# Interest rate
+	lines(fig[1,2], df_agg.t, df_agg.r)
+	
+	# Stationary distribution of capital
+	@chain df_dists begin
+		data(_) * mapping(:k, :π, 
+			color = :t => nonnumeric, 
+			col = :z => nonnumeric
+		) * visual(Lines)
+		draw!(fig[2,:], _)
+	end
+	
+	fig
+end
+
 # ╔═╡ 47b3744b-ee2f-478f-912e-3afbe023d946
 function bellman_operator!((; β, R, Q), v, Tv, σ)	
     vals = R + β * (Q * v)
@@ -75,6 +131,38 @@ end
 function Q_σ(Q, σ)
 	n_states = size(Q, 1)
 	sparse(vcat([Q[i,σ[i],:]' for i ∈ 1:n_states]...))
+end
+
+# ╔═╡ 848202be-788d-48e8-9787-c55bc8232199
+function controlled_transition_matrices((; out, Q, states))
+	T = maximum(DataFrame(out).t)
+	
+	Qσ_df = map(out) do (; t, σ)
+		if t < T
+			(; t, Qσ = Q_σ(Q, σ))
+		else
+			(; t, Qσ = missing)
+		end
+	end |> DataFrame
+
+	sort!(Qσ_df, :t)
+
+	@assert Qσ_df.t == 0:T
+	
+	(; Qσ_df, T, states)
+end
+
+# ╔═╡ 7b22d292-4032-49e1-903f-45222125006c
+@chain out1.out begin
+	DataFrame
+	@transform(:s = ss.states)
+	flatten([:v, :s, :σ])
+	select(:t, :v, :s => AsTable, Not(:s))
+	@aside T = maximum(_.t)
+	@subset(_, :t < T)
+
+	data(_) * mapping(:k, :σ, color = :t => nonnumeric, col = :z => nonnumeric) * visual(Lines)
+	draw
 end
 
 # ╔═╡ 5710e030-f413-4eb4-9dbb-6c31ffc71cc8
@@ -204,6 +292,73 @@ r = 0.02
 # ╔═╡ 016532bf-364d-4b56-b81c-2ec53d37fb9f
 q(r) = 1/(1+r)
 
+# ╔═╡ 889b2348-97a8-400e-a61e-1462d8b19053
+function Q_Rs(household, ss, z_chain, Ks, par)
+	
+	(; β, u) = household
+	(; states, policies, states_indices, policies_indices) = ss
+
+	T = length(Ks) - 1
+	K_df = DataFrame(K = Ks, t = 0:length(Ks)-1)
+
+	
+	Rs_df = map(eachrow(K_df)) do (; t, K)
+		r = rᴷ(K, par) - par.δ
+		prices = (q = q(r), w = 1.0, Δr = r/2)
+
+		R = setup_R(states, policies, prices, u)
+		(; R, r, K₋=K, t=t+1)
+	end |> DataFrame
+
+	K_df = @chain Rs_df begin
+		@select(:K₋, :r, :t)
+		outerjoin(_, K_df, on = :t)
+		rename(:K => :K_demand)
+		sort!(:t)
+	end
+	
+	Q = setup_Q(states_indices, policies_indices, z_chain)
+
+	(; β, Q, Rs_df, K_df)
+end	
+
+# ╔═╡ 56f5227e-6bf0-4d03-8f9b-b0f7238b9505
+function transition_given_Kpath(Ks, hh, ss, z_chain, par)
+	(; states) = ss
+	
+	## Construct, Rs, Q
+	(; β, Q, Rs_df, K_df)  = Q_Rs(hh, ss, z_chain, Ks, par)
+
+	## Specify final value (should come from steady state)
+	vᵀ = let
+		r = rᴷ(Ks[end], par) - par.δ
+		prices = (q = q(r), w = 1.0, Δr = r/2)
+		reward.(states, Ref((; k_next = 0.0)), Ref(prices), hh.u) / (1/β-1)
+	end
+
+	## Solve households' problem backwards
+	out = backward_induction((; β, Rs=Rs_df.R, Q), vᵀ)
+
+	#@info @select(DataFrame(out), :)
+	
+	## Construct time dependent controlled transition matrices
+	(; Qσ_df, T, states) = controlled_transition_matrices((; out, Q, states, K_df))
+
+	@info K_df
+	#@info Qσ_df # 0:T-1
+
+	## Solve distribution forwards
+
+	### specify initial distribution (should come from steady state)
+	mc₀ = MarkovChain(Qσ_df.Qσ[1], states)
+	π₀ = only(stationary_distributions(mc₀))
+
+	(; df_agg, df_dists) = iterate_forward((; Qσ_df, π₀, T, states, K_df))
+
+	df_agg.K_hh - df_agg.K_demand
+	#visualize(out3)
+end
+
 # ╔═╡ 3ce90de6-eebc-4e0d-98fb-78f91db4ad53
 prices = (q = q(r), w = 1.0, Δr = r/2)
 
@@ -223,122 +378,17 @@ We also need to define the Markov chain for the productivity process:
 # ╔═╡ c625c772-3b4c-489b-9f23-aa8ce4a38cb2
 z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
 
-# ╔═╡ 889b2348-97a8-400e-a61e-1462d8b19053
-out1 = let
-	household = hh
+# ╔═╡ fb12765f-ddb4-4a7a-8a42-31d4a1e5ae37
+let
 	ss = statespace(; k_vals = range(0.0, 20.0, length = 200), z_chain)
-	
-	(; β, u) = household
-	(; states, policies, states_indices, policies_indices) = ss
 
 	par = (; Γ = 1, α = 0.3, δ = 0.02, L = 1.0)
 
+	## Guess vector of K
 	T = 15
-	Ks = [(; t, K = KK + 0.01 * t) for t ∈ 0:T-1]
-
-	Rs = map(Ks) do (; t, K)
-		r = rᴷ(K, par) - par.δ
-		prices = (q = q(r), w = 1.0, Δr = r/2)
-
-		R = setup_R(states, policies, prices, u)
-		(; R, r, K₋=K, t=t+1)
-	end |> DataFrame
-
-	K_df = @chain Rs begin
-		@select(:K₋, :r, :t)
-		@select(:r, :t, :K_demand = @bycol lead(:K₋))
-	end
+	Ks = [KK + 0.01 * t for t ∈ 0:T-1]
 	
-	Q = setup_Q(states_indices, policies_indices, z_chain)
-
-	v_T = reward.(states, Ref((; k_next = 0.0)), Ref(prices), u) / (1/β-1)
-
-
-
-	out = backward_induction((; β, Rs=Rs.R, Q), v_T)
-	
-	(; out, T, Q, states, K_df)
-end	
-
-# ╔═╡ 848202be-788d-48e8-9787-c55bc8232199
-out2 = let (; out, T, Q, states, K_df) = out1
-	
-	Qσ_df = map(out) do (; t, σ)
-		if t < T
-			(; t, Qσ = Q_σ(Q, σ))
-		else
-			(; t, Qσ = missing)
-		end
-	end |> DataFrame
-
-	sort!(Qσ_df, :t)
-
-	@assert Qσ_df.t == 0:T
-
-	mc₀ = MarkovChain(Qσ_df.Qσ[1], states)
-	π₀ = only(stationary_distributions(mc₀))
-	
-	(; Qσ_df, mc₀, π₀, T, states, K_df)
-end;
-
-# ╔═╡ e9e06ab6-c944-4b16-a6d6-a52a8275b81b
-let (; Qσ_df, π₀, T, states, K_df) = out2
-	dists = [(; t=0, π=π₀)]
-
-	for t ∈ 1:T-1
-		i = t
-		π = Qσ_df.Qσ[i] * π₀
-		push!(dists, (; t, π))
-	end
-
-	df_dists = @chain dists begin
-		DataFrame
-		@transform(:s = states)
-		flatten([:s, :π])
-		select(:t, :s => AsTable, Not(:s))	
-	end
-
-	fig = Figure()
-
-	
-	vars = [:K_hh, :K_demand]
-	df_plt = @chain df_dists begin
-		@groupby(:t)
-		@combine(:K_hh = mean(:k, weights(:π)))
-		innerjoin(K_df, on = :t)
-	end
-
-	# Supply and demand for capital
-	SnD = data(df_plt) * mapping(:t, vars, color=dims(1) => renamer(vars)) * visual(Lines)
-	p = draw!(fig[1,1][2,1], SnD)
-	legend!(fig[1,1][1,1], p, orientation = :horizontal, titleposition=:left)
-	
-	# Interest rate
-	lines(fig[1,2], df_plt.t, df_plt.r)
-	
-	# Stationary distribution of capital
-	@chain df_dists begin
-		data(_) * mapping(:k, :π, 
-			color = :t => nonnumeric, 
-			col = :z => nonnumeric
-		) * visual(Lines)
-		draw!(fig[2,:], _)
-	end
-	
-	fig
-end
-
-# ╔═╡ 7b22d292-4032-49e1-903f-45222125006c
-@chain out1.out begin
-	DataFrame
-	@transform(:s = ss.states)
-	flatten([:v, :s, :σ])
-	select(:t, :v, :s => AsTable, Not(:s))
-	@aside T = maximum(_.t)
-	@subset(_, :t < T)
-
-	data(_) * mapping(:k, :σ, color = :t => nonnumeric, col = :z => nonnumeric) * visual(Lines)
-	draw
+	transition_given_Kpath(Ks, hh, ss, z_chain, par)
 end
 
 # ╔═╡ 98cbbc8d-60f3-4741-9440-7e7ec74a4f8f
@@ -449,6 +499,7 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
@@ -461,6 +512,7 @@ CairoMakie = "~0.11.9"
 Chain = "~0.6.0"
 DataFrameMacros = "~0.4.1"
 DataFrames = "~1.6.1"
+OffsetArrays = "~1.13.0"
 PlutoUI = "~0.7.58"
 QuantEcon = "~0.16.6"
 ShiftedArrays = "~2.0.0"
@@ -473,7 +525,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.1"
 manifest_format = "2.0"
-project_hash = "d9bb572b2f29a1a50e1f2fa97db31427b912226f"
+project_hash = "bd061f518bf99b336523e55367df0997966559ac"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2279,12 +2331,16 @@ version = "3.5.0+0"
 # ╟─791ecd02-e69b-481f-8393-1d52c75321e8
 # ╠═0bd67a5d-3fde-4117-a75e-52240a4f293c
 # ╠═01ef1782-9cc3-4963-a643-b92400e129ac
+# ╠═d8953949-1bb6-4eee-ae73-a3472ee427dd
+# ╠═12a06feb-a284-49a7-bec0-6b907abe6421
+# ╠═fb12765f-ddb4-4a7a-8a42-31d4a1e5ae37
+# ╠═56f5227e-6bf0-4d03-8f9b-b0f7238b9505
 # ╠═889b2348-97a8-400e-a61e-1462d8b19053
 # ╠═848202be-788d-48e8-9787-c55bc8232199
 # ╠═f50236dc-b795-4af4-9bd7-3553027c6054
 # ╠═4c0b2304-022e-470e-8140-7e4ffec1fa7c
-# ╠═d8953949-1bb6-4eee-ae73-a3472ee427dd
 # ╠═e9e06ab6-c944-4b16-a6d6-a52a8275b81b
+# ╠═0346172d-25c4-4c99-bc06-e7b87d963385
 # ╠═47b3744b-ee2f-478f-912e-3afbe023d946
 # ╠═bee0cb6d-330c-4616-94f5-ba05cbecfc25
 # ╠═64a0ca21-30d4-41df-b843-b65fe37b331e
