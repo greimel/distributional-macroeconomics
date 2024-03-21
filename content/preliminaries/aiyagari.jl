@@ -225,7 +225,7 @@ end
 
 # ╔═╡ 32f46a06-0832-479e-a00b-346cab1f8f5f
 function setup_R(states, policies, prices, u)
-	R = zeros(length(states), length(policies))
+	R = zeros(typeof(prices.q), length(states), length(policies))
 	setup_R!(R, states, policies, prices, u)
 end
 

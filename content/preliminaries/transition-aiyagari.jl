@@ -85,7 +85,7 @@ z_chain = MarkovChain([0.75 0.25; 0.25 0.75], [1.25, 0.75])
 
 # ╔═╡ 983426e6-b84f-4a91-b425-38be1a0f9db4
 ss2 = statespace(; 
-	k_vals = range(1e-10, 25.0, length = 100),
+	k_vals = range(1e-10, 25.0, length = 50),
 	z_chain = MarkovChain([0.9 0.1; 0.1 0.9], [0.1; 1.0])
 );
 
@@ -98,7 +98,7 @@ md"""
 """
 
 # ╔═╡ 0b70a4ed-0286-481b-bce6-b439e7aad66e
-
+transitio
 
 # ╔═╡ cd70ee13-15f9-49b9-bf20-f0d5026a3fd3
 md"""
@@ -180,8 +180,13 @@ end
 # ╔═╡ a1c4e0d1-c4d6-4899-a9e6-7e4ff2a8105a
 function backward_induction((; β, Rs, Q), vᵀ)
 	T = length(Rs)
-	vₜ = copy(vᵀ)
-	vₜ₋₁ = zeros(length(vᵀ))
+	TT1 = eltype(vᵀ)
+	TT2 = eltype(Rs[1])
+	
+	vₜ = zeros(TT2, length(vᵀ))
+	vₜ .= vᵀ
+	
+	vₜ₋₁ = zeros(TT2, length(vᵀ))
 	σ = zeros(Int, length(vᵀ))
 	out = [(; t = T, v = copy(vₜ), σ=copy(σ))]	
 
@@ -263,10 +268,14 @@ function Q_Rs(household, ss, z_chain, Ks, firm)
 	T = length(Ks) - 1
 	K_df = DataFrame(K = Ks, t = 0:length(Ks)-1)
 
+	Rs = map(Ks) do K
+		setup_R(states, policies, prices_from_K(firm, K), u)
+	end
+	
 	Rs_df = @chain K_df begin
 		@transform(:prices = prices_from_K(firm, :K))
-		@transform(:R = setup_R(states, policies, :prices, u))
-		@select(:R, :r = :prices.r, :K₋=:K, :t = :t + 1)
+		#@transform(:R = setup_R(states, policies, :prices, u))
+		@select(:r = :prices.r, :K₋=:K, :t = :t + 1)
 	end
 		
 	#=@transform(K_df)
@@ -286,7 +295,7 @@ function Q_Rs(household, ss, z_chain, Ks, firm)
 	
 	Q = setup_Q(states_indices, policies_indices, z_chain)
 
-	(; β, Q, Rs_df, K_df)
+	(; β, Q, Rs, K_df)
 end
 
 # ╔═╡ de5b2570-f02b-4a48-ab02-c7b413a9780a
@@ -294,7 +303,7 @@ function transition_given_Kpath(Ks, hh, ss, z_chain, firm, vᵀ, π₀; details=
 	(; states) = ss
 	
 	## Construct, Rs, Q
-	(; β, Q, Rs_df, K_df)  = Q_Rs(hh, ss, z_chain, Ks, firm)
+	(; β, Q, Rs, K_df)  = Q_Rs(hh, ss, z_chain, Ks, firm)
 
 	## Specify final value (should come from steady state)
 	#vᵀ = let
@@ -303,7 +312,7 @@ function transition_given_Kpath(Ks, hh, ss, z_chain, firm, vᵀ, π₀; details=
 	#end
 
 	## Solve households' problem backwards
-	out = backward_induction((; β, Rs=Rs_df.R, Q), vᵀ)
+	out = backward_induction((; β, Rs, Q), vᵀ)
 
 	#@info @select(DataFrame(out), :)
 	
@@ -376,12 +385,13 @@ let
 	vᵀ = out.ddpr.v
 	π₀ = out.results.π
 	## Guess vector of K
-	T = 150
+	T = 20
 	Ks = [KK + 0.01 * t/T for t ∈ reverse(0:T-1)]
 	
 	ForwardDiff.jacobian(Ks -> 
 		transition_given_Kpath(Ks, hh2, ss2, z_chain, firm, vᵀ, π₀, details = false)
 		, Ks)
+	
 end
 
 # ╔═╡ 5acb1509-04eb-43a4-b902-f051aab46793
