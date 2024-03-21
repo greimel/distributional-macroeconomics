@@ -308,29 +308,31 @@ We solve the households' problem using the policy function iteration (PFI) algor
 
 # ╔═╡ f40ae9c6-50e4-4ee6-b1b6-8415c41b27ef
 function solve_details0(ddp, states, policies; solver = PFI)
-	results = QuantEcon.solve(ddp, solver)
+	ddpr = QuantEcon.solve(ddp, solver)
 
-	df = [DataFrame(states) DataFrame(policies[results.sigma])]
-	df.state = states
-	df.policy = policies[results.sigma]
-	df.π = stationary_distributions(results.mc)[:, 1][1]
+	results = [DataFrame(states) DataFrame(policies[ddpr.sigma])]
+	results.state = states
+	results.policy = policies[ddpr.sigma]
+	results.π = stationary_distributions(ddpr.mc)[:, 1][1]
 
-	df
+	(; results, ddpr)
 end
 
 # ╔═╡ 4fa93659-4a83-4874-8595-ca59c16faa0e
 function solve_details(ddp, states, policies; solver = PFI)
-	df = solve_details0(ddp, states, policies; solver)
+	(; results, ddpr) = solve_details0(ddp, states, policies; solver)
 
-	@chain df begin
-		@transform(:consumption = consumption(:state, :policy, prices))
-		@transform(:saving = :k_next - :k)
+	results = @chain results begin
+		@transform!(:consumption = consumption(:state, :policy, prices))
+		@transform!(:saving = :k_next - :k)
 		select!(Not([:state, :policy]))
 	end
+
+	(; results, ddpr)
 end	
 
 # ╔═╡ 0d593683-3b35-4740-a510-517a4dd3e83b
-results = solve_details(ddp, ss.states, ss.policies; solver = PFI)
+(; results) = solve_details(ddp, ss.states, ss.policies; solver = PFI)
 
 # ╔═╡ 48c6da76-288d-4bd1-8f03-9a4815bd94dd
 md"""
@@ -506,7 +508,7 @@ Discount factor $\beta$
 begin	
 	hh_slider = Household(σ = σ_slider, β = β_slider);
 	ddp_slider = setup_DDP(hh_slider, ss, prices);
-	results_slider = solve_details(ddp_slider, ss.states, ss.policies; solver = PFI);
+	results_slider = solve_details(ddp_slider, ss.states, ss.policies; solver = PFI).results
 end;
 
 # ╔═╡ 2d1744d3-e8ec-4052-a3bb-e35b90ed60e4
@@ -552,7 +554,7 @@ function excess_savings(hh, statespace, r; w, Δr)
 	
 	ddp = setup_DDP(hh, statespace, (; w, q=q(r), Δr = Δr))
 	
-	results = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
+	(; results) = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
 
     return ζ = mean(results.k, weights(results.π))
 	
@@ -677,9 +679,7 @@ The production function is $F(K, N) = A K^\alpha N^{1-\alpha}$ where $K$ is the 
 """
 
 # ╔═╡ 5564f1c0-aed9-4373-9c6a-bbb4f5bc8a8e
-function production(f, K)
-	return f.A * K ^ f.α * f.N ^ (1 - f.α)
-end
+production((; A, α, N), K) = A * K^α * N^(1-α)
 
 # ╔═╡ 2fddaf62-9767-475f-8089-0feb7fa2bf1c
 md"""
@@ -687,9 +687,7 @@ The function below creates a named tuple with all parameters that describe the t
 """
 
 # ╔═╡ be1749b7-4b57-4b4c-95bd-91697e5c3c72
-function Firm(A = 1, N = 1, α = 0.33, δ = 0.05)
-	(; A, N, α, δ)
-end
+Firm(A = 1, N = 1, α = 0.33, δ = 0.05) = (; A, N, α, δ)
 
 # ╔═╡ 4c9d12d4-03bd-45cf-9a6d-e0285ec8639f
 md"""
@@ -699,21 +697,23 @@ From the first-order conditions we can derive three functions that will be usefu
 """
 
 # ╔═╡ b78213eb-a8c3-46c4-b340-9ddf6acb4c4d
-function capital_demand(f, r)
-	K = (f.α * f.A / (r + f.δ)) ^ (1 / (1 - f.α)) * f.N
-	return K
+function capital_demand(firm, r)
+	(; α, A, δ, N) = firm
+	return (α * A / (r + δ)) ^ (1 / (1 - α)) * N
 end
 
 # ╔═╡ fbfb389c-b67b-4705-92f8-086742e59303
-function K_to_r(f, K)
-	# Compute the interest rate that is associated with the given demand for capital
-    return f.A * f.α * (f.N / K) ^ (1 - f.α) - f.δ
+"Compute the interest rate that is associated with the given demand for capital"
+function K_to_r(firm, K)
+	(; α, A, δ, N) = firm
+    return A * α * (N / K)^(1 - α) - δ
 end
 
 # ╔═╡ f7983bf3-d725-43dc-ba1e-b0e9ead9e0d7
-function r_to_w(f, r)
-	# Compute the wage that is associated with the given interest rate
-    return f.A * (1 - f.α) * (f.A * f.α / (r + f.δ)) ^ (f.α / (1 - f.α))
+"Compute the interest rate that is associated with the given demand for capital"
+function r_to_w(firm, r)
+	(; α, A, δ, N) = firm
+    return A * (1 - α) * (A * α / (r + δ)) ^ (α / (1 - α))
 end
 
 # ╔═╡ 12b70fb0-2f04-4f23-88e7-7a6feb255237
@@ -749,22 +749,54 @@ First, we have a look at the capital demand and supply curves:
 """
 
 # ╔═╡ 4af5f025-fd09-495e-82c7-59aec0f635d4
-function capital_supply(hh, f, statespace, r)
+function capital_supply(household, firm, statespace, r)
 
-    w = r_to_w(f, r)
+    w = r_to_w(firm, r)
 	
-	ddp = setup_DDP(hh, statespace, (; w, q=q(r), Δr = 0.0))
+	ddp = setup_DDP(household, statespace, (; w, q=q(r), Δr = 0.0))
 	
-	results = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
+	(; results) = solve_details(ddp, statespace.states, statespace.policies, solver = PFI)
 
     return 	K = mean(results.k, weights(results.π))
 	
 end
 
-# ╔═╡ 1062e7f6-6a3d-4725-a3c2-479462aa139a
-begin
+# ╔═╡ cf970bb0-019f-4290-92dc-8ed44dcae5af
+function excess_demand2(household, firm, statespace, K_demand)
+	r = K_to_r(firm, K_demand)
+	w = r_to_w(firm, r)
 
-	r_vals_supply = range(0.001, 0.04, length = 20);
+	K_supply = capital_supply(household, firm, statespace, r)
+
+	excess_demand = K_demand - K_supply
+end
+
+# ╔═╡ c0c9fa16-678e-4031-bd10-7318d932ff81
+find_zero(K_demand -> excess_demand2(hh2, firm, ss2, K_demand), (1.0, 10.0), Brent())
+
+# ╔═╡ 1062e7f6-6a3d-4725-a3c2-479462aa139a
+@chain begin
+	DataFrame(r = range(0.001, 0.1, length = 40))
+	@transform!(
+		"supply (households)" = capital_supply(hh2, firm, ss2, :r),
+		"demand (firms)" = capital_demand(firm, :r)
+	)
+	stack(["supply (households)", "demand (firms)"], value_name = :capital)
+	@subset(:capital < 15)
+	data(_) * mapping(
+		:capital => L"capital $K$",
+		:r => L"interest rate $r$", 
+		color = :variable => ""
+	) * visual(Lines)
+	draw(
+		figure = (; size = (370, 300), fonts = (; regular = "CMU")), 
+		legend = (; position = :bottom, titleposition = :left)
+	)
+end
+
+# ╔═╡ 8b8ae8a4-137b-4a7f-a6f4-aca2b1c12508
+let
+   r_vals_supply = range(0.001, 0.04, length = 20);
 
 	k_vals = capital_supply.(
 		Ref(hh2),
@@ -775,17 +807,13 @@ begin
 
 	r_vals_demand = K_to_r.(Ref(firm), k_vals);
 
-end;
-
-# ╔═╡ 8b8ae8a4-137b-4a7f-a6f4-aca2b1c12508
-let
-
+	
 	fig = Figure()
 	
 	ax = fig[1, 1] = Axis(fig, xlabel = "capital", ylabel = "interest rate")
 	
-	lines!(k_vals, r_vals_demand, label = "demand")
-	lines!(k_vals, r_vals_supply, label = "supply")
+	lines!(k_vals, r_vals_demand, label = "demand (firm)")
+	lines!(k_vals, r_vals_supply, label = "supply (households)")
 
 	axislegend()
 	
@@ -923,7 +951,7 @@ StatsBase = "~0.34.2"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.0"
+julia_version = "1.10.1"
 manifest_format = "2.0"
 project_hash = "ba9f233aed4289c9c2661d17c73d523aa65949bc"
 
@@ -1197,7 +1225,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.5+1"
+version = "1.1.0+0"
 
 [[deps.CompositionsBase]]
 git-tree-sha1 = "802bb88cd69dfd1509f6670416bd4434015693ad"
@@ -2045,7 +2073,7 @@ version = "1.3.5+1"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
-version = "0.3.23+2"
+version = "0.3.23+4"
 
 [[deps.OpenEXR]]
 deps = ["Colors", "FileIO", "OpenEXR_jll"]
@@ -2869,6 +2897,8 @@ version = "3.5.0+0"
 # ╟─3390393a-48a7-47b9-8855-fd11098c107a
 # ╟─83574237-d23c-411f-90a1-ae7d832f65d6
 # ╠═4af5f025-fd09-495e-82c7-59aec0f635d4
+# ╠═c0c9fa16-678e-4031-bd10-7318d932ff81
+# ╠═cf970bb0-019f-4290-92dc-8ed44dcae5af
 # ╠═1062e7f6-6a3d-4725-a3c2-479462aa139a
 # ╠═8b8ae8a4-137b-4a7f-a6f4-aca2b1c12508
 # ╟─cfdfbaca-0de4-4094-b823-dd9d5e144a49
