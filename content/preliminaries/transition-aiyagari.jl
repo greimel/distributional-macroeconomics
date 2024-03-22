@@ -16,8 +16,17 @@ using HTTP: HTTP
 # ╔═╡ b2375732-2cfa-4b03-895c-d7c0e71b7c2e
 using QuantEcon: QuantEcon, PFI, MarkovChain, stationary_distributions
 
+# ╔═╡ 885540a6-689f-4bfa-9f03-4a8656cf9e63
+using OffsetArrays
+
+# ╔═╡ 84397b78-8d9c-4b30-bd95-dfad6cb9359b
+using ShiftedArrays: lag, lead
+
 # ╔═╡ 9c57b5a2-7b81-4ae7-8a67-de13d7892458
 using ForwardDiff: ForwardDiff
+
+# ╔═╡ a7e77f79-013f-4fdb-a5db-bf1693cb8b58
+using StatsBase: weights
 
 # ╔═╡ f3894313-888a-4534-96bc-3e0fe316956a
 using SparseArrays: sparse
@@ -97,9 +106,6 @@ md"""
 # Transition path
 """
 
-# ╔═╡ 0b70a4ed-0286-481b-bce6-b439e7aad66e
-transitio
-
 # ╔═╡ cd70ee13-15f9-49b9-bf20-f0d5026a3fd3
 md"""
 # Appendix 1: Functions
@@ -113,28 +119,51 @@ md"""
 # ╔═╡ 8cf21e7a-c9de-4943-9d25-480c24f84bac
 (; setup_R, setup_Q, reward) = AIY
 
+# ╔═╡ 395c3751-dd18-4886-be18-4fd471343931
+function offsetarray_to_df((label, oa))
+	DataFrame(
+		"t" => collect(axes(oa, 1)),
+		label => OffsetArrays.no_offset_view(oa),
+		#label
+	)
+end
+
 # ╔═╡ e6adfb96-68b7-4168-9eee-8aa523670d6c
-function iterate_forward((; Qσ_df, π₀, T, states, K_df))
+function iterate_forward((; Qσs, σs, π₀, T, states, policies, K_df))
 	#T = maximum(K_df.t)
 	
 	dists = [(; t=0, π=π₀)]
 
-	for t ∈ 0:T-1
-		i = t+1
-		π = Qσ_df.Qσ[i] * π₀
-		push!(dists, (; t, π))
+	πₜ₋₁ = π₀
+	
+	for t ∈ 1:T
+		πₜ = Qσs[t-1] * πₜ₋₁
+		push!(dists, (; t, π=copy(πₜ)))
 	end
 
+
+	#pol_df = offsetarray_to_df("σ" => σs)
+	#dropmissing!(pol_df)
+	
 	df_dists = @chain dists begin
 		DataFrame
-		@transform(:s = states)
+	#	outerjoin(_, pol_df, on = :t)
+		@transform!(#@subset(!ismissing(:σ)),
+			:s = states,
+		#	:p = policies[:σ]
+			)
 		flatten([:s, :π])
-		select(:t, :s => AsTable, Not(:s))	
+		select(:t, :s => AsTable,
+			#:p => AsTable, 
+			Not(:s))	
 	end
 
+	#@info df_dists
+	
 	df_agg = @chain df_dists begin
 		@groupby(:t)
 		@combine(:K_hh = mean(:k, weights(:π)))
+		@transform!(:K_hh_l = @bycol lag(:K_hh))
 		innerjoin(K_df, on = :t)
 	end
 
@@ -180,25 +209,30 @@ end
 # ╔═╡ a1c4e0d1-c4d6-4899-a9e6-7e4ff2a8105a
 function backward_induction((; β, Rs, Q), vᵀ)
 	T = length(Rs)
-	TT1 = eltype(vᵀ)
-	TT2 = eltype(Rs[1])
+	#TT1 = eltype(vᵀ)
+	TT = eltype(Rs[1])
 	
-	vₜ = zeros(TT2, length(vᵀ))
-	vₜ .= vᵀ
+	vₜ₊₁ = zeros(TT, length(vᵀ))
+	vₜ₊₁ .= vᵀ
+	vₜ = zeros(TT, length(vᵀ))
 	
-	vₜ₋₁ = zeros(TT2, length(vᵀ))
 	σ = zeros(Int, length(vᵀ))
-	out = [(; t = T, v = copy(vₜ), σ=copy(σ))]	
+	out = [(; t = T, v = copy(vₜ₊₁), σ=copy(σ))]	
 
-	for t ∈ T:-1:1
+	for t ∈ T-1:-1:0
 		R = Rs[t]
-		bellman_operator!((; β, R, Q), vₜ, vₜ₋₁, σ)
+		bellman_operator!((; β, R, Q), vₜ₊₁, vₜ, σ)
 	
-		push!(out, (; t = t-1, v = copy(vₜ₋₁), σ = copy(σ)))
-		vₜ .= vₜ₋₁ # update for next iteration
+		push!(out, (; t, v = copy(vₜ), σ = copy(σ)))
+		vₜ₊₁ .= vₜ # update for next iteration
 	end
 
-	return out
+	df = @subset(sort!(DataFrame(out), :t), :t < T)
+	@assert df.t == 0:T-1
+
+	σs = OffsetVector(df.σ, 0:T-1)
+	
+	return (; σs)
 end
 
 # ╔═╡ 1ef67aa0-6261-4616-bb92-2bcc60e2c260
@@ -208,22 +242,11 @@ function Q_σ(Q, σ)
 end
 
 # ╔═╡ 5c5935be-e8a4-492d-afac-a2f8d159376e
-function controlled_transition_matrices((; out, Q, states))
-	T = maximum(DataFrame(out).t)
-	
-	Qσ_df = map(out) do (; t, σ)
-		if t < T
-			(; t, Qσ = Q_σ(Q, σ))
-		else
-			(; t, Qσ = missing)
-		end
-	end |> DataFrame
+function controlled_transition_matrices((; σs, Q))
+	Qσs = Q_σ.(Ref(Q), σs)
 
-	sort!(Qσ_df, :t)
-
-	@assert Qσ_df.t == 0:T
-	
-	(; Qσ_df, T, states)
+	@assert axes(Qσs) == axes(σs)
+	(; Qσs)
 end
 
 # ╔═╡ 9b850cb5-4107-4f78-80dd-82458959da91
@@ -254,23 +277,27 @@ firm = Firm()
 function prices_from_K(firm, K)
 	(; α, A, δ, N) = firm
     r = A * α * (N / K)^(1 - α) - δ
-	w = A * (1 - α) * (A * α / (r + δ)) ^ (α / (1 - α))
+	w = A * (1 - α) * (N / K)^(-α)
 
 	(; r, w, q = q(r), Δr=0.0)
 end
 
 # ╔═╡ c6470665-6805-4672-b8de-5e73bb94b334
-function Q_Rs(household, ss, z_chain, Ks, firm)
+function Q_Rs(household, ss, z_chain, K, firm)
 	
 	(; β, u) = household
 	(; states, policies, states_indices, policies_indices) = ss
 
-	T = length(Ks) - 1
-	K_df = DataFrame(K = Ks, t = 0:length(Ks)-1)
+	T = lastindex(K)
+	K_df = offsetarray_to_df("K" => K)
+	#T = length(Ks) - 1
+	#K_df = DataFrame(K = Ks, t = 0:length(Ks)-1)
 
-	Rs = map(Ks) do K
-		setup_R(states, policies, prices_from_K(firm, K), u)
+	Rs = map(0:T-1) do t
+		setup_R(states, policies, prices_from_K(firm, K[t-1]), u)
 	end
+
+	Rs = OffsetArray(Rs, 0:T-1)
 	
 	Rs_df = @chain K_df begin
 		@transform(:prices = prices_from_K(firm, :K))
@@ -278,14 +305,6 @@ function Q_Rs(household, ss, z_chain, Ks, firm)
 		@select(:r = :prices.r, :K₋=:K, :t = :t + 1)
 	end
 		
-	#=@transform(K_df)
-	Rs = map(eachrow(K_df)) do (; t, K)
-		prices = prices_from_K(firm, K)
-	
-		R = setup_R(states, policies, prices, u)
-		(; R, prices.r, K₋=K, t=t+1)
-	end |> DataFrame
-=#
 	K_df = @chain Rs_df begin
 		@select(:K₋, :r, :t)
 		outerjoin(_, K_df, on = :t)
@@ -299,11 +318,14 @@ function Q_Rs(household, ss, z_chain, Ks, firm)
 end
 
 # ╔═╡ de5b2570-f02b-4a48-ab02-c7b413a9780a
-function transition_given_Kpath(Ks, hh, ss, z_chain, firm, vᵀ, π₀; details=false)
-	(; states) = ss
-	
+function transition_given_Kpath(Ks, (; K₋, Kᵀ), hh, ss, z_chain, firm, vᵀ, π₀; details=false)
+	(; states, policies) = ss
+
+	T = length(Ks)
+	K = OffsetArray([K₋; Ks; Kᵀ], -1:T)
+
 	## Construct, Rs, Q
-	(; β, Q, Rs, K_df)  = Q_Rs(hh, ss, z_chain, Ks, firm)
+	(; β, Q, Rs, K_df)  = Q_Rs(hh, ss, z_chain, K, firm)
 
 	## Specify final value (should come from steady state)
 	#vᵀ = let
@@ -312,14 +334,14 @@ function transition_given_Kpath(Ks, hh, ss, z_chain, firm, vᵀ, π₀; details=
 	#end
 
 	## Solve households' problem backwards
-	out = backward_induction((; β, Rs, Q), vᵀ)
+	(; σs) = backward_induction((; β, Rs, Q), vᵀ)
 
 	#@info @select(DataFrame(out), :)
 	
 	## Construct time dependent controlled transition matrices
-	(; Qσ_df, T, states) = controlled_transition_matrices((; out, Q, states, K_df))
+	(; Qσs) = controlled_transition_matrices((; σs, Q))
 
-	@info K_df
+	#@info K_df
 	#@info Qσ_df # 0:T-1
 
 	## Solve distribution forwards
@@ -328,10 +350,15 @@ function transition_given_Kpath(Ks, hh, ss, z_chain, firm, vᵀ, π₀; details=
 	#mc₀ = MarkovChain(Qσ_df.Qσ[1], states)
 	#π₀ = only(stationary_distributions(mc₀))
 
-	(; df_agg, df_dists) = iterate_forward((; Qσ_df, π₀, T, states, K_df))
+	(; df_agg, df_dists) = iterate_forward((; Qσs, σs, π₀, T, states, policies, K_df))
 
 	if !details
-		return df_agg.K_hh - df_agg.K_demand
+		#return identity.(@subset(df_agg, 0 ≤ :t ≤ T-1).K_demand)
+		return identity.(@subset(df_agg, 0 ≤ :t ≤ T-1).K_hh)
+		
+		#return df_agg.K_hh - df_agg.K₋#_demand
+		#return identity.(filter(!ismissing, df_agg.K_hh_l - df_agg.K_demand))
+		
 	else
 		return df_agg, df_dists
 	end
@@ -386,10 +413,10 @@ let
 	π₀ = out.results.π
 	## Guess vector of K
 	T = 20
-	Ks = [KK + 0.01 * t/T for t ∈ reverse(0:T-1)]
-	
+	Ks = rand(T)#[KK + 0.01 * t/T for t ∈ reverse(0:T-1)]
+
 	ForwardDiff.jacobian(Ks -> 
-		transition_given_Kpath(Ks, hh2, ss2, z_chain, firm, vᵀ, π₀, details = false)
+		transition_given_Kpath(Ks, (; K₋=1/2 * KK, Kᵀ = KK), hh2, ss2, z_chain, firm, vᵀ, π₀, details = false)
 		, Ks)
 	
 end
@@ -402,6 +429,12 @@ md"""
 # ╔═╡ 0147ae5b-f773-4b77-ad92-2adb53685e43
 TableOfContents()
 
+# ╔═╡ 6d446646-7985-4324-b3b0-c4add5e245c9
+# ╠═╡ disabled = true
+#=╠═╡
+using StatsBase: weights
+  ╠═╡ =#
+
 # ╔═╡ 8df1779f-95d7-4971-9ff2-e9672963b4e4
 # ╠═╡ disabled = true
 #=╠═╡
@@ -410,15 +443,6 @@ using QuantEcon
 
 # ╔═╡ fef956c1-6e4c-46ed-9647-734bc2c08c97
 
-
-# ╔═╡ 6d446646-7985-4324-b3b0-c4add5e245c9
-# ╠═╡ disabled = true
-#=╠═╡
-using StatsBase: weights
-  ╠═╡ =#
-
-# ╔═╡ a7e77f79-013f-4fdb-a5db-bf1693cb8b58
-using StatsBase: weights
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -432,10 +456,12 @@ Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 PlutoLinks = "0ff47ea0-7a50-410d-8455-4348d5de0420"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuantEcon = "fcd29c91-0bd7-5a09-975d-7ac3f643a60c"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
@@ -448,10 +474,12 @@ DataFrameMacros = "~0.4.1"
 DataFrames = "~1.6.1"
 ForwardDiff = "~0.10.36"
 HTTP = "~1.10.3"
+OffsetArrays = "~1.13.0"
 PlutoLinks = "~0.1.6"
 PlutoUI = "~0.7.58"
 QuantEcon = "~0.16.6"
 Roots = "~2.1.3"
+ShiftedArrays = "~2.0.0"
 StatsBase = "~0.34.2"
 """
 
@@ -461,7 +489,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.1"
 manifest_format = "2.0"
-project_hash = "dcc500f113959f83801d069fe9ee47796560df1a"
+project_hash = "db0944776457239259d31df9281646f2387afc7e"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2420,22 +2448,24 @@ version = "3.5.0+0"
 # ╠═7b60a3c9-1dfd-44b5-a026-d74c0c3a9bdb
 # ╠═ad8dc987-f27b-4a4c-9826-75e83ea764d5
 # ╟─4966366e-2c2a-426e-8400-54381c1179d5
+# ╠═885540a6-689f-4bfa-9f03-4a8656cf9e63
+# ╠═84397b78-8d9c-4b30-bd95-dfad6cb9359b
 # ╠═ac555a67-a8dc-463a-98ef-e4cf6d321eac
 # ╠═9c57b5a2-7b81-4ae7-8a67-de13d7892458
-# ╠═0b70a4ed-0286-481b-bce6-b439e7aad66e
 # ╟─cd70ee13-15f9-49b9-bf20-f0d5026a3fd3
 # ╟─1b35c51a-ad71-47b4-a8f5-762e0c48debc
 # ╠═8cf21e7a-c9de-4943-9d25-480c24f84bac
 # ╠═de5b2570-f02b-4a48-ab02-c7b413a9780a
+# ╠═395c3751-dd18-4886-be18-4fd471343931
 # ╠═c6470665-6805-4672-b8de-5e73bb94b334
 # ╠═5c5935be-e8a4-492d-afac-a2f8d159376e
+# ╠═a1c4e0d1-c4d6-4899-a9e6-7e4ff2a8105a
 # ╠═e6adfb96-68b7-4168-9eee-8aa523670d6c
 # ╠═cfbd369b-d961-4599-b300-fca89345ad0d
 # ╠═a7e77f79-013f-4fdb-a5db-bf1693cb8b58
 # ╠═707f9256-57f7-4ef0-9338-109e8a2effd7
 # ╠═f3894313-888a-4534-96bc-3e0fe316956a
 # ╠═c34554b6-edcf-4539-a26a-5f69d971afff
-# ╠═a1c4e0d1-c4d6-4899-a9e6-7e4ff2a8105a
 # ╠═1ef67aa0-6261-4616-bb92-2bcc60e2c260
 # ╟─9b850cb5-4107-4f78-80dd-82458959da91
 # ╠═f1f82671-7ea3-4ca6-be31-c4d49f656150
