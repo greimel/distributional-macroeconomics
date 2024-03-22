@@ -140,39 +140,6 @@ md"""
 # ╔═╡ ecd052f4-924f-4037-ba58-f387392b43c9
 
 
-# ╔═╡ ac555a67-a8dc-463a-98ef-e4cf6d321eac
-sol = let
-	(; H_fun, x₀) = trans_problemX
-
-
-	prob = NonlinearProblem((x_, p_) -> H_fun(x_), x₀, [])
-	sol = solve(prob, 
-	#	NewtonRaphson(),
-		LevenbergMarquardt(),
-#		PseudoTransient()
-#		TrustRegion()
-#		Broyden(),
-#		FastShortcutNonlinearPolyalg()
-		#RobustMultiNewton(),
-		show_trace=Val(true),
-		abstol = 1e-8,
-		#trace_level = TraceAll(), store_trace = Val(true)
-	)
-	#obj(Ks)
-	#Ks - Kss
-	#scatterlines(abs.(obj(Ks) - obj(Kss)))
-	#ForwardDiff.jacobian(obj, Ks)
-
-	#tran
-	
-end
-
-# ╔═╡ c64452c6-b856-439a-bf42-81b409e6389a
-sol.retcode
-
-# ╔═╡ b725edb8-8981-4dd5-8f04-4697cfe8ba9f
-sol.resid
-
 # ╔═╡ cd70ee13-15f9-49b9-bf20-f0d5026a3fd3
 md"""
 # Appendix 1: Functions
@@ -216,28 +183,44 @@ function iterate_forward((; Qσs, σs, π₋₁, T, states, policies#=, K_df=#))
 		DataFrame
 		innerjoin(pol_df, on = :t)
 		@transform(:s = states, :p = policies[:σ])
-		#flatten([:p, :π, :s])
-		#select(:t, :p => AsTable, :s => AsTable, Not(:p, :σ, :s))
+		flatten([:p, :π, :s])
+		select(:t, :p => AsTable, :s => AsTable, Not(:p, :σ, :s))
 	end
+
+	#=
+	df1 = @chain df_dist_pols begin
+		@select(:t, :s, :π, :p = @bycol lead(:p))
+		dropmissing
+		flatten([:π, :s, :p])
+		select(:t, :π, :s => AsTable, :p => AsTable)
+		@groupby(:t)
+		@combine(
+				:K_next = mean(:k_next, weights(:π)),
+				:K = mean(:k, weights(:π))
+		)
+		@transform(:K_next = @bycol lag(:K_next))
+		@transform(:ε = :K_next - :K)
+	end
+	=#
 	
 	df_dist_states = @chain dists begin
 		DataFrame
 		@transform!(:s = states)
 		flatten([:s, :π])
-		@transform(:t = :t-1)
+		#@transform(:t = :t-1)
 		select(:t, :s => AsTable, Not(:s))	
 	end
 
-	#@info df_dists
-	
-	df_agg = @chain df_dist_states begin
+	df_K_hh = @chain df_dist_states begin
 		@groupby(:t)
-		@combine(:K_hh = mean(:k, weights(:π)))
-		@transform!(:K_hh_l = @bycol lag(:K_hh))
-		#innerjoin(K_df, on = :t)
+		@combine(:K = mean(:k, weights(:π)))
 	end
 
-	(; df_dist_states, df_dist_pols, df_agg, dists)
+	@assert df_K_hh.t == -1:T-1
+
+	K_hh = OffsetArray(df_K_hh.K, -1:T-1)
+
+	(; df_dist_states, df_dist_pols, K_hh, dists)
 end
 
 # ╔═╡ cfbd369b-d961-4599-b300-fca89345ad0d
@@ -366,10 +349,7 @@ function Q_Rs(household, ss, z_chain, K, firm)
 	(; states, policies, states_indices, policies_indices) = ss
 
 	T = lastindex(K)
-	K_df = offsetarray_to_df("K" => K)
-	#T = length(Ks) - 1
-	#K_df = DataFrame(K = Ks, t = 0:length(Ks)-1)
-
+	
 	prc = map(0:T-1) do t
 		prices_from_K(firm, K[t-1])
 	end
@@ -382,70 +362,36 @@ function Q_Rs(household, ss, z_chain, K, firm)
 
 	Rs = OffsetArray(Rs, 0:T-1)
 	
-	#Rs_df = @chain K_df begin
-	#	@transform(:prices = prices_from_K(firm, :K))
-	#	#@transform(:R = setup_R(states, policies, :prices, u))
-	#	@select(:r = :prices.r, :K₋=:K, :t = :t + 1)
-	#end
-		
-	#K_df = @chain Rs_df begin
-	#	@select(:K₋, :r, :t)
-	#	outerjoin(_, K_df, on = :t)
-	#	rename(:K => :K_demand)
-	#	sort!(:t)
-	#end
-	
 	Q = setup_Q(states_indices, policies_indices, z_chain)
 
-	(; β, Q, Rs, #=K_df,=# prc)
+	(; β, Q, Rs, prc)
 end
 
 # ╔═╡ de5b2570-f02b-4a48-ab02-c7b413a9780a
 function transition_given_Kpath(Ks, (; π₋₁, Kᵀ), hh, ss, z_chain, firm, vᵀ; details=false)
 	(; states, policies) = ss
 
+	# choices σₜ => Qₜ => πₜ => aggregates Kₜ (=> rₜ₊₁)
 	K₋₁ = mean(getproperty.(ss.states, :k), weights(π₋₁))
-	@info K₋₁
 	
 	T = length(Ks)
 	K = OffsetArray([K₋₁; Ks; Kᵀ], -1:T)
 
 	## Construct, Rs, Q
-	(; β, Q, Rs, #=K_df,=# prc)  = Q_Rs(hh, ss, z_chain, K, firm)
-
-	## Specify final value (should come from steady state)
-	#vᵀ = let
-	#	prices = prices_from_K(firm, Ks[end])
-	#	reward.(states, Ref((; k_next = 0.0)), Ref(prices), hh.u) / (1/β-1)
-	#end
+	(; β, Q, Rs, prc)  = Q_Rs(hh, ss, z_chain, K, firm)
 
 	## Solve households' problem backwards
 	(; σs) = backward_induction((; β, Rs, Q), vᵀ)
-
-	#@info @select(DataFrame(out), :)
 	
 	## Construct time dependent controlled transition matrices
 	(; Qσs) = controlled_transition_matrices((; σs, Q))
 
-#	@info Qσs[1] - Qσs[2], Qσs[2] - Qσs[3]
-	#@info K_df
-	#@info Qσ_df # 0:T-1
-
-	## Solve distribution forwards
-
-	### specify initial distribution (should come from steady state)
-	#mc₀ = MarkovChain(Qσ_df.Qσ[1], states)
-	#π₀ = only(stationary_distributions(mc₀))
-
 	out = iterate_forward((; Qσs, σs, π₋₁, T, states, policies#=, K_df=#))
 	
 	if !details
-		#return identity.(@subset(df_agg, 0 ≤ :t ≤ T-1).K_demand)
-		#return identity.(@subset(df_agg, 0 ≤ :t ≤ T-1).K_hh)
-		
-		#return df_agg.K_hh - df_agg.K₋#_demand
-		return identity.(filter(!ismissing, out.df_agg.K_hh_l - out.df_agg.K_demand))
-		
+		(; K_hh) = out
+
+		return K_hh[0:T-1] - K[0:T-1]		
 	else
 		return (; out..., Qσs, σs, prc)
 	end
@@ -493,7 +439,7 @@ let
 end
 
 # ╔═╡ ae646b30-21d7-4dfc-9719-34bfc1a6e1c9
-let
+let # sanity checks
 	(; ddp, ddpr, results) = out
 
 	(; π) = results
@@ -505,9 +451,6 @@ let
 	Q_σ(Q, sigma) == mc.p
 
 	mc.p' * π ≈ π
-	
-
-	
 end
 
 # ╔═╡ e0fe993d-9f4a-4155-9021-9dfa5a36dd71
@@ -522,71 +465,60 @@ trans_problem = let
 	@info (; Kᵀ, K₋₁)
 
 	## Guess vector of K
-	T = 40
+	T = 20
 	x₀ = fill(KK, T)
 
 	H_fun(K; details=false) = transition_given_Kpath(K, (; π₋₁, Kᵀ), hh2, ss2, z_chain,firm, vᵀ; details)
 
-	(; df_dist_states, df_dist_pols, prc) = H_fun(x₀; details=true)
+#	(; df_dist_states, df_dist_pols, prc) = H_fun(x₀; details=true)
 
-	df1 = @chain df_dist_pols begin
-		@select(:t, :s, :π, :p = @bycol lead(:p))
-		dropmissing
-		flatten([:π, :s, :p])
-		select(:t, :π, :s => AsTable, :p => AsTable)
-		@groupby(:t)
-		@combine(
-				:K_next = mean(:k_next, weights(:π)),
-				:K = mean(:k, weights(:π))
-		)
-		@transform(:K_next = @bycol lag(:K_next))
-		@transform(:ε = :K_next - :K)
-		#@subset(:t > 15)
-		#@groupby(:k_next, :t)
-		#@combine(:π = sum(:π))
-		#data(_) * mapping(:k_next, :π, color = :t => nonnumeric) * visual(Lines)
-		#draw
-		#@groupby(:t)
-		#@combine(
-		#	:K_next = mean(:k_next, weights(:π)),
-		#	:K = mean(:k, weights(:π))
-		#)
-		#@transform(:t = :t + 1)
-	end
+#	H_fun(x₀)
 
-	#df2 = @chain df_dist_states begin
-	#	@groupby(:t)
-	#	@combine(:K = mean(:k, weights(:π)))
-	#end
-
-#	df = dropmissing(outerjoin(df1, df2, on = :t))
-#	lines(df1.K)# ./ df1.K_next .- 1)
-#	data(df) * mapping(:K, :K_next) * visual(Scatter) |> draw
-
-	#DataFrame(prc)
-
-	ForwardDiff.jacobian(H_fun, rand(10))
-#	(; H_fun, x₀, K₋, Kᵀ)
+#	ForwardDiff.jacobian(H_fun, rand(10))
+	(; H_fun, x₀, π₋₁, Kᵀ)
 end
+
+# ╔═╡ ac555a67-a8dc-463a-98ef-e4cf6d321eac
+sol = let
+	(; H_fun, x₀) = trans_problem
+
+
+	prob = NonlinearProblem((x_, p_) -> H_fun(x_), x₀, [])
+	sol = solve(prob, 
+	#	NewtonRaphson(),
+		LevenbergMarquardt(),
+#		PseudoTransient()
+#		TrustRegion()
+#		Broyden(),
+#		FastShortcutNonlinearPolyalg()
+		#RobustMultiNewton(),
+		show_trace=Val(true),
+		abstol = 1e-1,
+		maxiters= 50
+		#trace_level = TraceAll(), store_trace = Val(true)
+	)
+	#obj(Ks)
+	#Ks - Kss
+	#scatterlines(abs.(obj(Ks) - obj(Kss)))
+	#ForwardDiff.jacobian(obj, Ks)
+
+	#tran
+	
+end
+
+# ╔═╡ c64452c6-b856-439a-bf42-81b409e6389a
+sol.retcode
+
+# ╔═╡ b725edb8-8981-4dd5-8f04-4697cfe8ba9f
+sol.resid
 
 # ╔═╡ a137b707-0394-497b-9bb5-161e0e220ff3
-sol_df_agg = trans_problem.H_fun(sol, true)[1]
-
-# ╔═╡ 33321e9b-7201-4384-95f8-96cdd8ffeae6
 let
-	f = data(sol_df_agg) * mapping(:t, :K_hh) * visual(Lines) |> draw
-	hlines!(trans_problem.Kᵀ)
+	(; df_dist_states, df_dist_pols, K_hh, dists) = trans_problem.H_fun(sol; details=true)
 
-	f
-end
+	df = offsetarray_to_df("K" => K_hh)
 
-
-# ╔═╡ 94e4cc0b-41bd-4e7a-82be-d40f39c1e6da
-let
-	f = lines(collect(sol))
-	hlines!([trans_problem.K₋, trans_problem.Kᵀ])
-
-	f
+	lines(df.t, df.K)
 end
 
 # ╔═╡ 5acb1509-04eb-43a4-b902-f051aab46793
@@ -3099,8 +3031,6 @@ version = "3.5.0+0"
 # ╠═c64452c6-b856-439a-bf42-81b409e6389a
 # ╠═b725edb8-8981-4dd5-8f04-4697cfe8ba9f
 # ╠═a137b707-0394-497b-9bb5-161e0e220ff3
-# ╠═33321e9b-7201-4384-95f8-96cdd8ffeae6
-# ╠═94e4cc0b-41bd-4e7a-82be-d40f39c1e6da
 # ╠═9c57b5a2-7b81-4ae7-8a67-de13d7892458
 # ╟─cd70ee13-15f9-49b9-bf20-f0d5026a3fd3
 # ╟─1b35c51a-ad71-47b4-a8f5-762e0c48debc
