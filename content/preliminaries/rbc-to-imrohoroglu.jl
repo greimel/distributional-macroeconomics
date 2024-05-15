@@ -364,7 +364,7 @@ path0 = simulate(mc_ddp, 100)
 
 # ╔═╡ 3a3c093d-b4e9-4554-94ed-0f795c1ae088
 let
-	fig = Figure(resolution = (800, 400))
+	fig = Figure(size = (800, 400))
 	path = DataFrame(ss.states[path0])
 	lines(fig[1,1], path.k, axis = (; title = "evolution of capital", xlabel="time"))
 	lines(fig[1,2], path.z, axis = (; title = "evolution of productivity", xlabel="time"))
