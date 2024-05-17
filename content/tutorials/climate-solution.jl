@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.42
+# v0.19.40
 
 #> [frontmatter]
 #> chapter = 7
@@ -12,6 +12,12 @@
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ e9f7f1e8-fcff-45ad-a6f8-e0a0061101cf
+using CategoricalArrays: cut
+
+# ╔═╡ b5cb7649-cc35-4388-9c60-398fc10199d8
+using StatsBase: quantile
 
 # ╔═╡ 7931c043-9379-44f9-bab2-6d42153aa3d3
 using PlutoUI: TableOfContents
@@ -57,14 +63,15 @@ md"""
 
 ## Households' problem
 
-In this notebook, we extend the Bewley/Aiyagari/Huggett model to study indirect taxes. To begin with, let us introduce the two-goods setup that we will use in this notebook. The households' problem is:
+In this notebook, we extend the Bewley-Aiyagari-Huggett model to study indirect taxes. To begin with, let us introduce the two-goods setup that we will use in this notebook. The households' problem is:
 
 ```math
 \begin{align}
 &\max_{c_t, k_t} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t, d_t) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
-		&u(c, d) = \log(c^\eta (d-\underline{d})^{1-\eta}) \\
+		&u(C) = \frac{C^{1-\sigma} - 1}{1-\sigma} \\
+		&C(c, d) = (c^\eta (d-\underline{d})^{1-\eta}) \\
 		&k_t \ge 0 \\
 		&c_t + (p_d + \tau_d)d_t + k_t = k_{t-1}(1 + r) + y_t\\
 		&y_t \sim \text{some Markov Chain} \\
@@ -84,7 +91,7 @@ md"""
 md"""
 ## Exercise 1: Static model (3 points)
 
-As a first step, let's consider a simple static model without income risk and without the ad hoc borrowing constraint $k_t\ge 0$. ($e$ denoutes the non-stochastic income.)
+As a first step, let's consider a simple static model without income risk and without the ad hoc borrowing constraint $k_t\ge 0$. ($e$ denotes the non-stochastic income.)
 
 
 ```math
@@ -151,7 +158,7 @@ Now we can solve the model and look at the results.
 md"""
 ## General equilibrium
 
-In order to close the model we need to find the equilibrium price for the dirty good. Assume that there is an endowent and the price should make the market clear:
+In order to close the model we need to find the equilibrium price for the dirty good. Assume that there is an endowment and the price should make the market clear:
 
 $$\sum_{y\in\{y^1, y^2\}} \int_{k_\min}^\infty d(k,y) \pi(k,y) dk = Y_D$$
 
@@ -211,6 +218,31 @@ md"""
 # ╔═╡ 1db30da6-9231-4894-abc1-db03c127b6ff
 md"""
 Now we can plot the welfare function and then find the optimal tax $\tau^*_d$
+"""
+
+# ╔═╡ 10ec6f83-7552-4686-870a-be47d7c29d5e
+md"""
+## Exercise 6: Who wins, who loses?
+
+Let's now compare the two steady states with and without a tax on the dirty good.
+"""
+
+# ╔═╡ 9fa5fa96-8e45-4028-9ba2-812436afbfd2
+md"""
+### Consumption equivalent welfare change
+"""
+
+# ╔═╡ 85ed8f0c-d091-43d9-be38-74b331c24b0a
+md"""
+### Percentage changes of value, consumption, etc. for wealth quintiles across the two steady states
+"""
+
+# ╔═╡ 989b51e1-257d-41e9-b899-a20a624c4103
+fmt(from, to, i; leftclosed, rightclosed) = "Q$i"
+
+# ╔═╡ 107adc19-41b6-416f-adfa-2235c7a52d99
+md"""
+### Changes in the stationary distribution
 """
 
 # ╔═╡ 6b545ee6-1263-4bf9-9478-431f808e920f
@@ -279,9 +311,11 @@ end
 
 # ╔═╡ be1fa4e4-932d-4cfd-967f-441462f97982
 begin
-	hh = Household(β = 0.96, u = log)
+	β = 0.96
+	σ = 2.0
+	hh = Household(; β, σ)
 	η = 0.93
-	d_under = 0.15
+	d̲ = 0.15 # type d\underbar<TAB>
 	θ = 20
 	r = 0.03
 	Yd = 0.5
@@ -321,15 +355,15 @@ end
 # ╔═╡ a8e6ccb8-4cdd-44e3-a6b8-cd22e49d99ad
 function reward(state, policy, prices, u)
 	c_exp = consumption(state, policy, prices)
-	c = η*(c_exp - (prices.pd + prices.τd)*d_under)
+	c = η*(c_exp - (prices.pd + prices.τd)*d̲)
 	if c < 0
 		return -100_000 + 100 * c
 	end
 	d = (c_exp - c)/(prices.pd + prices.τd)
-	if d < d_under
+	if d < d̲
 		return -100_000 + 100 * d
 	end
-	c_agg = c^η * (d-d_under)^(1-η)
+	c_agg = c^η * (d-d̲)^(1-η)
     if c_agg > 0
 		u(c_agg)
 	else
@@ -373,7 +407,7 @@ function results_to_df(results, states, policies, prices)
 	df.policy = policies[results.sigma]
 
 	df.consumption = consumption(DataFrame(states), DataFrame(policies[results.sigma]), prices)
-	df.consumption_c = η*(df.consumption .- (prices.pd + prices.τd)*d_under)
+	df.consumption_c = η*(df.consumption .- (prices.pd + prices.τd)*d̲)
 	df.consumption_d = (df.consumption - df.consumption_c)./(prices.pd + prices.τd)
 	df.saving = df.k_next - df.k
 	
@@ -406,60 +440,158 @@ let
 end
 
 # ╔═╡ b1cf7802-caaf-41d2-847d-799ad81949fb
-function net_dirty_demand(hh, ss, pd)
-	prices  = (q = 1/(1+r), pd = pd, τd = 0)
+# ╠═╡ disabled = true
+#=╠═╡
+function net_dirty_demand(hh, ss, pd, Yd, τd)
+	prices  = (; q = 1/(1+r), pd, τd)
 	df = solve_PE(hh, ss, prices)
 	mean(df.consumption_d, weights(df.π)) - Yd
 end
+  ╠═╡ =#
 
 # ╔═╡ 3a406479-3cc8-4a85-8023-74d3514355d5
+#=╠═╡
 pd_eq = find_zero(
-	pd -> net_dirty_demand(hh, ss, pd), 
+	pd -> net_dirty_demand(hh, ss, pd, Yd, 0.0), 
 	initial_bracket, Brent(),
 	atol=1e-4, rtol=1e-4, xatol=1e-4, xrtol=1e-4
 )
+  ╠═╡ =#
 
 # ╔═╡ 0b8f5e22-dc9e-43be-bd40-16840111285c
-function solve_GE(hh, ss_lf, prices, T, τd)
+function solve_PE_rebate(hh, ss_lf, prices, T, τd)
 	y_chain_τ   = MarkovChain(ss_lf.z_chain.p, ss_lf.z_chain.state_values .+ T/2)
 	ss_τ = statespace(; k_vals, z_chain=y_chain_τ)
-	pd_τ   = find_zero(
-		pd -> net_dirty_demand(hh, ss_τ,   pd), 
-		initial_bracket, Brent(),
-		atol=1e-4, rtol=1e-4, xatol=1e-4, xrtol=1e-4
-	)
-	prices  = (q = 1/(1+r), pd = pd_τ, τd = τd)
+	
+	#pd   = find_zero(
+	#	pd -> net_dirty_demand(hh, ss_τ, pd, Yd, τd), 
+	#	initial_bracket, Brent(),
+	#	atol=1e-4, rtol=1e-4, xatol=1e-4, xrtol=1e-4
+	#)
+	prices  = (; q = 1/(1+r), prices.pd, τd)
 	df_τ = solve_PE(hh, ss_τ, prices)
 	df_τ
 end
 
 # ╔═╡ 83a12c74-bb6d-4e0e-91f3-593fc7bed552
 function government_deficit(hh, T, τd)
-	df_τ = solve_GE(hh, ss, prices, T, τd)
+	df_τ = solve_PE_rebate(hh, ss, prices, T, τd)
 	mean(df_τ.consumption_d, weights(df_τ.π))*τd - T
 end
 
-# ╔═╡ 57b524ca-3abc-47d0-b035-f26ba55967b5
-function welfare(τd)
-	T_eq   = find_zero(
+# ╔═╡ ad7936fa-efb3-46cd-b9b3-c994f53a0744
+function solve_PE_BB(hh, ss, prices, τd)
+	T_eq = find_zero(
 		T -> government_deficit(hh, T, τd), 
 		(0.0, 0.5), Brent(),
 		atol=1e-2, rtol=1e-2, xatol=1e-2, xrtol=1e-2
 	)
 	
-	df_τ = solve_GE(hh, ss, prices, T_eq, τd)
-	welfare = mean(df_τ.value,   weights(df_τ.π)) - θ*(mean(df_τ.consumption_d, weights(df_τ.π)))^2
+	df = solve_PE_rebate(hh, ss, prices, T_eq, τd)
+end
+
+# ╔═╡ 57b524ca-3abc-47d0-b035-f26ba55967b5
+function welfare(τd)
+	df_τ = solve_PE_BB(hh, ss, prices, τd)
+
+	dirty = mean(df_τ.consumption_d, weights(df_τ.π))
+	value = mean(df_τ.value,   weights(df_τ.π))
+	welfare = value - θ*dirty^2
+	(; τd, dirty, value, welfare)
+	
 end
 
 # ╔═╡ 4e522395-865c-4f42-9ec3-ee2d4449edcd
-begin
-	tau_arr = range(0., 0.5, length = 25)
-	W = welfare.(tau_arr)
-	lines(tau_arr, W, legend=false)
+let
+	τᴰs = range(0.0, 0.5, length = 15)
+	df = DataFrame(welfare.(τᴰs))
+
+	data(stack(df, Not(:τd))) * mapping(:τd, :value, color=:variable) * visual(Lines) |> draw
 end
 
 # ╔═╡ 36f45dbd-f57c-49a5-9164-14acc05653ec
-optimize(x -> -welfare(x), 0.0, 0.3)
+opt = optimize(x -> -welfare(x).welfare, 0.0, 0.3)
+
+# ╔═╡ a77d6b41-83d1-464b-a254-f0f06f861c08
+τd_opt = opt.minimizer
+
+# ╔═╡ be8ae8f6-347d-4849-92ae-c6efeb69fd36
+comparison_df = let
+	df1 = solve_PE_BB(hh, ss, prices, 0.0)
+	df2 = solve_PE_BB(hh, ss, prices, τd_opt)
+
+	df = vcat(df1, df2, source = :τ => ["zero", "optimal"])
+
+	damage = @chain df begin
+		@groupby(:τ)
+		@combine(:damage = mean(:consumption_d, weights(:π)))
+	end
+	
+	@chain df begin
+		leftjoin(_, damage, on = :τ)
+		@transform(:net_value = :value - θ * :damage^2)
+	end
+end
+
+# ╔═╡ 01c01fad-e3d0-4205-acfa-8f69bfd30e03
+@chain comparison_df begin
+	@groupby(:τ)
+	@transform(:k_quantiles = @bycol cut(:k, quantile(:k, weights(:π), 0:0.2:0.8), extend=true, labels=fmt))
+	#stack([:value, :net_value])
+	@groupby(:τ, :k_quantiles)
+	@combine(
+		:value = mean(:value, weights(:π)),
+	)
+	unstack(:τ, :value)
+	@transform(:Δ_welfare = (:optimal/:zero)^(1/(1-σ)) - 1)
+	data(_) * mapping(
+		:k_quantiles => "Wealth quintile",
+		:Δ_welfare => "Consumption equivalent (%)"
+	) * visual(BarPlot)
+	draw(; facet = (; linkyaxes = :none))
+end
+
+# ╔═╡ 7614bbfd-aee8-4dae-82bc-14cf59e01561
+@chain comparison_df begin
+	@groupby(:τ)
+	@transform(:k_quantiles = @bycol cut(:k, quantile(:k, weights(:π), 0:0.2:0.8), extend=true, labels=fmt))
+	#stack([:value, :net_value])
+	@groupby(:τ, :k_quantiles)
+	@combine(
+		:value = mean(:value, weights(:π)),
+		:net_value = mean(:net_value, weights(:π)),
+		:consumption = mean(:consumption, weights(:π)),
+		:k_next = mean(:k_next, weights(:π)),
+		:consumption_d = mean(:consumption_d, weights(:π))
+	)
+	stack([:value, :net_value, :consumption, :k_next, :consumption_d])
+	unstack(:τ, :value)
+	@transform(:gain = (:optimal - :zero)/abs(:zero))
+	data(_) * mapping(
+		:k_quantiles => "Wealth quintile",
+		:gain => "% change", 
+		layout = :variable) * visual(BarPlot)
+	draw(; facet = (; linkyaxes = :none))
+end
+
+# ╔═╡ 7059c96d-594a-429c-9819-4d826164eaf3
+data(comparison_df) * mapping(:k, :π, linestyle = :τ, color = :income, row = :income) * visual(Lines) |> draw
+
+# ╔═╡ b81058ac-5732-4288-8e23-196ce2c897a7
+let
+	@chain comparison_df begin
+		stack([:value, :net_value])
+		@groupby(:k, :τ, :variable)
+		@combine(
+			:value = mean(:value, weights(:π)),
+		)
+		data(_) * mapping(
+			:k, :value, layout = :variable, #color = :income, 
+			linestyle = :τ
+		) * visual(Lines)
+		draw(; facet = (; linkyaxes = false))
+	end	
+end
 
 # ╔═╡ c4a6ee98-763d-4fad-887a-403b9e5ade58
 md"""
@@ -513,6 +645,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
@@ -526,6 +659,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 [compat]
 AlgebraOfGraphics = "~0.6.18"
 CairoMakie = "~0.11.8"
+CategoricalArrays = "~0.10.8"
 Chain = "~0.5.0"
 DataFrameMacros = "~0.4.1"
 DataFrames = "~1.6.1"
@@ -542,7 +676,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.3"
 manifest_format = "2.0"
-project_hash = "851971e2cda31eacbe236fee6b3a2e5d01451f1a"
+project_hash = "d6f43c664a2d76efa8f7989ab1d64efafa5b7cfa"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -711,15 +845,33 @@ version = "0.11.11"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "a2f1c8c668c8e3cb4cca4e57a8efdb09067bb3fd"
+git-tree-sha1 = "a4c43f59baa34011e303e76f5c8c91bf58415aaf"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
-version = "1.18.0+2"
+version = "1.18.0+1"
 
 [[deps.Calculus]]
 deps = ["LinearAlgebra"]
 git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
 uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
 version = "0.5.1"
+
+[[deps.CategoricalArrays]]
+deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
+git-tree-sha1 = "1568b28f91293458345dabba6a5ea3f183250a61"
+uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+version = "0.10.8"
+
+    [deps.CategoricalArrays.extensions]
+    CategoricalArraysJSONExt = "JSON"
+    CategoricalArraysRecipesBaseExt = "RecipesBase"
+    CategoricalArraysSentinelArraysExt = "SentinelArrays"
+    CategoricalArraysStructTypesExt = "StructTypes"
+
+    [deps.CategoricalArrays.weakdeps]
+    JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+    RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+    SentinelArrays = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
+    StructTypes = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
 
 [[deps.Chain]]
 git-tree-sha1 = "8c4920235f6c561e401dfe569beb8b924adad003"
@@ -2344,9 +2496,23 @@ version = "3.5.0+0"
 # ╟─b7d07a6a-ca24-4107-b141-2d1ff227f8cb
 # ╠═83a12c74-bb6d-4e0e-91f3-593fc7bed552
 # ╠═57b524ca-3abc-47d0-b035-f26ba55967b5
+# ╠═ad7936fa-efb3-46cd-b9b3-c994f53a0744
 # ╟─1db30da6-9231-4894-abc1-db03c127b6ff
 # ╠═4e522395-865c-4f42-9ec3-ee2d4449edcd
 # ╠═36f45dbd-f57c-49a5-9164-14acc05653ec
+# ╟─10ec6f83-7552-4686-870a-be47d7c29d5e
+# ╠═a77d6b41-83d1-464b-a254-f0f06f861c08
+# ╠═be8ae8f6-347d-4849-92ae-c6efeb69fd36
+# ╠═e9f7f1e8-fcff-45ad-a6f8-e0a0061101cf
+# ╠═b5cb7649-cc35-4388-9c60-398fc10199d8
+# ╟─9fa5fa96-8e45-4028-9ba2-812436afbfd2
+# ╟─01c01fad-e3d0-4205-acfa-8f69bfd30e03
+# ╟─85ed8f0c-d091-43d9-be38-74b331c24b0a
+# ╟─7614bbfd-aee8-4dae-82bc-14cf59e01561
+# ╠═989b51e1-257d-41e9-b899-a20a624c4103
+# ╟─107adc19-41b6-416f-adfa-2235c7a52d99
+# ╠═7059c96d-594a-429c-9819-4d826164eaf3
+# ╠═b81058ac-5732-4288-8e23-196ce2c897a7
 # ╟─6b545ee6-1263-4bf9-9478-431f808e920f
 # ╟─9091469e-5e6a-4079-ba10-f90a7b4a6690
 # ╟─d20764bb-dd3a-4c08-9fd7-b2960d1d9c2d
