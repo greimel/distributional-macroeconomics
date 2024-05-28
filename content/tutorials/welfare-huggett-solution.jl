@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 #> [frontmatter]
 #> chapter = 7
@@ -7,7 +7,7 @@
 #> order = 5.5
 #> title = "Tutorial 2 (Solution)"
 #> layout = "layout.jlhtml"
-#> tags = ["solutions"]
+#> tags = ["solutions-week2"]
 #> description = ""
 
 using Markdown
@@ -280,10 +280,10 @@ The value function in the stationary equilibrium without the reform is:
 
 ```math
 \begin{align}
-V(k_{-1}, y_0)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c(k_{t-1}, y_t)) \Bigr) \\
+V(k_{-1}, y_0)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c^*(k_{t-1}, y_t)) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
-		&k_t  = k_{t-1}(1 + r) + y_t - c(k_{t-1}, y_t) \\
+		&k_t  = k_{t-1}(1 + r) + y_t - c^*(k_{t-1}, y_t) \\
 \end{aligned}
 \end{align}
 ```
@@ -292,29 +292,29 @@ The value function in the stationary equilibrium with the reform is:
 
 ```math
 \begin{align}
-V_\tau(k_{-1}, y_0)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c_\tau(k_{t-1}, y_t)) \Bigr) \\
+V_\tau(k_{-1}, y_0)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(c^*_\tau(k_{t-1}, y_t)) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
-		&k_t  = k_{t-1}(1 + r) + y_t - T(y_t) - c_\tau(k_{t-1}, y_t) \\
+		&k_t  = k_{t-1}(1 + r) + y_t - T(y_t) - c^*_\tau(k_{t-1}, y_t) \\
 \end{aligned}
 \end{align}
 ```
 
-where $c(k,y)$ is optimal consumption in the stationary equilibrium without the reform and $c_\tau(k, y)$ is the optimal consumption in the stationary equilibrium with the reform.
+where $c^*(k,y)$ is optimal consumption in the stationary equilibrium without the reform and $c^*_\tau(k, y)$ is the optimal consumption in the stationary equilibrium with the reform.
 
 If consumption in the stationary equilibrium without the reform is increased by a fraction $\Delta$ in each state of the world, the sum of expected utilities becomes:
 
 ```math
 \begin{align}
-W(k_{-1}, y_0; \Delta)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u((1+\Delta)c(k_{t-1}, y_t)) \Bigr) \\
+W(k_{-1}, y_0; \Delta)&= \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t (1-m)^t u(\textcolor{red}{(1+\Delta)}c^*(k_{t-1}, y_t)) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
-		&k_t  = k_{t-1}(1 + r) + y_t - c(k_{t-1}, y_t) \\
+		&k_t  = k_{t-1}(1 + r) + y_t - c^*(k_{t-1}, y_t) \\
 \end{aligned}
 \end{align}
 ```
 
-Note that we do not allow the agent to reoptimize with respect to the relative consumption increase $\Delta$ in the definition of $W(k, y; \Delta)$.
+Note that we do _not allow the agent to reoptimize_ with respect to the relative consumption increase $\Delta$ in the definition of $W(k, y; \Delta)$.
 
 We can finally define the conditional welfare change for an agent born into state $(k,y)$ as the relative increase in consumption $\Delta(k,y)$ in the stationary equilibrium without the reform that makes the agent as well off as in the stationary equilibrium with the reform:
 
@@ -689,7 +689,7 @@ end;
 
 # ╔═╡ 4bdd9050-87f7-4551-88d5-5c2cca569bb8
 let
-	figure = (; resolution = (600, 300))
+	figure = (; size = (600, 300))
 
 	@chain df begin
 		data(_) * mapping(:k, :π, color = :income) * visual(Lines)
@@ -705,7 +705,7 @@ end;
 
 # ╔═╡ 7f64fa32-d9a4-4f4c-b53a-35423c7c9cf2
 let
-	figure = (; resolution = (600, 300))
+	figure = (; size = (600, 300))
 	
 	df_big = vcat(df, df_τ, source = "tax reform" => ["no", "yes"])
 	
@@ -727,7 +727,7 @@ end;
 
 # ╔═╡ 3520454b-ab40-4521-aeb5-463345d4422c
 let
-	figure = (; resolution = (600, 300))
+	figure = (; size = (600, 300))
 
 	@chain dfΔ begin
 		data(_) * mapping(:k, :Δ, color=:income) * visual(Lines)
@@ -789,7 +789,7 @@ let
 	print("Δ  = ",  round(Δ_sl*100, digits=2), "%")
 
 	# plot conditional welfare changes
-	figure = (; resolution = (600, 300))
+	figure = (; size = (600, 300))
 
 	df_big = vcat(dfΔ, df_sl, source=:parameters => ["default", "sliders"])
 	@chain df_big begin
@@ -848,7 +848,7 @@ end
 
 # ╔═╡ dbba6cdc-95be-44ce-8ea6-ccd1225dcd03
 let
-	figure = (; resolution = (600, 300))
+	figure = (; size = (600, 300))
 
 	df_big = vcat(df_τ_noeq, df_τ_eq, source = :equilibrium => ["PE", "GE"])
 	@chain df_big begin

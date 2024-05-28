@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 #> [frontmatter]
 #> chapter = 7
@@ -7,7 +7,7 @@
 #> order = 3
 #> title = "Assignment 2A (Solution)"
 #> layout = "layout.jlhtml"
-#> tags = ["solutions"]
+#> tags = ["solutions-week2"]
 #> description = ""
 
 using Markdown
@@ -158,9 +158,6 @@ end
 # ╔═╡ 1f488ec2-0f6b-4a7c-8891-944b86189608
 mod0 = SimpleHousingModel()
 
-# ╔═╡ 657815e7-e8b9-477f-8a9d-349b822c5c94
-PROJ_DIR = joinpath(@__DIR__(), "..", "..", "..", "Research", "housing-wealth-effects") |> normpath
-
 # ╔═╡ 58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
 md"""
 ## Optimal policies
@@ -168,12 +165,12 @@ md"""
 
 # ╔═╡ 19a2bc1f-41c4-4548-b2fe-e72280b9a842
 md"""
-* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1/(1+0.0245), show_value = true))
-* ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
-* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
-* ``J``: $(@bind J1 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
+* ``\beta``: $(@bind β1 Slider(0.8:0.005:2.0, default=1.045, show_value = true))
+* ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.5, default = 0.05, show_value=true)) (depreciation rate of housing)
+* ``\xi``: $(@bind ξ1 Slider(0.0:0.0025:1.0, default = 0.0175, show_value=true)) (utility weight of housing)
+* ``J``: $(@bind J1 Slider(10:5:400, default = 45, show_value=true)) (length of working life)
 * ``y``: $(@bind y1 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
-* ``d_0``: $(@bind d₀1 Slider(-5:0.5:5, default = 0, show_value=true)) (initial debt; if negative: asset)
+* ``d_0``: $(@bind d₀1 Slider(-5:0.05:5, default = 0, show_value=true)) (initial debt; if negative: asset)
 *  $(@bind compare1 CheckBox(default = true)) (compare with defaults)
 """
 
@@ -313,29 +310,74 @@ md"""
 In this assignment we will explore how demographic change is affecting the aggregate response to house price changes.
 """
 
-# ╔═╡ 895c1fb6-bd6f-4b00-9121-898fc08fb000
-md"""
-## Exercise 1: Calibration (4 points)
+# ╔═╡ c97e2412-565f-41a3-9030-03ef9c39ea64
+answer1_1 = md"""
+``J`` is the length of the work-life in years. If we assume people working from 25 to 65 then ``J=40``. We'd have to check labor market statistics about average age at the first job and average retirement age.
 
-👉 Choose ``n \geq 1`` statistics that can be computed in the model and in the Survey of Consumer Finances. Choose ``n`` parameters from the model. Set the parameter values so that the statistics in the model match those in the data.
-
-👉 Discuss your choice.
+``\delta`` is the depreciation rate of housing. It can also represent maintenance costs and utilities. The Survey of Consumer Expenditures (CEX) can give you maintenance costs and utilities. The depreciation rate can be taken from accounting rules (_expected useful life_).
 """
 
-# ╔═╡ fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
-answer1 = md"""
-I adopt $y=1$ as a normalization so that one unit of the consumption corresponds to the average annual income. The depreciation rate of housing $\delta$ and the length of the agents' lives $J$ can be set according to external information. Moreover, the model defines the discount factor $\beta$ as $\beta = 1/(1+r)$ and the real interest rate $r$ can be set according to external information. So the only parameter which remains for internal calibration is the utility weight on housing services $\xi$.
+# ╔═╡ 413bf806-26a9-4a93-9010-d5ab7e2ade8e
+answer1_2 = md"""
+Preferences are homothetic, that is, all choices are proportional to income. Hence,
+all objects of interest (e.g. housing wealth effects, debt-to-income, housing-to-income) are independent of income. 
+"""
 
-If households place more weight on housing in their Cobb-Douglas utility function, they will spend a larger share of their financial resources on housing. For a fixed depreciation rate $\delta$ and interest rate $r$, this means that they will buy larger houses. So the natural choice as the targeted moment is aggregate housing wealth/ aggregate income. (I divide by aggregate income due to the $y=1$ normalization.) With $\xi=0.094$ instead of the old default value $\xi=0.113$, the chosen moment has almost the same value in the model as in the data.
+# ╔═╡ 655003ee-1f6b-4b06-91af-d72f2727cc2c
+md"""
+#### Part 1.2 _Internal Calibration_
 
-This means that a lot of information in the data is not used for calibration, e.g. net wealth/ income and debt/ income. You can still use these moments for model validation, i.e. to check whether the model is able to match moments which were not targeted during the calibration.
+The remaining parameters ``\beta`` and ``\xi`` are _calibrated internally_. These parameters are chosen **to match _moments_ from the data**. 
 
-As a side note, I find it a bit unsatisfying that the strength of the bequest motive cannot be calibrated in this model even though it is important for the relationship of MPCs with age (stronger bequest motive -> less steep increase of MPCs with age).
+👉 Pick two statistics (_"moments"_) that can be computed in the model and in the _Survey of Consumer Finances_. (Redefine the ```model_statistics``` and ```data_statistics``` accordingly.) It's best to use scale-free moments, e.g. a value relative to income. Here's a suggestion. You can stick with it, but be encouraged to play around.
+"""
+
+# ╔═╡ 186f5d80-a298-4722-b23d-5897b5e19561
+model_raw = @chain policies_slider begin
+	stack([:d, :c, :ph, :h, :y], :π)
+	@groupby(:variable)
+	@combine(:value = mean(:value, weights(:π)))
+	NamedTuple{tuple(Symbol.(_.variable)...)}(tuple(_.value...))	
+end
+
+# ╔═╡ 2d2a13d0-025b-4cb8-91bb-3e551b9581e4
+model_statistics = (; ph2y = model_raw.ph / model_raw.y, d2ph = model_raw.d / model_raw.ph)
+
+# ╔═╡ 4ea73142-ba36-489a-978a-a2c3b90edb18
+model_statistics
+
+# ╔═╡ 7d80df7e-77a6-4056-b115-6cc641682845
+md"""
+👉 Play with the sliders above and try to _match these moments_.
+"""
+
+# ╔═╡ 6a8102fc-7a1e-44bb-8353-0abf5a7f2001
+function loss(data_moments, model_moments)
+	moms1 = keys(data_moments)
+	moms2 = keys(model_moments)
+	if moms1 ≠ moms2
+		@error "The named tuples should have the same names: $moms1 ≠ $moms2"
+	else
+		return mean(sum((data_moments[key] - model_moments[key])^2 for key ∈ moms1))
+	end
+end
+
+# ╔═╡ 847287f5-5ab8-46ae-ab1c-0b6cceb544db
+answer1_3 = md"""
+The discount rate ``\beta`` determines your willingness to borrow and save. Hence it is natural to use it to match the indebtedness of agents.
+
+The utility weight ``\xi`` determines what fraction of income is spent on housing. Hence it is natural to use it to match agents house size.
+
+This means that a lot of information in the data is not used for calibration, e.g. net wealth/income. You can still use these moments for model validation, i.e. to check whether the model is able to match moments which were not targeted during the calibration.
+
+As a side note, it is a bit unsatisfying that the strength of the bequest motive cannot be calibrated in this model even though it is important for the relationship of MPCs with age (stronger bequest motive ``\implies`` less steep increase of MPCs with age).
 """
 
 # ╔═╡ 176bd3ca-d62b-45ee-b390-728ce3702bcf
 md"""
-**Some words on calibration in general**
+#### Some words on calibration in general
+
+_by Daniel Schmidt_
 
 The decisions involved when calibrating a model can seem very arbitrary. For this reason, I'll briefly describe my approach to calibration. (This is not necessarily the best way to do it.)
 
@@ -349,20 +391,6 @@ A good starting point is to pick moments such that each moment is particularly i
 
 Moreover, models typically feature some type of normalization such as "one unit of the consumption good is equal to the average annual income". When selecting moments you need to take into account the normalization.
 """
-
-# ╔═╡ 77de36ca-8556-409d-b249-12639c79f832
-model_raw = @chain policies_slider begin
-	stack([:d, :c, :ph, :h, :y], :π)
-	@groupby(:variable)
-	@combine(:value = mean(:value, weights(:π)))
-	NamedTuple{tuple(Symbol.(_.variable)...)}(tuple(_.value...))	
-end
-
-# ╔═╡ 74d54e68-8568-49e8-879c-68cba67aa71f
-model_statistics = (; ph = model_raw.ph/model_raw.y)
-
-# ╔═╡ cc894ce1-b63a-4af9-b4f8-6d73e3d33080
-model_statistics
 
 # ╔═╡ 88149f5e-81eb-40db-9893-60bf734a4659
 md"""
@@ -456,7 +484,7 @@ function get_scf(year)
 	CSV.File(joinpath(path, "SCFP$(year).csv")) |> DataFrame
 end
 
-# ╔═╡ 0f3a0c2a-f6bd-4844-92c6-43bddb120ad7
+# ╔═╡ cfb62cfc-46c0-45cb-8261-9e9c35de41be
 data_raw = @chain get_scf(2019) begin
 	stack([:INCOME, :NETWORTH, :ASSET, :DEBT, :NH_MORT, :HOUSES], [:WGT])
 	@groupby(:variable)
@@ -464,11 +492,17 @@ data_raw = @chain get_scf(2019) begin
 	NamedTuple{tuple(Symbol.(_.variable)...)}(tuple(_.value...))
 end
 
-# ╔═╡ 780e8d5a-e523-4c25-bd28-75a37985e3f5
-data_statistics = (; ph = data_raw.HOUSES/data_raw.INCOME)
+# ╔═╡ 8042a52c-f327-42f9-8721-0e7802e1c957
+data_statistics = (; ph2y = data_raw.HOUSES / data_raw.INCOME, d2ph = data_raw.NH_MORT / data_raw.HOUSES)
 
-# ╔═╡ 0ba27a96-1c07-4ea6-949a-34a60009b79f
+# ╔═╡ 30e4e9b0-4c05-48b7-891f-3ad866ccdb7c
 data_statistics
+
+# ╔═╡ b3eff8e9-3fac-4483-b38a-6966c652f1e3
+loss(model_statistics, data_statistics)
+
+# ╔═╡ 4a9cf9ab-032a-4d47-9c12-d0a2ea8db355
+loss(data_statistics, model_statistics)
 
 # ╔═╡ 4fcbf785-3df6-464e-94fd-54208c8306a9
 @chain get_scf(2019) begin
@@ -579,6 +613,43 @@ function show_words_limit(answer, limit)
 	end
 end
 
+# ╔═╡ 56449888-786f-4edc-9db5-95b886c31015
+begin
+	limit1_1 = 100
+	show_words_limit(answer1_1, limit1_1)
+end
+
+# ╔═╡ 7ec3442c-0083-4511-b743-ad84569eb40d
+md"""
+## Exercise 1: Calibration (4 points)
+
+#### Part 1.1: _External Calibration_
+
+👉 The parameters ``\delta = 0.05`` and ``J = 40`` are _calibrated externally_. (That is, they are chosen to match external information.) Discuss what data can be used to justify these parameters. (No data work necessary.) *(< $limit1_1 words)*
+"""
+
+# ╔═╡ e58eb874-63ad-4353-ac31-e4bb8a0f1a08
+begin
+	limit1_2 = 50
+	show_words_limit(answer1_2, limit1_2)
+end
+
+# ╔═╡ 403a14e9-8c4f-4492-be38-feb04143fe31
+md"""
+👉 The parameters ``y`` is normalized to 1. Is this a meaningful thing to do? *(< $limit1_2 words)*
+"""
+
+# ╔═╡ 63f93afd-75de-43a2-b005-814b592b1a5b
+begin
+	limit1_3 = 100
+	show_words_limit(answer1_3, limit1_3)
+end
+
+# ╔═╡ b35cb22a-ff83-4ab8-89cc-a395c9572265
+md"""
+👉 Discuss your strategy and findings. (What _moments_ did you pick and why? How do the chosen moments identify the parameters? What values did you find? ) *(max. $(limit1_3) words).*
+"""
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -615,7 +686,7 @@ StructArrays = "~0.6.17"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.1"
+julia_version = "1.10.3"
 manifest_format = "2.0"
 project_hash = "e3bc385adbff73fdcbd6b8b4d564424517a37116"
 
@@ -888,7 +959,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.1.0+0"
+version = "1.1.1+0"
 
 [[deps.ConcurrentUtilities]]
 deps = ["Serialization", "Sockets"]
@@ -2472,11 +2543,11 @@ version = "3.5.0+0"
 # ╠═5f389e7c-e890-4b93-ad13-cebba3e0c2c6
 # ╠═2c81c88d-9b0a-44f7-a61b-2682ee3b980e
 # ╠═1f488ec2-0f6b-4a7c-8891-944b86189608
-# ╠═657815e7-e8b9-477f-8a9d-349b822c5c94
 # ╟─58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
 # ╟─19a2bc1f-41c4-4548-b2fe-e72280b9a842
-# ╠═cc894ce1-b63a-4af9-b4f8-6d73e3d33080
-# ╠═0ba27a96-1c07-4ea6-949a-34a60009b79f
+# ╠═4ea73142-ba36-489a-978a-a2c3b90edb18
+# ╠═30e4e9b0-4c05-48b7-891f-3ad866ccdb7c
+# ╠═b3eff8e9-3fac-4483-b38a-6966c652f1e3
 # ╠═448fd3c7-3092-40a2-a037-4303222c6424
 # ╠═4317bfa1-ed6e-4e00-995b-f64f09413882
 # ╟─d404371b-9382-4aca-b7d1-5a4fed0d9849
@@ -2492,13 +2563,24 @@ version = "3.5.0+0"
 # ╠═bbbdb059-4bb9-4964-87b1-57f1c411546e
 # ╠═80d7b8f4-8346-439c-a4c4-f7b7c21c80d7
 # ╟─d59caf31-60d5-411d-abbc-26e2e3131860
-# ╟─895c1fb6-bd6f-4b00-9121-898fc08fb000
-# ╟─fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
+# ╟─7ec3442c-0083-4511-b743-ad84569eb40d
+# ╟─c97e2412-565f-41a3-9030-03ef9c39ea64
+# ╟─56449888-786f-4edc-9db5-95b886c31015
+# ╟─403a14e9-8c4f-4492-be38-feb04143fe31
+# ╟─413bf806-26a9-4a93-9010-d5ab7e2ade8e
+# ╟─e58eb874-63ad-4353-ac31-e4bb8a0f1a08
+# ╟─655003ee-1f6b-4b06-91af-d72f2727cc2c
+# ╠═8042a52c-f327-42f9-8721-0e7802e1c957
+# ╟─cfb62cfc-46c0-45cb-8261-9e9c35de41be
+# ╠═2d2a13d0-025b-4cb8-91bb-3e551b9581e4
+# ╟─186f5d80-a298-4722-b23d-5897b5e19561
+# ╟─7d80df7e-77a6-4056-b115-6cc641682845
+# ╠═4a9cf9ab-032a-4d47-9c12-d0a2ea8db355
+# ╟─6a8102fc-7a1e-44bb-8353-0abf5a7f2001
+# ╟─b35cb22a-ff83-4ab8-89cc-a395c9572265
+# ╟─847287f5-5ab8-46ae-ab1c-0b6cceb544db
+# ╟─63f93afd-75de-43a2-b005-814b592b1a5b
 # ╟─176bd3ca-d62b-45ee-b390-728ce3702bcf
-# ╠═0f3a0c2a-f6bd-4844-92c6-43bddb120ad7
-# ╠═780e8d5a-e523-4c25-bd28-75a37985e3f5
-# ╠═77de36ca-8556-409d-b249-12639c79f832
-# ╠═74d54e68-8568-49e8-879c-68cba67aa71f
 # ╟─88149f5e-81eb-40db-9893-60bf734a4659
 # ╟─f23da3a5-d494-4a51-b31f-0237681c0bed
 # ╟─0c41a7bc-aecd-4980-bb88-62fafb469750
