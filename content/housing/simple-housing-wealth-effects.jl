@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 #> [frontmatter]
 #> chapter = 4
@@ -60,7 +60,7 @@ end
 
 # ╔═╡ 49914c8d-b321-4042-8b8e-acd74bab1021
 md"""
-`simple-housing-wealth-effects.jl` | **Version 1.1** | *last updated: May 25 2022*
+`simple-housing-wealth-effects.jl` | **Version 1.2** | *last updated: May 28 2024*
 """
 
 # ╔═╡ 8b0be852-af27-4347-8981-04c4cb7cfd3e
@@ -68,12 +68,6 @@ md"""
 # Simple Housing Wealth Effects
 
 _Based on the article **Understanding Housing Wealth Effects: Debt, Homeownership and the Lifecycle** (Greimel & Zadow, 2020)._
-
-**TODO 2024** Students suggested to add more information to the calibration exercise:
-- It is fine to say that some parameters can be set according to external information (e.g. $\delta$). Only parameters for which such external information is not available need to be calibrated "internally" using the method of moments.
-- The discussion of the chosen moments should ideally explain informally how the chosen moments identify the calibrated parameters.
-- It is was not obvious to everyone that they are supposed to redefine the ```model_statistics``` and ```data_statistics``` lists which are displayed below the parameter sliders.
-
 """
 
 # ╔═╡ c2af58e4-3e90-4013-814e-84224aa8575a
@@ -164,9 +158,6 @@ end
 # ╔═╡ 1f488ec2-0f6b-4a7c-8891-944b86189608
 mod0 = SimpleHousingModel()
 
-# ╔═╡ 657815e7-e8b9-477f-8a9d-349b822c5c94
-PROJ_DIR = joinpath(@__DIR__(), "..", "..", "..", "Research", "housing-wealth-effects") |> normpath
-
 # ╔═╡ 58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
 md"""
 ## Optimal policies
@@ -174,12 +165,12 @@ md"""
 
 # ╔═╡ 19a2bc1f-41c4-4548-b2fe-e72280b9a842
 md"""
-* ``\beta``: $(@bind β1 Slider(0.8:0.001:1.0, default=1/(1+0.0245), show_value = true))
-* ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.1, default = 0.022, show_value=true)) (depreciation rate of housing)
-* ``\xi``: $(@bind ξ1 Slider(0.0:0.001:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
-* ``J``: $(@bind J1 Slider(10:5:400, default = 60, show_value=true)) (length of working life)
+* ``\beta``: $(@bind β1 Slider(0.8:0.005:2.0, default=1/(1+0.0245), show_value = true))
+* ``\delta``: $(@bind δ1 Slider(0.0:0.005:0.5, default = 0.05, show_value=true)) (depreciation rate of housing)
+* ``\xi``: $(@bind ξ1 Slider(0.0:0.005:1.0, default = 1 - 0.8875, show_value=true)) (utility weight of housing)
+* ``J``: $(@bind J1 Slider(10:5:400, default = 45, show_value=true)) (length of working life)
 * ``y``: $(@bind y1 Slider(0.5:0.5:5.0, default = 1, show_value=true)) (income)
-* ``d_0``: $(@bind d₀1 Slider(-5:0.5:5, default = 0, show_value=true)) (initial debt; if negative: asset)
+* ``d_0``: $(@bind d₀1 Slider(-5:0.05:5, default = 0, show_value=true)) (initial debt; if negative: asset)
 *  $(@bind compare1 CheckBox(default = true)) (compare with defaults)
 """
 
@@ -320,8 +311,22 @@ In this assignment we will explore how demographic change is affecting the aggre
 """
 
 # ╔═╡ fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
-answer1 = md"""
+answer1_1 = md"""
 Your answer goes here ...
+"""
+
+# ╔═╡ 4d4a157c-c08a-432b-a8cf-30a2302941d0
+answer1_2 = md"""
+Your answer goes here ...
+"""
+
+# ╔═╡ 687e5bc8-bc84-45fd-bba0-cd8903c72b37
+md"""
+#### Part 1.2 _Internal Calibration_
+
+The remaining parameters ``\beta`` and ``\xi`` are _calibrated internally_. These parameters are chosen **to match _moments_ from the data**. 
+
+👉 Pick two statistics (_"moments"_) that can be computed in the model and in the _Survey of Consumer Finances_. (Redefine the ```model_statistics``` and ```data_statistics``` accordingly.) It's best to use scale-free moments, e.g. a value relative to income. Here's a suggestion. You can stick with it, but be encouraged to play around.
 """
 
 # ╔═╡ 77de36ca-8556-409d-b249-12639c79f832
@@ -333,10 +338,31 @@ model_raw = @chain policies_slider begin
 end
 
 # ╔═╡ 74d54e68-8568-49e8-879c-68cba67aa71f
-model_statistics = (; ph = model_raw.ph)
+model_statistics = (; ph2y = model_raw.ph / model_raw.y, d2ph = model_raw.d / model_raw.ph)
 
 # ╔═╡ cc894ce1-b63a-4af9-b4f8-6d73e3d33080
 model_statistics
+
+# ╔═╡ 7a723027-55da-450a-ac97-cdfd3b7f2942
+md"""
+👉 Play with the sliders above and try to _match these moments_.
+"""
+
+# ╔═╡ 7d276238-b91d-49a7-a9b0-cc658a56190e
+function loss(data_moments, model_moments)
+	moms1 = keys(data_moments)
+	moms2 = keys(model_moments)
+	if moms1 ≠ moms2
+		@error "The named tuples should have the same names: $moms1 ≠ $moms2"
+	else
+		return mean(sum((data_moments[key] - model_moments[key])^2 for key ∈ moms1))
+	end
+end
+
+# ╔═╡ 6616b9ee-226a-469d-967e-045cce67feef
+answer1_3 = md"""
+Your answer goes here ...
+"""
 
 # ╔═╡ 88149f5e-81eb-40db-9893-60bf734a4659
 md"""
@@ -442,10 +468,16 @@ data_raw = @chain get_scf(2019) begin
 end
 
 # ╔═╡ 780e8d5a-e523-4c25-bd28-75a37985e3f5
-data_statistics = (; ph = data_raw.HOUSES)
+data_statistics = (; ph2y = data_raw.HOUSES / data_raw.INCOME, d2ph = data_raw.NH_MORT / data_raw.HOUSES)
 
 # ╔═╡ 0ba27a96-1c07-4ea6-949a-34a60009b79f
 data_statistics
+
+# ╔═╡ 39c98ca6-0dde-47f5-9829-aeba9f2263c1
+loss(model_statistics, data_statistics)
+
+# ╔═╡ b63026f8-da5e-4875-a79b-e364b5aeb2c6
+loss(data_statistics, model_statistics)
 
 # ╔═╡ 4fcbf785-3df6-464e-94fd-54208c8306a9
 @chain get_scf(2019) begin
@@ -563,17 +595,39 @@ end
 
 # ╔═╡ ab6a85f4-22f6-4cb6-9e2e-b3b08848f801
 begin
-	limit1 = 100
-	show_words_limit(answer1, limit1)
+	limit1_1 = 100
+	show_words_limit(answer1_1, limit1_1)
 end
 
 # ╔═╡ 895c1fb6-bd6f-4b00-9121-898fc08fb000
 md"""
 ## Exercise 1: Calibration (4 points)
 
-👉 Choose ``n \geq 1`` statistics that can be computed in the model and in the Survey of Consumer Finances. Choose ``n`` parameters from the model. Set the parameter values so that the statistics in the model match those in the data.
+#### Part 1.1: _External Calibration_
 
-👉 Discuss your choice _(max. $(limit1) words)._
+👉 The parameters ``\delta = 0.05`` and ``J = 40`` are _calibrated externally_. (That is, they are chosen to match external information.) Discuss what data can be used to justify these parameters. (No data work necessary.) *(< $limit1_1 words)*
+"""
+
+# ╔═╡ edfc8c05-cf5d-4092-80c6-1eb0985c7640
+begin
+	limit1_2 = 50
+	show_words_limit(answer1_2, limit1_2)
+end
+
+# ╔═╡ e570502c-1018-4055-abeb-2b0b99932157
+md"""
+👉 The parameters ``y`` is normalized to 1. Is this a meaningful thing to do? *(< $limit1_2 words)*
+"""
+
+# ╔═╡ 1860407f-3cfb-45ce-b15f-605008ea0e5f
+begin
+	limit1_3 = 100
+	show_words_limit(answer1_3, limit1_3)
+end
+
+# ╔═╡ a0e2e113-01d5-432e-bebc-6c7ec694a85a
+md"""
+👉 Discuss your strategy and findings. (What _moments_ did you pick and why? How do the chosen moments identify the parameters? What values did you find? ) *(max. $(limit1_3) words).*
 """
 
 # ╔═╡ d3f8729a-f656-45ee-9606-8b28410ff265
@@ -623,7 +677,7 @@ StructArrays = "~0.6.17"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.0"
+julia_version = "1.10.3"
 manifest_format = "2.0"
 project_hash = "e3bc385adbff73fdcbd6b8b4d564424517a37116"
 
@@ -896,7 +950,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.5+1"
+version = "1.1.1+0"
 
 [[deps.ConcurrentUtilities]]
 deps = ["Serialization", "Sockets"]
@@ -1737,7 +1791,7 @@ version = "1.3.5+1"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
-version = "0.3.23+2"
+version = "0.3.23+4"
 
 [[deps.OpenEXR]]
 deps = ["Colors", "FileIO", "OpenEXR_jll"]
@@ -2480,11 +2534,11 @@ version = "3.5.0+0"
 # ╠═5f389e7c-e890-4b93-ad13-cebba3e0c2c6
 # ╠═2c81c88d-9b0a-44f7-a61b-2682ee3b980e
 # ╠═1f488ec2-0f6b-4a7c-8891-944b86189608
-# ╠═657815e7-e8b9-477f-8a9d-349b822c5c94
 # ╟─58e5d4c2-84d9-4fc2-8eec-8cc6d92b39f6
 # ╟─19a2bc1f-41c4-4548-b2fe-e72280b9a842
 # ╠═cc894ce1-b63a-4af9-b4f8-6d73e3d33080
 # ╠═0ba27a96-1c07-4ea6-949a-34a60009b79f
+# ╠═39c98ca6-0dde-47f5-9829-aeba9f2263c1
 # ╠═448fd3c7-3092-40a2-a037-4303222c6424
 # ╠═4317bfa1-ed6e-4e00-995b-f64f09413882
 # ╟─d404371b-9382-4aca-b7d1-5a4fed0d9849
@@ -2503,10 +2557,20 @@ version = "3.5.0+0"
 # ╟─895c1fb6-bd6f-4b00-9121-898fc08fb000
 # ╠═fa6f6504-4a9e-42d9-bb12-96c9b314bf5a
 # ╟─ab6a85f4-22f6-4cb6-9e2e-b3b08848f801
-# ╠═0f3a0c2a-f6bd-4844-92c6-43bddb120ad7
+# ╟─e570502c-1018-4055-abeb-2b0b99932157
+# ╠═4d4a157c-c08a-432b-a8cf-30a2302941d0
+# ╟─edfc8c05-cf5d-4092-80c6-1eb0985c7640
+# ╟─687e5bc8-bc84-45fd-bba0-cd8903c72b37
 # ╠═780e8d5a-e523-4c25-bd28-75a37985e3f5
-# ╠═77de36ca-8556-409d-b249-12639c79f832
+# ╟─0f3a0c2a-f6bd-4844-92c6-43bddb120ad7
 # ╠═74d54e68-8568-49e8-879c-68cba67aa71f
+# ╟─77de36ca-8556-409d-b249-12639c79f832
+# ╟─7a723027-55da-450a-ac97-cdfd3b7f2942
+# ╠═b63026f8-da5e-4875-a79b-e364b5aeb2c6
+# ╟─7d276238-b91d-49a7-a9b0-cc658a56190e
+# ╟─a0e2e113-01d5-432e-bebc-6c7ec694a85a
+# ╠═6616b9ee-226a-469d-967e-045cce67feef
+# ╟─1860407f-3cfb-45ce-b15f-605008ea0e5f
 # ╟─88149f5e-81eb-40db-9893-60bf734a4659
 # ╟─f23da3a5-d494-4a51-b31f-0237681c0bed
 # ╟─0c41a7bc-aecd-4980-bb88-62fafb469750

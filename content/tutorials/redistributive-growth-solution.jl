@@ -7,7 +7,7 @@
 #> order = 4
 #> title = "Assignment 2B (Solution)"
 #> layout = "layout.jlhtml"
-#> tags = ["solutions"]
+#> tags = ["solutions-week2"]
 #> description = ""
 
 using Markdown
