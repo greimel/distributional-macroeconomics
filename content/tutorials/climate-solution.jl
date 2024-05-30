@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.42
 
 #> [frontmatter]
 #> chapter = 7
@@ -80,7 +80,7 @@ In this notebook, we extend the Bewley-Aiyagari-Huggett model to study indirect 
 
 ```math
 \begin{align}
-&\max_{c_t, k_t} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(c_t, d_t) \Bigr) \\
+&\max_{c_t, d_t, k_t} \operatorname{E}_0\Bigl(\sum_{t=0}^\infty \beta^t u(C_t) \Bigr) \\
 &\begin{aligned}
 	\text{subject to } 
 		&u(C) = \frac{C^{1-\sigma} - 1}{1-\sigma} \\
@@ -242,7 +242,7 @@ The following function finds the partial equilibrium (taking into account rebate
 
 # ╔═╡ 5d8b8c01-acd1-4011-a8f7-76a03ec48368
 md"""
-## Exercise 4: Transfers and welfare (3 points)
+## Exercise 3: Transfers and welfare (3 points)
 
 👉 Now write the function that returns the government deficit (tax rate times the total dirty demand minus the transfer $T$) and create the welfare function that solves the model given tax rate $\tau_d$. 
 """
@@ -262,7 +262,7 @@ prices.pd
 
 # ╔═╡ 10ec6f83-7552-4686-870a-be47d7c29d5e
 md"""
-## Exercise 5: Who wins, who loses?
+## Exercise 4: Who wins, who loses? (1 point)
 
 Let's now compare the two steady states with and without a tax on the dirty good.
 """
@@ -280,9 +280,14 @@ md"""
 ### Consumption and value across the wealth distribution
 """
 
+# ╔═╡ 9c80f4ac-2a50-4ce2-bcc1-76591c16cfc2
+md"""
+👉 Explain the patterns that you see here. Who benefits from the taxes most? Who suffers most? What effect has ``\theta``?
+"""
+
 # ╔═╡ 8d6a7104-2e81-4f84-b432-dd74623a5753
 md"""
-## Exercise 3: Consumption equivalent welfare change (1 point)
+## Exercise 5: Consumption equivalent welfare change (1 point)
 
 In order to compare welfare across two steady states (with and without taxes), we would like to express changes in the value function in consumption equivalent changes (see the notebook from the last tutorial).
 
@@ -2552,12 +2557,13 @@ version = "3.5.0+0"
 # ╟─59eb518d-25c0-4199-bde5-3d9e4767b49b
 # ╟─197e7de7-c830-4d98-b5ed-552e3ec195f2
 # ╟─f157d534-bbed-41d9-9c33-73c11dd6ef84
+# ╟─9c80f4ac-2a50-4ce2-bcc1-76591c16cfc2
 # ╟─8d6a7104-2e81-4f84-b432-dd74623a5753
 # ╟─7e721ecd-bd63-43a2-82b4-cf6632e4f02a
 # ╟─2e2f6cfa-e092-4bb1-b4dc-c5a9c7183b89
 # ╠═4bfdb443-77dc-47f3-9835-b6a4072459f8
 # ╟─81060327-02ef-44a5-82f3-d7f59d182d90
-# ╟─01c01fad-e3d0-4205-acfa-8f69bfd30e03
+# ╠═01c01fad-e3d0-4205-acfa-8f69bfd30e03
 # ╠═d07fa7b0-d2f0-4c45-af58-1a59b05123fe
 # ╠═e9f7f1e8-fcff-45ad-a6f8-e0a0061101cf
 # ╠═b5cb7649-cc35-4388-9c60-398fc10199d8
