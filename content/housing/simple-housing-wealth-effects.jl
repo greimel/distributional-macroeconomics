@@ -5,9 +5,9 @@
 #> chapter = 4
 #> section = 2
 #> order = 2
-#> title = "Simple Housing Wealth Effects"
+#> title = "Assignment 2A: Housing Wealth Effects"
 #> layout = "layout.jlhtml"
-#> tags = ["housing"]
+#> tags = ["assignments"]
 #> description = ""
 
 using Markdown

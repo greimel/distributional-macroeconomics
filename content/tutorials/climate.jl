@@ -5,7 +5,7 @@
 #> chapter = 7
 #> section = 5
 #> order = 6.5
-#> title = "Assignment 3 (Solution)"
+#> title = "Assignment 3: Climate"
 #> layout = "layout.jlhtml"
 #> tags = ["assignments"]
 #> description = ""
