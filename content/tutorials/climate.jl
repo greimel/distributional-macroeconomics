@@ -4,8 +4,8 @@
 #> [frontmatter]
 #> chapter = 7
 #> section = 5
-#> order = 6
-#> title = "Assignment 3"
+#> order = 6.5
+#> title = "Assignment 3 (Solution)"
 #> layout = "layout.jlhtml"
 #> tags = ["assignments"]
 #> description = ""
@@ -67,7 +67,7 @@ using QuantEcon
 
 # ╔═╡ 93f1d71a-94bf-4f34-b1fa-bf7addc9c03b
 md"""
-`climate-solution.jl` | **Version 1.1** | *last updated: May 29 2024* | *created by [Evgenii Ivanov](https://github.com/evivanov)*
+`climate.jl` | **Version 1.0** | *last updated: May 31 2024* | *created by [Evgenii Ivanov](https://github.com/evivanov)*
 """
 
 # ╔═╡ 4aa065ca-d54c-419a-a31a-7063fbb98a33
@@ -123,23 +123,29 @@ u(e) = &\max_{c, d} \left[ c^\eta (d-\underline{d})^{1-\eta} \right] \\
 \end{align}
 ```
 
-👉 Derive an analytical formula for the dirty and clean good demands.  
+👉 (a) Derive an analytical formula for the dirty and clean good demands.  
 
-👉 What can you say about the shape of the Engel curves in this static model?
+👉 (b) What can you say about the shape of the Engel curves in this static model?
+
+👉 (c) Are the rich scaled version of the poor? _(**Hint:** Look at ``\frac{d}{e}``.)_
 
 Let's now re-interpret this problem as a sub-problem of consumer in a fully dynamic model. It is what households solve each period _after deciding_ how much money $e$ to allocate for consumption in the given period.
 
-👉 Will Engel curves have the same properties in the dynamic model? (no derivations required)
+👉 (d) Will Engel curves have the same properties in the dynamic model? (no derivations required)
+
+
 """
 
 # ╔═╡ 50118426-20c9-43b9-9d13-4e524853f0c9
 md"""
-Your answer goes here ...
+**Answer**
+
+
 """
 
 # ╔═╡ 843f658c-0e26-4eed-88dc-3946e97e5f6f
 md"""
-## Exercise 2: Solution to the households' problem (4 points)
+## Exercise 2: Solution to the households' problem (3 points)
 
 First, let us solve the model assuming the relative price of the dirty good is given. To do that we need to modify the code that we used in the first assingment to solve the classic Aiyagari model. 
 
@@ -148,7 +154,8 @@ First, let us solve the model assuming the relative price of the dirty good is g
 
 # ╔═╡ 813e9358-cb27-4f5b-b174-646ffd2e7f55
 md"""
-Your answer goes here ...
+**Answer**
+
 """
 
 # ╔═╡ d60367db-cf92-4c0a-aea4-eddb6552e2c8
@@ -156,13 +163,13 @@ function consumption((; z, k), (; k_next), (; q, pd, τd), (; η, d̲))
 	r = (1/q - 1)
 	C_expenditures = z + (1 + r) * k - k_next
 
-	clean = C_expenditures
-	dirty = 0
+	clean = C_expenditures ## FIX ME
+	dirty = 100 ## FIX ME
 	
-	if clean > 0 && dirty > d̲
-		composite = clean^η * (dirty - d̲)^(1-η)
+	if true # clean > 0 && dirty > d̲ #FIX ME
+		composite = clean ## FIX ME
 	else
-		composite = NaN
+		composite = missing
 	end
 
 	(; clean, dirty, composite)
@@ -172,6 +179,7 @@ end
 function reward(state, policy, prices, parameters)
 	(; u, d̲) = parameters
 	(; clean, dirty, composite) = consumption(state, policy, prices, parameters)
+	# cover corner cases (u is not defined for negative consumption)
 	if clean < 0
 		return -100_000 + 100 * clean
 	end
@@ -186,16 +194,6 @@ md"""
 Now we can solve the model and look at the results.
 """
 
-# ╔═╡ 42480386-93aa-4dcf-8a42-ca2ff7f35273
-let
-	figure = (; size = (600, 300))
-
-	@chain df begin
-		data(_) * mapping(:k, :π, color = :income) * visual(Lines)
-		draw(; figure)
-	end
-end
-
 # ╔═╡ cf72682d-c48e-4079-9292-b31863101857
 md"""
 ## Environmental damage lowers welfare
@@ -209,13 +207,15 @@ D = \sum_{y\in\{y^1, y^2\}} \int_{k_\min}^\infty d^*(k,y) \pi(k,y) dk.
 Consuming the dirty good causes environmental damage. We model it as a convex penalty term for total dirty good consumption in the household's value.
 
 ```math
-\tilde V(k_{-1},z, D) = V(k_{-1}, z) - \theta D^2
+\widetilde V(k_{-1},z, D) = V(k_{-1}, z) - \theta D^2
 ```
 
 Damage ``D`` is treated an externality that individual agent's cannot influence. Hence the solution to the household's problem is unchanged.
 
+Utilitarian welfare is given by
+
 ```math 
-W = \sum_{y\in\{y^1, y^2\}}\int_{k_\min}^\infty V(k,y) \pi(k,y) dk - \theta D^2.
+\widetilde W = \underbrace{\sum_{y\in\{y^1, y^2\}}\int_{k_\min}^\infty V(k,y) \pi(k,y) dk}_{=:W} - \theta D^2 = W - \theta D^2.
 ```
 """
 
@@ -223,12 +223,12 @@ W = \sum_{y\in\{y^1, y^2\}}\int_{k_\min}^\infty V(k,y) \pi(k,y) dk - \theta D^2.
 md"""
 ## Taxation and welfare
 
-Up to now, the government hasn't taxed the dirty good (``\tau_D = 0``). Let us now find the the tax rate the maximizes welfare.
+Up to now, the government hasn't taxed the dirty good (``\tau_D = 0``). Let us now find the the tax rate that maximizes welfare.
 """
 
 # ╔═╡ 6eabe641-b7df-4bb4-a2aa-8b45f94565e1
 md"""
-To close the model we need to do something with the tax revenue. Assume that the government gives it back to the agents in lump-sum way. So similarly to the welfare notebook we just modify the Markov chain for income by adding $\frac{T}{2}$ to both states.
+To close the model we need to do something with the tax revenue. Assume that the government gives it back to the agents in a lump-sum way. So similarly to the welfare notebook we just modify the Markov chain for income by adding $\frac{T}{2}$ to both states.
 
 The following function finds the partial equilibrium (taking into account rebates) given the $\tau_d$:
 """
@@ -242,7 +242,7 @@ md"""
 
 # ╔═╡ b7d07a6a-ca24-4107-b141-2d1ff227f8cb
 md"""
-Your answer goes here ...
+**Answer**
 """
 
 # ╔═╡ 1db30da6-9231-4894-abc1-db03c127b6ff
@@ -250,14 +250,28 @@ md"""
 Now we can plot the welfare function and then find the optimal tax $\tau^*_d$
 """
 
+# ╔═╡ 36f45dbd-f57c-49a5-9164-14acc05653ec
+#opt = optimize(x -> -welfare(x, (; θ)).W_tilde, 0.0, 0.3)
+
 # ╔═╡ d14653f8-15ef-4a5f-bf21-8547d2aa324f
 prices.pd
 
-# ╔═╡ 10ec6f83-7552-4686-870a-be47d7c29d5e
+# ╔═╡ a77d6b41-83d1-464b-a254-f0f06f861c08
+τd_opt = opt.minimizer
+
+# ╔═╡ 44830129-7d7d-4b05-b1ac-ccca5d89d9ef
+τd = @isdefined(τd_opt) && τd_opt > 0.01 ? τd_opt : 0.1
+
+# ╔═╡ 11bf5079-a4f1-4bc8-b2c7-2c44ee05ddd7
+qs = 10
+
+# ╔═╡ 2094b3e6-080d-4707-8ca1-03215759c8a1
 md"""
-## Exercise 4: Who wins, who loses? (1 point)
+## Comparing steady states: What does the tax do?
 
 Let's now compare the two steady states with and without a tax on the dirty good.
+
+In order to assess the redistributive effects of the climate tax, we split the population _into $qs net worth quantiles_. We compute average consumption levels and average value of these groups and compare those group averages across steady states.
 """
 
 # ╔═╡ ed8335a7-22da-41ed-9593-f00a2922a7e7
@@ -265,54 +279,19 @@ md"""
 ``\theta``: $(@bind θ Slider(0:50, default = 15, show_value=true))
 """
 
-# ╔═╡ 11bf5079-a4f1-4bc8-b2c7-2c44ee05ddd7
-qs = 10
-
-# ╔═╡ aaeaf66c-8e24-49f3-9522-e078e4cb5598
-summary_df = @chain comparison_df begin
-	# split into net worth quantiles
-	@groupby(:τ)
-	@transform(:k_quantiles = @bycol cut(:k, quantile(:k, weights(:π), 0:1/qs:(qs-1)/qs), extend=true, labels=fmt))
-	# compute group means for all variables
-	stack([:k, :z, :value, :clean, :dirty, :composite, :net_value], [:k_quantiles, :π, :τ, :income])
-	@groupby(:τ, :k_quantiles, :variable)
-	@combine(:value = mean(:value, weights(:π)))
-end
-
 # ╔═╡ 59eb518d-25c0-4199-bde5-3d9e4767b49b
 md"""
-### Consumption and value across the wealth distribution
+#### Consumption and value across the wealth distribution
 """
 
-# ╔═╡ 197e7de7-c830-4d98-b5ed-552e3ec195f2
-@chain summary_df begin
-	@subset(:variable ∉ ["k", "z", "composite"])
-	data(_) * mapping(
-		:k_quantiles => "networth quantile", 
-		:value, layout=:variable, color = :τ => L"tax scheme $τ_D$") * visual(ScatterLines)
-	draw(facet = (; linkyaxes = false), legend = (; position = :bottom, titleposition = :left))
-end
-
-# ╔═╡ f157d534-bbed-41d9-9c33-73c11dd6ef84
-@chain summary_df begin
-	@subset(:variable ∉ ["k", "z", "composite"])
-	unstack(:τ, :value)
-	@transform(:pc_change = (:optimal - :zero)/abs(:zero))
-	data(_) * mapping(
-		:k_quantiles => "networth quantile", 
-		:pc_change, layout=:variable
-	) * visual(BarPlot)
-	draw(facet = (; linkyaxes = false), legend = (; position = :bottom, titleposition = :left))
-end
-
-# ╔═╡ 9c80f4ac-2a50-4ce2-bcc1-76591c16cfc2
+# ╔═╡ 9657c7b5-d39f-458b-8080-5ddac39da315
 md"""
-👉 Explain the patterns that you see here. Who benefits from the taxes most? Who suffers most? What effect has ``\theta``?
+As discussed in the tutorial on welfare, _value_ does not have natural units. Before you are asked to discuss these plots in **Exercise 5**, we transform welfare changes into consumption equivalents in the following **Exercise 4**.
 """
 
 # ╔═╡ 8d6a7104-2e81-4f84-b432-dd74623a5753
 md"""
-## Exercise 5: Consumption equivalent welfare change (1 point)
+## Exercise 4: Consumption equivalent welfare change (2 point)
 
 In order to compare welfare across two steady states (with and without taxes), we would like to express changes in the value function in consumption equivalent changes (see the notebook from the last tutorial).
 
@@ -321,7 +300,14 @@ In order to compare welfare across two steady states (with and without taxes), w
 
 # ╔═╡ 7e721ecd-bd63-43a2-82b4-cf6632e4f02a
 md"""
-Your answer goes here ...
+**(Wrong) Answer** -- Fix it!
+```math
+\begin{align*}
+\operatorname{E}_0 \sum \beta^t \frac{((1+\Delta) c_t)^{1-\sigma}}{1-\sigma}  &= \operatorname{E}_0 \sum \beta^t \frac{((c^\tau_t)^{1-\sigma}}{1-\sigma} \\
+(1+ \Delta)^{1-\sigma} V  &= V^\tau \\
+\Delta &= \left(\frac{V^\tau}{V}\right)^\frac{1}{1-\sigma} - 1\\
+\end{align*}
+```
 """
 
 # ╔═╡ 2e2f6cfa-e092-4bb1-b4dc-c5a9c7183b89
@@ -332,7 +318,8 @@ md"""
 # ╔═╡ 4bfdb443-77dc-47f3-9835-b6a4072459f8
 function CE_welfare_change(V_τ, V, D_τ, D, parameters, θ)
 	(; σ) = parameters
-	Δ = 0
+	tmp = V_τ / V ## FIX ME
+	Δ = tmp^(1/(1-σ)) - 1
 end
 
 # ╔═╡ 81060327-02ef-44a5-82f3-d7f59d182d90
@@ -340,39 +327,34 @@ md"""
 #### Consumption equivalent welfare changes
 """
 
-# ╔═╡ 01c01fad-e3d0-4205-acfa-8f69bfd30e03
-@chain comparison_df begin
-	@groupby(:τ)
-	@transform(:k_quantiles = @bycol cut(:k, quantile(:k, weights(:π), 0:1/qs:(qs-1)/qs), extend=true, labels=fmt))
-	@groupby(:τ, :k_quantiles)
-	@combine(
-		:out = Ref((; 
-			value = mean(:value, weights(:π)), 
-			damage = mean(:dirty, weights(:π))
-		))
-	)
-	unstack(:τ, :out)
-	@transform(:Δ_welfare = CE_welfare_change(:optimal.value, :zero.value, :optimal.damage, :zero.damage, parameters, θ))
-	data(_) * mapping(
-		:k_quantiles => "Networth quantile",
-		:Δ_welfare => "Consumption equivalent (%)"
-	) * visual(BarPlot)
-	draw(; facet = (; linkyaxes = :none))
-end
-
-# ╔═╡ 989b51e1-257d-41e9-b899-a20a624c4103
-fmt(from, to, i; leftclosed, rightclosed) = "Q$i"
-
-# ╔═╡ 6b545ee6-1263-4bf9-9478-431f808e920f
+# ╔═╡ abf32167-319d-4848-8aa0-4e5dccdd918e
 md"""
-## Exercise 6: Interpretation (3 points)
+## Exercise 5: Interpretation (4 point)
 
-👉 What are the tradeoffs that the planner faces? Argue verbally what happens to welfare if the tax goes up.
 """
 
-# ╔═╡ 9091469e-5e6a-4079-ba10-f90a7b4a6690
+# ╔═╡ 79de3b46-ebbe-42f2-b484-432ba7d63bbe
 md"""
-Your answer goes here ...
+👉 Explain the trade-off that the planner faces. What's the role of ``\theta``?
+"""
+
+# ╔═╡ 39d7e250-ed9c-4f72-b2af-3fdb3c59a5bc
+md"""
+**Answer** 
+
+
+"""
+
+# ╔═╡ 9c80f4ac-2a50-4ce2-bcc1-76591c16cfc2
+md"""
+👉 Look at `fig1, fig2, fig3`. Who wins, who loses? Who benefits most from the tax? Who suffers most? Does ``\theta`` matter for your conclusion?
+"""
+
+# ╔═╡ c04043d2-6eae-443f-9d7b-7b95d24cfcf0
+md"""
+**Answer**
+
+
 """
 
 # ╔═╡ d20764bb-dd3a-4c08-9fd7-b2960d1d9c2d
@@ -409,7 +391,7 @@ end
 parameters = let
 	σ=2.0
 	β=0.96
-	d̲=0.15 #= type d\underbar<TAB> =#
+	d̲=0.15 # type d\underbar<TAB>
 	η=0.93
 	u = Household(; β, σ).u
 	(; d̲, η, β, σ, u)
@@ -516,6 +498,16 @@ end
 # ╔═╡ e3122e1f-18de-4308-8b3f-175962862bd5
 df = solve_PE(parameters, ss, prices)
 
+# ╔═╡ 42480386-93aa-4dcf-8a42-ca2ff7f35273
+let
+	figure = (; size = (600, 300))
+
+	@chain df begin
+		data(_) * mapping(:k, :π, color = :income) * visual(Lines)
+		draw(; figure)
+	end
+end
+
 # ╔═╡ 0b8f5e22-dc9e-43be-bd40-16840111285c
 function solve_PE_rebate(parameters, ss_lf, prices, T, τd)
 	y_chain_τ   = MarkovChain(ss_lf.z_chain.p, ss_lf.z_chain.state_values .+ T/2)
@@ -529,8 +521,9 @@ end
 # ╔═╡ 83a12c74-bb6d-4e0e-91f3-593fc7bed552
 function government_deficit(parameters, ss, prices, T, τd)
 	df_τ = solve_PE_rebate(parameters, ss, prices, T, τd)
-	dirty = 0
-	return dirty*τd - T
+	dirty = 0.0 ## FIX ME
+	deficit = 0.0 ## FIX ME
+	return deficit
 end
 
 # ╔═╡ ad7936fa-efb3-46cd-b9b3-c994f53a0744
@@ -548,10 +541,12 @@ end
 function welfare(τd, (; θ))
 	df_τ = solve_PE_BB(parameters, ss, prices, τd)
 
-	dirty = 0
-	value = 0
-	welfare = 0
-	(; τd, dirty, value, welfare)
+	D = 0.0 # FIX ME 
+	# "net welfare" W
+	W = mean(df_τ.value, weights(df_τ.π))
+	# welfare W̃ – type W\tilde<TAB>
+	W_tilde = W # FIX ME
+	(; τd, dirty = D, W, W_tilde)
 	
 end
 
@@ -562,19 +557,11 @@ let
 
 	@chain df begin
 		stack(Not(:τd))
+	#	@transform(:variable = Makie.LaTeXString(:variable))
 		data(_) * mapping(:τd, :value, row = :variable, color=:variable) * visual(Lines)
 		draw(; facet = (; linkyaxes = false))
 	end
 end
-
-# ╔═╡ 36f45dbd-f57c-49a5-9164-14acc05653ec
-opt = optimize(x -> -welfare(x, (; θ)).welfare, 0.0, 0.3)
-
-# ╔═╡ a77d6b41-83d1-464b-a254-f0f06f861c08
-τd_opt = opt.minimizer
-
-# ╔═╡ 44830129-7d7d-4b05-b1ac-ccca5d89d9ef
-τd = @isdefined(τd_opt) ? τd_opt : 0.1
 
 # ╔═╡ be8ae8f6-347d-4849-92ae-c6efeb69fd36
 comparison_df = let
@@ -590,7 +577,7 @@ comparison_df = let
 	
 	@chain df begin
 		leftjoin(_, damage, on = :τ)
-		@transform(:net_value = :value - θ * :damage^2)
+		@transform(:value_tilde = :value - θ * :damage^2)
 	end
 end
 
@@ -623,8 +610,11 @@ begin
 	got_it(text=rand(yays)) = correct(text, "Got it!")
 end
 
+# ╔═╡ bc125bc0-e830-49c0-b00c-4057c7bc994a
+warning(md"When you're done with **Exercise 3**, uncomment the cell above to find the optimal tax rate.")
+
 # ╔═╡ e58a4d60-87d4-4ebe-afca-c35052949aaf
-@isdefined(τd_opt) || warning(@mdx("""You have not found the optimal tax rate yet. The analysis below arbitrarly sets ``$("τ_D = $τd")``."""))
+(!(@isdefined(τd_opt)) || !(τd_opt > 0.01)) && warning(@mdx("""You have not found the optimal tax rate yet. The analysis below arbitrarly sets ``$("τ_D = $τd")``."""))
 
 # ╔═╡ 3aaf2225-0174-4380-bb3e-118765f78c6e
 function show_words_limit(answer, limit)
@@ -640,6 +630,64 @@ end
 md"""
 ## Imported packages
 """
+
+# ╔═╡ 989b51e1-257d-41e9-b899-a20a624c4103
+fmt(from, to, i; leftclosed, rightclosed) = "Q$i"
+
+# ╔═╡ aaeaf66c-8e24-49f3-9522-e078e4cb5598
+summary_df = @chain comparison_df begin
+	# split into net worth quantiles
+	@groupby(:τ)
+	@transform(:k_quantiles = @bycol cut(:k, quantile(:k, weights(:π), 0:1/qs:(qs-1)/qs), extend=true, labels=fmt))
+	# compute group means for all variables
+	stack([:k, :z, :value, :clean, :dirty, :composite, :value_tilde], [:k_quantiles, :π, :τ, :income])
+	@groupby(:τ, :k_quantiles, :variable)
+	@combine(:value = mean(:value, weights(:π)))
+end
+
+# ╔═╡ 197e7de7-c830-4d98-b5ed-552e3ec195f2
+fig1 = @chain summary_df begin
+	@subset(:variable ∉ ["k", "z", "composite"])
+	data(_) * mapping(
+		:k_quantiles => "networth quantile", 
+		:value, layout=:variable, color = :τ => L"tax scheme $τ_D$") * visual(ScatterLines)
+	draw(figure = (; size = (600, 350)), facet = (; linkyaxes = false), legend = (; position = :bottom, titleposition = :left))
+end
+
+# ╔═╡ f157d534-bbed-41d9-9c33-73c11dd6ef84
+fig2 = @chain summary_df begin
+	@subset(:variable ∉ ["k", "z", "composite"])
+	unstack(:τ, :value)
+	@transform(:pc_change = (:optimal - :zero)/abs(:zero))
+	data(_) * mapping(
+		:k_quantiles => "networth quantile", 
+		:pc_change, layout=:variable
+	) * visual(BarPlot)
+	draw(figure = (; size = (600, 300)), facet = (; linkyaxes = false), legend = (; position = :bottom, titleposition = :left))
+end
+
+# ╔═╡ 01c01fad-e3d0-4205-acfa-8f69bfd30e03
+fig3 = @chain comparison_df begin
+	@groupby(:τ)
+	@transform(:k_quantiles = @bycol cut(:k, quantile(:k, weights(:π), 0:1/qs:(qs-1)/qs), extend=true, labels=fmt))
+	@groupby(:τ, :k_quantiles)
+	@combine(
+		:out = Ref((; 
+			value = mean(:value, weights(:π)), 
+			damage = mean(:dirty, weights(:π))
+		))
+	)
+	unstack(:τ, :out)
+	@transform(:Δ_welfare = CE_welfare_change(:optimal.value, :zero.value, :optimal.damage, :zero.damage, parameters, θ))
+	data(_) * mapping(
+		:k_quantiles => "Networth quantile",
+		:Δ_welfare => "Consumption equivalent (%)"
+	) * visual(BarPlot)
+	draw(; figure = (; size = (400, 250)), facet = (; linkyaxes = :none))
+end
+
+# ╔═╡ 9e85856c-d124-4381-897d-83502ec06a50
+fig1, fig2, fig3 # Ctrl-<click> to get to bigger figure
 
 # ╔═╡ 1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 TableOfContents()
@@ -662,18 +710,18 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
-AlgebraOfGraphics = "~0.6.18"
-CairoMakie = "~0.11.8"
+AlgebraOfGraphics = "~0.6.19"
+CairoMakie = "~0.12.2"
 CategoricalArrays = "~0.10.8"
-Chain = "~0.5.0"
+Chain = "~0.6.0"
 DataFrameMacros = "~0.4.1"
 DataFrames = "~1.6.1"
 MarkdownLiteral = "~0.1.1"
-Optim = "~1.9.3"
-PlutoUI = "~0.7.58"
+Optim = "~1.9.4"
+PlutoUI = "~0.7.59"
 QuantEcon = "~0.16.6"
-Roots = "~2.1.2"
-StatsBase = "~0.34.2"
+Roots = "~2.1.5"
+StatsBase = "~0.34.3"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -682,7 +730,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.3"
 manifest_format = "2.0"
-project_hash = "a85b5812913639befec1b0798a55da72996c2bec"
+project_hash = "0bf9efa4288238036e1b4bc45a5dba7af4eb7912"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -739,15 +787,15 @@ weakdeps = ["StaticArrays"]
 
 [[deps.AlgebraOfGraphics]]
 deps = ["Colors", "Dates", "Dictionaries", "FileIO", "GLM", "GeoInterface", "GeometryBasics", "GridLayoutBase", "KernelDensity", "Loess", "Makie", "PlotUtils", "PooledArrays", "PrecompileTools", "RelocatableFolders", "StatsBase", "StructArrays", "Tables"]
-git-tree-sha1 = "3fbdee81b0cdc2b106b681dd2b9d4bdc60ca35a2"
+git-tree-sha1 = "ec69c80cdf7bb2865d4c73df641842b2d8ce7e54"
 uuid = "cbdf2221-f076-402e-a563-3d30da359d67"
-version = "0.6.18"
+version = "0.6.19"
 
 [[deps.AliasTables]]
-deps = ["Random"]
-git-tree-sha1 = "82b912bb5215792fd33df26f407d064d3602af98"
+deps = ["PtrArrays", "Random"]
+git-tree-sha1 = "9876e1e164b144ca45e9e3198d0b689cadfed9ff"
 uuid = "66dad0bd-aa9a-41b7-9441-69ab47430ed8"
-version = "1.1.2"
+version = "1.1.3"
 
 [[deps.Animations]]
 deps = ["Colors"]
@@ -845,15 +893,15 @@ version = "1.0.5"
 
 [[deps.CairoMakie]]
 deps = ["CRC32c", "Cairo", "Colors", "FileIO", "FreeType", "GeometryBasics", "LinearAlgebra", "Makie", "PrecompileTools"]
-git-tree-sha1 = "d69c7593fe9d7d617973adcbe4762028c6899b2c"
+git-tree-sha1 = "9e8eaaff3e5951d8c61b7c9261d935eb27e0304b"
 uuid = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-version = "0.11.11"
+version = "0.12.2"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "a4c43f59baa34011e303e76f5c8c91bf58415aaf"
+git-tree-sha1 = "a2f1c8c668c8e3cb4cca4e57a8efdb09067bb3fd"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
-version = "1.18.0+1"
+version = "1.18.0+2"
 
 [[deps.Calculus]]
 deps = ["LinearAlgebra"]
@@ -880,9 +928,9 @@ version = "0.10.8"
     StructTypes = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
 
 [[deps.Chain]]
-git-tree-sha1 = "8c4920235f6c561e401dfe569beb8b924adad003"
+git-tree-sha1 = "9ae9be75ad8ad9d26395bf625dea9beac6d519f1"
 uuid = "8be319e6-bccf-4806-a6f7-6fae938471bc"
-version = "0.5.0"
+version = "0.6.0"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra"]
@@ -1069,9 +1117,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["AliasTables", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns"]
-git-tree-sha1 = "22c595ca4146c07b16bcf9c8bea86f731f7109d2"
+git-tree-sha1 = "9c405847cc7ecda2dc921ccf18b47ca150d7317e"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.108"
+version = "0.25.109"
 
     [deps.Distributions.extensions]
     DistributionsChainRulesCoreExt = "ChainRulesCore"
@@ -1230,9 +1278,9 @@ version = "4.1.1"
 
 [[deps.FreeType2_jll]]
 deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "d8db6a5a2fe1381c1ea4ef2cab7c69c2de7f9ea0"
+git-tree-sha1 = "5c1d8ae0efc6c2e7b1fc502cbe25def8f661b7bc"
 uuid = "d7e528f0-a631-5988-bf34-fe36492bcfd7"
-version = "2.13.1+0"
+version = "2.13.2+0"
 
 [[deps.FreeTypeAbstraction]]
 deps = ["ColorVectorSpace", "Colors", "FreeType", "GeometryBasics"]
@@ -1300,9 +1348,9 @@ version = "1.11.0"
 
 [[deps.GridLayoutBase]]
 deps = ["GeometryBasics", "InteractiveUtils", "Observables"]
-git-tree-sha1 = "6f93a83ca11346771a93bbde2bdad2f65b61498f"
+git-tree-sha1 = "fc713f007cff99ff9e50accba6373624ddd33588"
 uuid = "3955a311-db13-416c-9275-1d80ed98e5e9"
-version = "0.10.2"
+version = "0.11.0"
 
 [[deps.Grisu]]
 git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
@@ -1386,9 +1434,9 @@ uuid = "9b13fd28-a010-5f03-acff-a1bbcff69959"
 version = "1.0.0"
 
 [[deps.Inflate]]
-git-tree-sha1 = "ea8031dea4aff6bd41f1df8f2fdfb25b33626381"
+git-tree-sha1 = "d1b1b796e47d94588b3757fe84fbf65a5ec4a80d"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
-version = "0.1.4"
+version = "0.1.5"
 
 [[deps.InlineStrings]]
 deps = ["Parsers"]
@@ -1416,18 +1464,16 @@ deps = ["Adapt", "AxisAlgorithms", "ChainRulesCore", "LinearAlgebra", "OffsetArr
 git-tree-sha1 = "88a101217d7cb38a7b481ccd50d21876e1d1b0e0"
 uuid = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 version = "0.15.1"
+weakdeps = ["Unitful"]
 
     [deps.Interpolations.extensions]
     InterpolationsUnitfulExt = "Unitful"
 
-    [deps.Interpolations.weakdeps]
-    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-
 [[deps.IntervalArithmetic]]
 deps = ["CRlibm_jll", "MacroTools", "RoundingEmulator"]
-git-tree-sha1 = "23ddd329f4a2a65c7a55b91553b60849bd038575"
+git-tree-sha1 = "90709228dc114e599a2b62b7d23482a4f50938ee"
 uuid = "d1acc4aa-44c8-5952-acd4-ba5d80a2a253"
-version = "0.22.11"
+version = "0.22.13"
 weakdeps = ["DiffRules", "ForwardDiff", "RecipesBase"]
 
     [deps.IntervalArithmetic.extensions]
@@ -1660,16 +1706,16 @@ uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 version = "0.5.13"
 
 [[deps.Makie]]
-deps = ["Animations", "Base64", "CRC32c", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "Contour", "DelaunayTriangulation", "Distributions", "DocStringExtensions", "Downloads", "FFMPEG_jll", "FileIO", "FilePaths", "FixedPointNumbers", "Format", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageIO", "InteractiveUtils", "IntervalSets", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MacroTools", "MakieCore", "Markdown", "MathTeXEngine", "Observables", "OffsetArrays", "Packing", "PlotUtils", "PolygonOps", "PrecompileTools", "Printf", "REPL", "Random", "RelocatableFolders", "Scratch", "ShaderAbstractions", "Showoff", "SignedDistanceFields", "SparseArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "TriplotBase", "UnicodeFun"]
-git-tree-sha1 = "4d49c9ee830eec99d3e8de2425ff433ece7cc1bc"
+deps = ["Animations", "Base64", "CRC32c", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "Contour", "Dates", "DelaunayTriangulation", "Distributions", "DocStringExtensions", "Downloads", "FFMPEG_jll", "FileIO", "FilePaths", "FixedPointNumbers", "Format", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageIO", "InteractiveUtils", "IntervalSets", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MacroTools", "MakieCore", "Markdown", "MathTeXEngine", "Observables", "OffsetArrays", "Packing", "PlotUtils", "PolygonOps", "PrecompileTools", "Printf", "REPL", "Random", "RelocatableFolders", "Scratch", "ShaderAbstractions", "Showoff", "SignedDistanceFields", "SparseArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "TriplotBase", "UnicodeFun", "Unitful"]
+git-tree-sha1 = "ec3a60c9de787bc6ef119d13e07d4bfacceebb83"
 uuid = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-version = "0.20.10"
+version = "0.21.2"
 
 [[deps.MakieCore]]
-deps = ["Observables", "REPL"]
-git-tree-sha1 = "248b7a4be0f92b497f7a331aed02c1e9a878f46b"
+deps = ["ColorTypes", "GeometryBasics", "IntervalSets", "Observables"]
+git-tree-sha1 = "c1c9da1a69f6c635a60581c98da252958c844d70"
 uuid = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
-version = "0.7.3"
+version = "0.8.2"
 
 [[deps.MappedArrays]]
 git-tree-sha1 = "2dab0221fe2b0f2cb6754eaa743cc266339f527e"
@@ -1688,9 +1734,9 @@ version = "0.1.1"
 
 [[deps.MathTeXEngine]]
 deps = ["AbstractTrees", "Automa", "DataStructures", "FreeTypeAbstraction", "GeometryBasics", "LaTeXStrings", "REPL", "RelocatableFolders", "UnicodeFun"]
-git-tree-sha1 = "96ca8a313eb6437db5ffe946c457a401bbb8ce1d"
+git-tree-sha1 = "1865d0b8a2d91477c8b16b49152a32764c7b1f5f"
 uuid = "0a4f8689-d25c-4efe-a92b-7142dfc1aa53"
-version = "0.5.7"
+version = "0.6.0"
 
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1916,9 +1962,9 @@ version = "0.1.2"
 
 [[deps.Polynomials]]
 deps = ["LinearAlgebra", "RecipesBase", "Setfield", "SparseArrays"]
-git-tree-sha1 = "89620a0b5458dca4bf9ea96174fa6422b3adf6f9"
+git-tree-sha1 = "25e7f73d679e5214971620886d3416c1f5991ecc"
 uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
-version = "4.0.8"
+version = "4.0.9"
 
     [deps.Polynomials.extensions]
     PolynomialsChainRulesCoreExt = "ChainRulesCore"
@@ -1958,9 +2004,9 @@ version = "1.4.3"
 
 [[deps.PrettyTables]]
 deps = ["Crayons", "LaTeXStrings", "Markdown", "PrecompileTools", "Printf", "Reexport", "StringManipulation", "Tables"]
-git-tree-sha1 = "88b895d13d53b5577fd53379d913b9ab9ac82660"
+git-tree-sha1 = "66b20dd35966a748321d3b2537c4584cf40387c7"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-version = "2.3.1"
+version = "2.3.2"
 
 [[deps.Primes]]
 deps = ["IntegerMathUtils"]
@@ -1977,6 +2023,11 @@ deps = ["Distributed", "Printf"]
 git-tree-sha1 = "763a8ceb07833dd51bb9e3bbca372de32c0605ad"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.10.0"
+
+[[deps.PtrArrays]]
+git-tree-sha1 = "f011fbb92c4d401059b2212c05c0601b70f8b759"
+uuid = "43287f4e-b6f4-7ad1-bb20-aadabca52c3d"
+version = "1.2.0"
 
 [[deps.QOI]]
 deps = ["ColorTypes", "FileIO", "FixedPointNumbers"]
@@ -2049,10 +2100,10 @@ uuid = "79098fc4-a85e-5d69-aa6a-4863f24498fa"
 version = "0.7.1"
 
 [[deps.Rmath_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "6ed52fdd3382cf21947b15e8870ac0ddbff736da"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "d483cd324ce5cf5d61b77930f0bbd6cb61927d21"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
-version = "0.4.0+0"
+version = "0.4.2+0"
 
 [[deps.Roots]]
 deps = ["Accessors", "ChainRulesCore", "CommonSolve", "Printf"]
@@ -2095,9 +2146,9 @@ version = "1.2.1"
 
 [[deps.SentinelArrays]]
 deps = ["Dates", "Random"]
-git-tree-sha1 = "363c4e82b66be7b9f7c7c7da7478fdae07de44b9"
+git-tree-sha1 = "90b4f68892337554d31cdcdbe19e48989f26c7e6"
 uuid = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
-version = "1.4.2"
+version = "1.4.3"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -2179,9 +2230,9 @@ version = "0.1.1"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]
-git-tree-sha1 = "bf074c045d3d5ffd956fa0a461da38a44685d6b2"
+git-tree-sha1 = "9ae599cd7529cfce7fea36cf00a62cfc56f0f37c"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.9.3"
+version = "1.9.4"
 weakdeps = ["ChainRulesCore", "Statistics"]
 
     [deps.StaticArrays.extensions]
@@ -2340,6 +2391,17 @@ git-tree-sha1 = "53915e50200959667e78a92a418594b428dffddf"
 uuid = "1cfade01-22cf-5700-b092-accc4b62d6e1"
 version = "0.4.1"
 
+[[deps.Unitful]]
+deps = ["Dates", "LinearAlgebra", "Random"]
+git-tree-sha1 = "dd260903fdabea27d9b6021689b3cd5401a57748"
+uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
+version = "1.20.0"
+weakdeps = ["ConstructionBase", "InverseFunctions"]
+
+    [deps.Unitful.extensions]
+    ConstructionBaseUnitfulExt = "ConstructionBase"
+    InverseFunctionsUnitfulExt = "InverseFunctions"
+
 [[deps.WoodburyMatrices]]
 deps = ["LinearAlgebra", "SparseArrays"]
 git-tree-sha1 = "c1a7aa6219628fcd757dede0ca95e245c5cd9511"
@@ -2348,9 +2410,9 @@ version = "1.0.0"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]
-git-tree-sha1 = "532e22cf7be8462035d092ff21fada7527e2c488"
+git-tree-sha1 = "52ff2af32e591541550bd753c0da8b9bc92bb9d9"
 uuid = "02c8fc9c-b97f-50b9-bbe4-9be30ff0a78a"
-version = "2.12.6+0"
+version = "2.12.7+0"
 
 [[deps.XSLT_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libgcrypt_jll", "Libgpg_error_jll", "Libiconv_jll", "Pkg", "XML2_jll", "Zlib_jll"]
@@ -2418,10 +2480,10 @@ uuid = "9a68df92-36a6-505f-a73e-abb412b6bfb4"
 version = "0.2.3+0"
 
 [[deps.libaom_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "3a2ea60308f0996d26f1e5354e10c24e9ef905d4"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "1827acba325fdcdf1d2647fc8d5301dd9ba43a9d"
 uuid = "a4ae2306-e953-59d6-aa16-d00cac43593b"
-version = "3.4.0+0"
+version = "3.9.0+0"
 
 [[deps.libass_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
@@ -2515,31 +2577,32 @@ version = "3.5.0+0"
 # ╟─1db30da6-9231-4894-abc1-db03c127b6ff
 # ╟─4e522395-865c-4f42-9ec3-ee2d4449edcd
 # ╠═36f45dbd-f57c-49a5-9164-14acc05653ec
+# ╟─bc125bc0-e830-49c0-b00c-4057c7bc994a
 # ╠═d14653f8-15ef-4a5f-bf21-8547d2aa324f
 # ╠═a77d6b41-83d1-464b-a254-f0f06f861c08
 # ╟─e58a4d60-87d4-4ebe-afca-c35052949aaf
 # ╟─44830129-7d7d-4b05-b1ac-ccca5d89d9ef
-# ╟─10ec6f83-7552-4686-870a-be47d7c29d5e
-# ╟─be8ae8f6-347d-4849-92ae-c6efeb69fd36
-# ╟─ed8335a7-22da-41ed-9593-f00a2922a7e7
+# ╟─2094b3e6-080d-4707-8ca1-03215759c8a1
 # ╠═11bf5079-a4f1-4bc8-b2c7-2c44ee05ddd7
 # ╟─aaeaf66c-8e24-49f3-9522-e078e4cb5598
+# ╠═be8ae8f6-347d-4849-92ae-c6efeb69fd36
+# ╟─ed8335a7-22da-41ed-9593-f00a2922a7e7
 # ╟─59eb518d-25c0-4199-bde5-3d9e4767b49b
 # ╟─197e7de7-c830-4d98-b5ed-552e3ec195f2
 # ╟─f157d534-bbed-41d9-9c33-73c11dd6ef84
-# ╟─9c80f4ac-2a50-4ce2-bcc1-76591c16cfc2
+# ╟─9657c7b5-d39f-458b-8080-5ddac39da315
 # ╟─8d6a7104-2e81-4f84-b432-dd74623a5753
-# ╟─7e721ecd-bd63-43a2-82b4-cf6632e4f02a
+# ╠═7e721ecd-bd63-43a2-82b4-cf6632e4f02a
 # ╟─2e2f6cfa-e092-4bb1-b4dc-c5a9c7183b89
 # ╠═4bfdb443-77dc-47f3-9835-b6a4072459f8
 # ╟─81060327-02ef-44a5-82f3-d7f59d182d90
-# ╠═01c01fad-e3d0-4205-acfa-8f69bfd30e03
-# ╠═d07fa7b0-d2f0-4c45-af58-1a59b05123fe
-# ╠═e9f7f1e8-fcff-45ad-a6f8-e0a0061101cf
-# ╠═b5cb7649-cc35-4388-9c60-398fc10199d8
-# ╠═989b51e1-257d-41e9-b899-a20a624c4103
-# ╟─6b545ee6-1263-4bf9-9478-431f808e920f
-# ╟─9091469e-5e6a-4079-ba10-f90a7b4a6690
+# ╟─01c01fad-e3d0-4205-acfa-8f69bfd30e03
+# ╟─abf32167-319d-4848-8aa0-4e5dccdd918e
+# ╟─79de3b46-ebbe-42f2-b484-432ba7d63bbe
+# ╠═39d7e250-ed9c-4f72-b2af-3fdb3c59a5bc
+# ╟─9c80f4ac-2a50-4ce2-bcc1-76591c16cfc2
+# ╠═9e85856c-d124-4381-897d-83502ec06a50
+# ╠═c04043d2-6eae-443f-9d7b-7b95d24cfcf0
 # ╟─d20764bb-dd3a-4c08-9fd7-b2960d1d9c2d
 # ╟─2c93d5a7-40bd-4535-9985-420533c12666
 # ╠═681c557a-3435-485d-a426-f56ed70f1f42
@@ -2557,6 +2620,10 @@ version = "3.5.0+0"
 # ╠═3aaf2225-0174-4380-bb3e-118765f78c6e
 # ╠═0e558fd9-a8a8-45c3-a4bc-38f3607ceb98
 # ╟─e099f86b-3b8e-4783-9c80-84733cf174df
+# ╠═d07fa7b0-d2f0-4c45-af58-1a59b05123fe
+# ╠═e9f7f1e8-fcff-45ad-a6f8-e0a0061101cf
+# ╠═b5cb7649-cc35-4388-9c60-398fc10199d8
+# ╠═989b51e1-257d-41e9-b899-a20a624c4103
 # ╠═1392f788-73b5-4733-b1d3-4fb5cc1c8c78
 # ╠═7931c043-9379-44f9-bab2-6d42153aa3d3
 # ╠═9df5eb89-7ff6-4749-b3c1-4199e22d1d07
